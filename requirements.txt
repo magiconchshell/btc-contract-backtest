@@ -1,0 +1,36 @@
+# Bitcoin Contract Trading Backtest System
+# Python Dependencies - Phase 4
+
+# Core dependencies
+ccxt>=4.0.0          # Crypto exchange API
+pandas>=2.0.0        # Data manipulation
+numpy>=1.24.0        # Numerical computing
+
+# Visualization
+matplotlib>=3.7.0    # Plotting library
+seaborn>=0.12.0      # Statistical visualization
+
+# Optional dependencies
+plotly>=5.18.0       # Interactive charts (optional)
+jupyter>=1.0.0       # Jupyter notebook support (optional)
+
+# Development & Testing
+pytest>=7.4.0        # Testing framework
+black>=23.0.0        # Code formatting
+flake8>=6.1.0        # Linting
+mypy>=1.5.0          # Type checking
+
+# Documentation
+mkdocs>=1.5.0        # Documentation generator
+mkdocs-material>=9.1.0   # Material theme for MkDocs
+
+# Packaging
+setuptools>=68.0.0   # Package management
+wheel>=0.41.0        # Wheel distribution
+
+# Advanced features (optional)
+scikit-learn>=1.3.0  # For ML-based strategy optimization
+statsmodels>=0.14.0  # Statistical analysis
+
+# Performance optimization
+numba>=0.58.0        # JIT compilation for faster calculations
