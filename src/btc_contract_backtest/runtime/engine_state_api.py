@@ -19,6 +19,9 @@ class EngineStateStoreAPI:
     def set_orders(self, orders: list[dict[str, Any]]) -> None:
         raise NotImplementedError
 
+    def upsert_order(self, order: dict[str, Any]) -> None:
+        raise NotImplementedError
+
     def append_fill(self, fill: dict[str, Any]) -> None:
         raise NotImplementedError
 

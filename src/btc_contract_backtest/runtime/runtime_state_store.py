@@ -58,6 +58,17 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
     def set_orders(self, orders: list[dict[str, Any]]) -> None:
         self.state["orders"] = self._serialize(orders)
 
+    def upsert_order(self, order: dict[str, Any]) -> None:
+        serialized = self._serialize(order)
+        orders = self.state.setdefault("orders", [])
+        order_id = serialized.get("order_id")
+        client_order_id = serialized.get("client_order_id")
+        for idx, existing in enumerate(orders):
+            if existing.get("order_id") == order_id or (client_order_id and existing.get("client_order_id") == client_order_id):
+                orders[idx] = serialized
+                return
+        orders.append(serialized)
+
     def append_fill(self, fill: dict[str, Any]) -> None:
         self.state.setdefault("fills", []).append(self._serialize(fill))
 
