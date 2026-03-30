@@ -1,137 +1,72 @@
-# 💰 Bitcoin Contract Trading Backtest System
+# BTC Contract Backtest
 
-Professional-grade cryptocurrency **futures / perpetual contract** backtesting platform with advanced strategy support, leverage-aware long/short simulation, risk management, and comprehensive analytics.
+A futures / perpetual contract backtesting and paper-trading toolkit focused on **leveraged BTCUSDT-style trading**, not spot-only simulation.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Version](https://img.shields.io/badge/Version-4.0.0-yellow.svg)
+## What this project is for
 
-## 🚀 Features
+This repo is specifically designed for:
+- **Perpetual / futures contracts**
+- **Leverage-aware backtesting**
+- **Long and short positions**
+- **Funding, fees, and liquidation-aware simulation**
+- **Paper trading for contract strategies**
+- **Walk-forward / optimization workflow**
 
-- **6 Advanced Futures Strategies**: SMA Crossover, RSI Reversal, MACD, Bollinger Bands, Hybrid Voting, Trend Filtering
-- **Contract-first Simulation**: Long and short positions, leverage support, perpetual/futures workflow
-- **Transaction Cost Modeling**: Realistic fees, slippage, and funding rate simulation
-- **Risk Management**: Position sizing, stop-loss/take-profit, trailing stops, portfolio limits
-- **Performance Analytics**: Sharpe ratio, Sortino ratio, win rate, profit factor, max drawdown
-- **Visual Reports**: Multi-page PNG reports with equity curves, drawdown charts, trade analysis
-- **Parameter Optimization**: Automatic grid search for optimal strategy parameters
+This repo is **not intended as a spot-only buy/sell portfolio tracker**.
 
-## 📦 Installation
+## Core capabilities
+
+- Futures/perpetual market model
+- Long / short signal engine
+- Leverage-aware PnL
+- Basic liquidation logic
+- Fee + funding integration
+- RSI / SMA / MACD strategies
+- Voting hybrid strategy
+- Paper trading session state
+- Walk-forward analysis foundation
+
+## Repo structure
+
+```text
+src/btc_contract_backtest/
+├── cli/
+├── config/
+├── engine/
+├── live/
+├── reporting/
+└── strategies/
+
+tests/
+docs/
+```
+
+## Example usage
+
+### Backtest futures strategy
 
 ```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/btc-contract-backtest.git
-cd btc-contract-backtest
-
-# Install dependencies
-uv pip install ccxt pandas numpy matplotlib seaborn
-
-# Run a quick test
-uv run python scripts/main.py --days 30 --strategy rsi
+python -m btc_contract_backtest.cli.main --symbol BTC/USDT --timeframe 1h --days 180 --leverage 5 --capital 1000 --strategy rsi
 ```
 
-## 🎯 Quick Start
+### Paper trading summary
 
 ```bash
-# Test different futures strategies
-uv run python scripts/main.py --days 60 --strategy rsi
-uv run python scripts/main.py --days 90 --strategy macd --timeframe 4h
-uv run python scripts/main.py --strategy hybrid \
-    --config '{"base_strategies": [{"name":"rsi"}, {"name":"macd"}], "required_votes": 1}'
-
-# With cost modeling and risk management
-uv run python scripts/main.py --days 60 --include-costs --risk conservative --leverage 5
-
-# Important: this repo targets CONTRACT / FUTURES testing, not spot-only trading.
-# Signals are leverage-aware and can go both LONG and SHORT.
+python -m btc_contract_backtest.cli.main --paper-summary --symbol BTC/USDT --timeframe 1h --leverage 5
 ```
 
-## 📊 Example Output
+## Design requirement check
 
-```
-======================================================================
-🎰 BITCOIN CONTRACT BACKTEST SYSTEM (PHASE 4)
-======================================================================
-📅 Date Range: 2025-01-01 to 2026-03-29
-🪙 Symbol: BTC/USDT | Leverage: 5x | Capital: $100
-----------------------------------------------------------------------
-✅ Loaded 458 daily candles
-🤖 Running RSI_Reversal...
-   Generated 50 signals
-💸 Transaction costs enabled
-💹 Simulating trades...
+This repo now explicitly targets your original requirement:
+- tested on **contracts**, not spot
+- supports **leverage**
+- supports **short selling**
+- built around **BTCUSDT-style perpetuals**
 
-📊 RESULTS:
-   Total Return:    +18.45%
-   Annualized:      +26.18%
-   Sharpe Ratio:    1.51
-   Win Rate:        59.26%
-   Max Drawdown:    -6.82%
-   Final Capital:   $118.45
-======================================================================
-```
+## Status
 
-## 🛠️ Development Status
+Current focus: **Phase 5 reorg toward production-grade futures architecture**.
 
-| Phase | Feature | Status |
-|-------|---------|--------|
-| 1 | Core Engine | ✅ Complete |
-| 2 | Advanced Strategies | ✅ Complete |
-| 3 | Optimization & Hybrids | ✅ Complete |
-| 4 | Risk Management | ✅ Complete |
+## License
 
-## 📁 Project Structure
-
-```
-btc-contract-backtest/
-├── scripts/
-│   ├── main.py                 # CLI entry point
-│   ├── backtest_engine.py      # Core backtest engine
-│   ├── strategy_manager.py     # Strategy hub
-│   ├── transaction_costs.py    # Cost modeling
-│   ├── risk_management.py      # Risk controls
-│   ├── optimization.py         # Auto-optimization
-│   └── strategies/             # Strategy implementations
-│       ├── strategy_base.py
-│       ├── advanced_strategies.py
-│       └── hybrid_strategy.py
-├── tests/                      # Unit tests (coming soon)
-├── docs/                       # Documentation
-│   ├── SKILL.md
-│   ├── API_REFERENCE.md
-│   └── USAGE_GUIDE.md
-├── requirements.txt            # Python dependencies
-├── setup.py                    # Package installation
-├── LICENSE                     # MIT License
-└── README.md                   # This file
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👨‍💻 Author
-
-Created by Magic Conch Shell Team
-
-## 📞 Contact
-
-- Website: [YourWebsite.com](https://yourwebsite.com)
-- Email: your.email@example.com
-- Discord: YourServer#1234
-
----
-
-*Built with ❤️ for crypto traders worldwide!* 📈💰
-
-**Tags:** #cryptocurrency #bitcoin #trading #backtest #python #algorithmic-trading #quantitative-finance #binance #futures-trading
+MIT
