@@ -55,6 +55,16 @@ python -m btc_contract_backtest.cli.main --symbol BTC/USDT --timeframe 1h --days
 python -m btc_contract_backtest.cli.main --paper-summary --symbol BTC/USDT --timeframe 1h --leverage 5
 ```
 
+### Run visual HTML backtest report server
+
+```bash
+uvicorn btc_contract_backtest.cli.report_server:app --host 0.0.0.0 --port 8123
+```
+
+Then open:
+- `http://localhost:8123`
+- or expose port `8123` with ngrok
+
 ## Design requirement check
 
 This repo now explicitly targets your original requirement:

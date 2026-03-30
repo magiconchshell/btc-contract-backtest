@@ -12,6 +12,8 @@ setup(
         "numpy>=1.24.0",
         "matplotlib>=3.7.0",
         "seaborn>=0.12.0",
+        "fastapi>=0.115.0",
+        "uvicorn>=0.30.0",
     ],
     entry_points={
         "console_scripts": [
