@@ -6,6 +6,7 @@ from .regime_asymmetric import RegimeAsymmetricStrategy
 from .baselines import BuyAndHoldLongStrategy, EMATrendStrategy
 from .btc_bias import LongOnlyRegimeStrategy, ShortLiteRegimeStrategy, ExtremeDowntrendShortStrategy
 from .regime_switcher import RegimeSwitcherStrategy
+from .short_overlay_switcher import ShortOverlaySwitcherStrategy
 
 
 def build_strategy(name: str, config: dict | None = None):
@@ -34,4 +35,6 @@ def build_strategy(name: str, config: dict | None = None):
         return ExtremeDowntrendShortStrategy(**config)
     if name == "regime_switcher":
         return RegimeSwitcherStrategy(**config)
+    if name == "short_overlay_switcher":
+        return ShortOverlaySwitcherStrategy(**config)
     raise ValueError(f"Unknown strategy: {name}")
