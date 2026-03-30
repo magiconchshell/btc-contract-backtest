@@ -51,6 +51,12 @@ def parse_args():
     p.add_argument("--maker-fill-probability", type=float, default=0.35)
     p.add_argument("--latency-ms", type=int, default=150)
     p.add_argument("--queue-priority-model", default="probabilistic")
+    p.add_argument("--use-realistic-funding", action="store_true")
+    p.add_argument("--orderbook-depth-levels", type=int, default=5)
+    p.add_argument("--simulated-depth-notional", type=float, default=250000.0)
+    p.add_argument("--impact-exponent", type=float, default=0.6)
+    p.add_argument("--disable-mark-bid-ask-consistency", action="store_true")
+    p.add_argument("--stale-mark-deviation-bps", type=float, default=15.0)
     p.add_argument("--enable-kill-switch", action="store_true")
     p.add_argument("--max-consecutive-failures", type=int, default=5)
     p.add_argument("--heartbeat-timeout-seconds", type=int, default=180)
@@ -89,6 +95,12 @@ def main():
         maker_fill_probability=args.maker_fill_probability,
         latency_ms=args.latency_ms,
         queue_priority_model=args.queue_priority_model,
+        use_realistic_funding=args.use_realistic_funding,
+        orderbook_depth_levels=args.orderbook_depth_levels,
+        simulated_depth_notional=args.simulated_depth_notional,
+        impact_exponent=args.impact_exponent,
+        enforce_mark_bid_ask_consistency=not args.disable_mark_bid_ask_consistency,
+        stale_mark_deviation_bps=args.stale_mark_deviation_bps,
     )
     live_risk = LiveRiskConfig(
         enable_kill_switch=args.enable_kill_switch,

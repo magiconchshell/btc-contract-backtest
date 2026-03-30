@@ -104,9 +104,18 @@ Still simplified compared with exchange-grade execution:
 - no full restart reconciliation with remote order replay yet
 - no production-grade idempotent live execution loop yet
 
+## Current Phase 3 simulation quality upgrades
+
+The engine now also supports a more detailed execution-cost and market-consistency layer:
+- depth-aware slippage / impact approximation
+- probabilistic queue-based limit fill ratio
+- realistic funding snapshots when available in the data stream
+- mark-vs-bid/ask consistency checks to block stale or broken market states
+- spread / slippage / funding behavior shared by backtest and paper trading
+
 ## Next evolution
 
-- richer orderbook and fill calibration
+- deeper orderbook replay / calibration
 - remote reconciliation and restart-safe recovery hardening
 - exchange shadow-live execution mode
 - richer liquidation tiers

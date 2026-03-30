@@ -72,6 +72,7 @@ class FuturesBacktestEngine:
                 core.position.bars_held += 1
                 core.position.peak_price = snapshot.close if core.position.peak_price is None else max(core.position.peak_price, snapshot.close)
                 core.position.trough_price = snapshot.close if core.position.trough_price is None else min(core.position.trough_price, snapshot.close)
+                core.apply_periodic_funding(snapshot)
 
             price = snapshot.close
             atr = None if pd.isna(row.get("atr")) else float(row.get("atr"))
@@ -109,7 +110,7 @@ class FuturesBacktestEngine:
                 should_close = None
                 if self.risk.partial_take_profit_pct is not None and not core.position.partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
                     close_qty = abs(core.position.quantity) * self.risk.partial_close_ratio
-                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, close_qty, reduce_only=True)
+                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, close_qty, OrderType.MARKET, reduce_only=True)
                     for fill in core.try_fill_order(order, snapshot):
                         core.apply_fill(fill)
                     core.position.partial_taken = True
@@ -149,7 +150,7 @@ class FuturesBacktestEngine:
                     should_close = "time_exit"
 
                 if should_close is not None:
-                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), reduce_only=True)
+                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), OrderType.MARKET, reduce_only=True)
                     for fill in core.try_fill_order(order, snapshot):
                         core.apply_fill(fill)
                     if core.trades:
@@ -171,7 +172,7 @@ class FuturesBacktestEngine:
                     core.position.atr_at_entry = atr
                 continue
             if signal != core.position.side:
-                close_order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), reduce_only=True)
+                close_order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), OrderType.MARKET, reduce_only=True)
                 for fill in core.try_fill_order(close_order, snapshot):
                     core.apply_fill(fill)
                 notional = core.determine_notional(price, atr)

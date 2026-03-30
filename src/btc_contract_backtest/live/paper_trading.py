@@ -157,12 +157,13 @@ class PaperTradingSession:
             self.core.position.bars_held += 1
             self.core.position.peak_price = snapshot.close if self.core.position.peak_price is None else max(self.core.position.peak_price, snapshot.close)
             self.core.position.trough_price = snapshot.close if self.core.position.trough_price is None else min(self.core.position.trough_price, snapshot.close)
+            self.core.apply_periodic_funding(snapshot)
             pnl_pct = ((snapshot.close - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.side if self.core.position.entry_price else 0.0
             should_close = None
 
             if self.risk.partial_take_profit_pct is not None and not self.core.position.partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
                 qty = abs(self.core.position.quantity) * self.risk.partial_close_ratio
-                order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, qty, reduce_only=True)
+                order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, qty, OrderType.MARKET, reduce_only=True)
                 for fill in self.core.try_fill_order(order, snapshot):
                     self.core.apply_fill(fill)
                 self.core.position.partial_taken = True

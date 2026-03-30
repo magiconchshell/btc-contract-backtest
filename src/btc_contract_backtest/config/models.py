@@ -59,6 +59,12 @@ class ExecutionConfig:
     default_order_type: str = "market"
     enable_reduce_only: bool = True
     funding_interval_hours: int = 8
+    use_realistic_funding: bool = True
+    orderbook_depth_levels: int = 5
+    simulated_depth_notional: float = 250000.0
+    impact_exponent: float = 0.6
+    enforce_mark_bid_ask_consistency: bool = True
+    stale_mark_deviation_bps: float = 15.0
 
 
 @dataclass

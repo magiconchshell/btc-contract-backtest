@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
+import math
 import uuid
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
@@ -39,9 +40,11 @@ class SimulatorCore:
     def snapshot_from_bar(self, timestamp, row) -> MarketSnapshot:
         close = float(row["close"])
         spread = close * (self.execution.simulated_spread_bps / 10000)
-        bid = close - spread / 2
-        ask = close + spread / 2
+        bid = float(row.get("bid", close - spread / 2))
+        ask = float(row.get("ask", close + spread / 2))
+        mark_price = float(row.get("mark_price", close))
         funding_rate = row.get("funding_rate")
+        depth_notional = float(row.get("depth_notional", self.execution.simulated_depth_notional))
         return MarketSnapshot(
             symbol=self.contract.symbol,
             timestamp=str(timestamp),
@@ -52,7 +55,7 @@ class SimulatorCore:
             volume=float(row.get("volume", 0.0)),
             bid=bid,
             ask=ask,
-            mark_price=float(row.get("mark_price", close)),
+            mark_price=mark_price,
             funding_rate=None if funding_rate is None else float(funding_rate),
             latency_ms=self.execution.latency_ms,
             stale=bool(row.get("stale", False)),
@@ -67,6 +70,13 @@ class SimulatorCore:
         if self.risk.kill_on_stale_data and snapshot.stale:
             self.emit_risk_event("stale_data", "Market snapshot marked stale; blocking execution", severity="critical")
             return False
+        if self.execution.enforce_mark_bid_ask_consistency and snapshot.bid is not None and snapshot.ask is not None and snapshot.mark_price is not None:
+            mid = (snapshot.bid + snapshot.ask) / 2
+            deviation_bps = abs(snapshot.mark_price - mid) / mid * 10000 if mid else 0.0
+            if deviation_bps > self.execution.stale_mark_deviation_bps:
+                self.emit_risk_event("mark_inconsistency", "Mark price deviates too far from bid/ask midpoint", severity="critical", metadata={"deviation_bps": deviation_bps})
+                return False
+        self.last_snapshot = snapshot
         return True
 
     def _current_position_scale(self, current_equity: float) -> float:
@@ -125,14 +135,40 @@ class SimulatorCore:
         order.updated_at = self.now_iso()
         return order
 
-    def _fill_price(self, snapshot: MarketSnapshot, side: OrderSide, order_type: OrderType) -> float:
+    def _depth_impact_bps(self, order_notional: float, depth_notional: float) -> float:
+        if depth_notional <= 0:
+            return self.execution.simulated_slippage_bps
+        ratio = max(order_notional / depth_notional, 0.0)
+        return self.execution.simulated_slippage_bps * math.pow(max(ratio, 1e-9), self.execution.impact_exponent)
+
+    def _fill_price(self, snapshot: MarketSnapshot, side: OrderSide, order_type: OrderType, quantity: float) -> float:
         base = snapshot.ask if side == OrderSide.BUY else snapshot.bid
         if base is None:
             base = snapshot.close
-        slip = snapshot.close * (self.execution.simulated_slippage_bps / 10000)
+        depth_notional = self.execution.simulated_depth_notional
+        order_notional = quantity * snapshot.close
+        slip_bps = self._depth_impact_bps(order_notional, depth_notional)
+        slip = snapshot.close * (slip_bps / 10000)
         if order_type == OrderType.MARKET:
             return base + slip if side == OrderSide.BUY else base - slip
         return base
+
+    def _fill_ratio(self, order: Order) -> float:
+        if not self.execution.allow_partial_fills:
+            return 1.0
+        base = self.execution.max_fill_ratio_per_bar
+        if self.execution.queue_priority_model == "probabilistic" and order.order_type == OrderType.LIMIT:
+            return min(1.0, max(0.0, base * self.execution.maker_fill_probability))
+        if self.execution.queue_priority_model == "conservative" and order.order_type == OrderType.LIMIT:
+            return min(1.0, max(0.0, base * 0.5))
+        return min(1.0, max(0.0, base))
+
+    def funding_cost(self, snapshot: MarketSnapshot) -> float:
+        if self.position.side == 0 or self.position.notional <= 0:
+            return 0.0
+        if self.execution.use_realistic_funding and snapshot.funding_rate is not None:
+            return self.position.notional * snapshot.funding_rate
+        return self.position.notional * (self.account.funding_rate_annual / (365 * (24 / max(self.execution.funding_interval_hours, 1))))
 
     def try_fill_order(self, order: Order, snapshot: MarketSnapshot) -> list[FillEvent]:
         fills: list[FillEvent] = []
@@ -143,9 +179,9 @@ class SimulatorCore:
             order.status = OrderStatus.FILLED
             return fills
 
-        fill_ratio = self.execution.max_fill_ratio_per_bar if self.execution.allow_partial_fills else 1.0
+        fill_ratio = self._fill_ratio(order)
         fill_qty = min(remaining, order.quantity * fill_ratio)
-        price = self._fill_price(snapshot, order.side, order.order_type)
+        price = self._fill_price(snapshot, order.side, order.order_type, fill_qty)
         fee_rate = self.account.taker_fee_rate if order.order_type in {OrderType.MARKET, OrderType.STOP_MARKET} else self.account.maker_fee_rate
         liquidity = "taker" if fee_rate == self.account.taker_fee_rate else "maker"
         fee = fill_qty * price * fee_rate
@@ -232,6 +268,13 @@ class SimulatorCore:
         if self.position.side != 0:
             self.position.peak_price = fill.fill_price if self.position.peak_price is None else max(self.position.peak_price, fill.fill_price)
             self.position.trough_price = fill.fill_price if self.position.trough_price is None else min(self.position.trough_price, fill.fill_price)
+
+    def apply_periodic_funding(self, snapshot: MarketSnapshot):
+        cost = self.funding_cost(snapshot)
+        if cost == 0.0:
+            return 0.0
+        self.capital -= cost
+        return cost
 
     def check_daily_loss_kill(self, current_equity: float) -> bool:
         if self.risk.max_daily_loss_pct is None:
