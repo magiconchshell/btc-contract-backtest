@@ -12,6 +12,7 @@ from btc_contract_backtest.config.models import AccountConfig, ContractSpec, Exe
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.shadow_recovery import ShadowRecovery
+from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -29,7 +30,7 @@ class ShadowTradingSession(TradingRuntime):
         audit_log: str = "shadow_audit.jsonl",
         state_file: str = "shadow_state.json",
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
+        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.audit = AuditLogger(audit_log)
@@ -50,11 +51,10 @@ class ShadowTradingSession(TradingRuntime):
             "consecutive_failures": self.watchdog.state.consecutive_failures,
             "halted": self.watchdog.state.halted,
             "halt_reason": self.watchdog.state.halt_reason,
-            "risk_events": self.core.risk_events,
             "last_payload": last_payload,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        self.recovery.save(payload)
+        self.persist_runtime_state(**payload)
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)

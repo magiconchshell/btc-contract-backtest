@@ -13,6 +13,7 @@ from btc_contract_backtest.config.models import AccountConfig, ContractSpec, Exe
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
+from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -29,7 +30,7 @@ class PaperTradingSession(TradingRuntime):
         execution: ExecutionConfig | None = None,
         live_risk: LiveRiskConfig | None = None,
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
+        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
         self.state_path = Path(state_file)
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
@@ -40,8 +41,9 @@ class PaperTradingSession(TradingRuntime):
             self.reconcile_with_exchange()
 
     def _load(self):
-        if self.state_path.exists():
-            return json.loads(self.state_path.read_text())
+        loaded = self.recovery.load_state()
+        if loaded:
+            return loaded
         return {
             "capital": self.context.account.initial_capital,
             "position": None,
@@ -78,35 +80,36 @@ class PaperTradingSession(TradingRuntime):
             self.core.emit_risk_event("reconcile_failed", result.error or "Unknown reconcile failure", severity="warning")
 
     def save(self):
-        self.state["capital"] = self.core.capital
-        self.state["position"] = {
-            "symbol": self.core.position.symbol,
-            "side": self.core.position.side,
-            "quantity": self.core.position.quantity,
-            "entry_price": self.core.position.entry_price,
-            "entry_time": self.core.position.entry_time,
-            "notional": self.core.position.notional,
-            "leverage": self.core.position.leverage,
-            "margin_used": self.core.position.margin_used,
-            "bars_held": self.core.position.bars_held,
-            "peak_price": self.core.position.peak_price,
-            "trough_price": self.core.position.trough_price,
-            "atr_at_entry": self.core.position.atr_at_entry,
-            "break_even_armed": self.core.position.break_even_armed,
-            "partial_taken": self.core.position.partial_taken,
-            "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
-        } if self.core.position.side != 0 else None
-        self.state["orders"] = [vars(o) for o in self.core.orders.values()]
-        self.state["trades"] = self.core.trades
-        self.state["risk_events"] = self.core.risk_events
-        self.state["watchdog"] = {
-            "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-            "consecutive_failures": self.watchdog.state.consecutive_failures,
-            "halted": self.watchdog.state.halted,
-            "halt_reason": self.watchdog.state.halt_reason,
-        }
-        self.state["updated_at"] = datetime.now(timezone.utc).isoformat()
-        self.state_path.write_text(json.dumps(self.state, indent=2, default=str))
+        self.persist_runtime_state(
+            capital=self.core.capital,
+            position={
+                "symbol": self.core.position.symbol,
+                "side": self.core.position.side,
+                "quantity": self.core.position.quantity,
+                "entry_price": self.core.position.entry_price,
+                "entry_time": self.core.position.entry_time,
+                "notional": self.core.position.notional,
+                "leverage": self.core.position.leverage,
+                "margin_used": self.core.position.margin_used,
+                "bars_held": self.core.position.bars_held,
+                "peak_price": self.core.position.peak_price,
+                "trough_price": self.core.position.trough_price,
+                "atr_at_entry": self.core.position.atr_at_entry,
+                "break_even_armed": self.core.position.break_even_armed,
+                "partial_taken": self.core.position.partial_taken,
+                "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
+            } if self.core.position.side != 0 else None,
+            orders=[vars(o) for o in self.core.orders.values()],
+            trades=self.core.trades,
+            risk_events=self.core.risk_events,
+            watchdog={
+                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                "consecutive_failures": self.watchdog.state.consecutive_failures,
+                "halted": self.watchdog.state.halted,
+                "halt_reason": self.watchdog.state.halt_reason,
+            },
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)

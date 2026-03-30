@@ -120,6 +120,14 @@ class TradingRuntime:
             self.persistence.record_risk_event(event)
         self._last_risk_event_count = len(self.core.risk_events)
 
+    def persist_runtime_state(self, **fields):
+        setter = getattr(self.persistence, "set_state_fields", None)
+        saver = getattr(self.persistence, "save", None)
+        if callable(setter):
+            setter(**fields)
+        if callable(saver):
+            saver()
+
     def on_blocked_snapshot(self, payload: dict):
         return payload
 

@@ -14,6 +14,7 @@ from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
+from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -35,7 +36,7 @@ class GovernedLiveSession(TradingRuntime):
         alerts_file: str = "live_alerts.jsonl",
         state_file: str = "live_session_state.json",
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
+        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.audit = AuditLogger(audit_log)
@@ -54,14 +55,14 @@ class GovernedLiveSession(TradingRuntime):
         self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit)
 
     def save_state(self, payload: dict | None = None):
-        self.recovery.save({
-            "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-            "consecutive_failures": self.watchdog.state.consecutive_failures,
-            "halted": self.watchdog.state.halted,
-            "halt_reason": self.watchdog.state.halt_reason,
-            "last_payload": payload,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        self.persist_runtime_state(
+            last_heartbeat_at=self.watchdog.state.last_heartbeat_at,
+            consecutive_failures=self.watchdog.state.consecutive_failures,
+            halted=self.watchdog.state.halted,
+            halt_reason=self.watchdog.state.halt_reason,
+            last_payload=payload,
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
