@@ -10,10 +10,11 @@ import ccxt
 import pandas as pd
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
-from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
+from btc_contract_backtest.engine.execution_models import OrderType
 from btc_contract_backtest.engine.simulator_core import SimulatorCore
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
+from btc_contract_backtest.live.shadow_recovery import ShadowRecovery
 from btc_contract_backtest.live.watchdog import HeartbeatWatchdog
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -29,6 +30,7 @@ class ShadowTradingSession:
         execution: ExecutionConfig | None = None,
         live_risk: LiveRiskConfig | None = None,
         audit_log: str = "shadow_audit.jsonl",
+        state_file: str = "shadow_state.json",
     ):
         self.contract = contract
         self.account = account
@@ -42,6 +44,28 @@ class ShadowTradingSession:
         self.watchdog = HeartbeatWatchdog(self.live_risk.heartbeat_timeout_seconds, self.live_risk.max_consecutive_failures)
         self.core = SimulatorCore(contract, account, risk, self.execution, self.live_risk)
         self.audit = AuditLogger(audit_log)
+        self.recovery = ShadowRecovery(state_file)
+        self.state = self.recovery.load()
+        self._restore_state()
+
+    def _restore_state(self):
+        self.watchdog.state.last_heartbeat_at = self.state.get("last_heartbeat_at")
+        self.watchdog.state.consecutive_failures = self.state.get("consecutive_failures", 0)
+        self.watchdog.state.halted = self.state.get("halted", False)
+        self.watchdog.state.halt_reason = self.state.get("halt_reason")
+        self.core.risk_events = self.state.get("risk_events", [])
+
+    def save_state(self, last_payload: dict | None = None):
+        payload = {
+            "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+            "consecutive_failures": self.watchdog.state.consecutive_failures,
+            "halted": self.watchdog.state.halted,
+            "halt_reason": self.watchdog.state.halt_reason,
+            "risk_events": self.core.risk_events,
+            "last_payload": last_payload,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.recovery.save(payload)
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.contract.symbol, timeframe=self.timeframe, limit=limit)
@@ -87,6 +111,7 @@ class ShadowTradingSession:
         if self.watchdog.state.halted:
             payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "event": "halted", "reason": self.watchdog.state.halt_reason}
             self.audit.log("shadow_halt", payload)
+            self.save_state(payload)
             return payload
 
         self.watchdog.beat()
@@ -97,6 +122,7 @@ class ShadowTradingSession:
         if not self.core.check_snapshot_safety(snapshot):
             payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "event": "blocked", "reason": "snapshot_safety_failed", "risk_events": self.core.risk_events[-3:]}
             self.audit.log("shadow_blocked", payload)
+            self.save_state(payload)
             return payload
 
         signal = int(latest.get("signal", 0))
@@ -123,6 +149,7 @@ class ShadowTradingSession:
             "reconcile": reconcile_result.payload if reconcile_result.ok else {"error": reconcile_result.error},
         }
         self.audit.log("shadow_decision", payload)
+        self.save_state(payload)
         return payload
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
@@ -131,6 +158,7 @@ class ShadowTradingSession:
             if self.watchdog.check_timeout():
                 payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "event": "halted", "reason": "heartbeat_timeout"}
                 self.audit.log("shadow_halt", payload)
+                self.save_state(payload)
                 print(json.dumps(payload, indent=2, default=str))
                 break
             payload = self.step()

@@ -121,10 +121,18 @@ A shadow-live orchestration layer now exists:
 - shadow mode compares local intended execution against live exchange state via the adapter
 - watchdog and reconcile hooks remain active to surface unsafe market/runtime states
 
+## Current Phase 4.5 shadow hardening layer
+
+Shadow mode now also includes:
+- shadow state persistence and restart recovery
+- audit summarization tooling for blocked / reconcile / decision events
+- explicit unsafe-market event analytics from shadow audit logs
+- persistent last-payload tracking for restart-safe shadow inspection
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
-- remote reconciliation and restart-safe recovery hardening
-- exchange shadow-live execution loop hardening and analytics
+- remote reconciliation and restart-safe recovery hardening for live order flow
+- exchange shadow-live analytics dashboarding
 - richer liquidation tiers
 - multi-asset portfolio layer
