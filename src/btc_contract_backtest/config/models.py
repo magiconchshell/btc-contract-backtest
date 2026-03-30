@@ -65,6 +65,8 @@ class ExecutionConfig:
     impact_exponent: float = 0.6
     enforce_mark_bid_ask_consistency: bool = True
     stale_mark_deviation_bps: float = 15.0
+    calibration_mode: str = "calibrated"
+    calibration_version: str = "t4-v1"
 
 
 @dataclass

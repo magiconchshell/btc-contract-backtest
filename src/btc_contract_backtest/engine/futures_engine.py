@@ -94,4 +94,6 @@ class FuturesBacktestEngine:
             "final_capital": float(results["final_capital"]),
             "liquidation_events": int(results["liquidation_events"]),
             "risk_events": 0 if "risk_events" not in results or results["risk_events"].empty else int(len(results["risk_events"])),
+            "calibration_mode": getattr(self.execution, "calibration_mode", "calibrated"),
+            "calibration_version": getattr(self.execution, "calibration_version", "t4-v1"),
         }

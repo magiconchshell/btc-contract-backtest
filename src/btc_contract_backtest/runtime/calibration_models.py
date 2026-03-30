@@ -35,6 +35,8 @@ class CalibrationSample:
 
 @dataclass
 class CalibrationConfig:
+    mode: str = "calibrated"
+    version: str = "t4-v1"
     slippage_spread_weight: float = 0.35
     slippage_depth_weight: float = 0.45
     slippage_volatility_weight: float = 0.20

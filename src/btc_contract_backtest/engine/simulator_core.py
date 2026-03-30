@@ -8,8 +8,10 @@ import uuid
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import FillEvent, MarketSnapshot, Order, OrderSide, OrderStatus, OrderType, PositionState, RiskEvent
-from btc_contract_backtest.runtime.calibration_engine import calibrate_fill_ratio, calibrate_slippage_bps
+from btc_contract_backtest.runtime.calibration_engine import calibrate_fill_ratio, calibrate_slippage_bps, sample_from_execution
 from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, CalibrationSample
+from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
+from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
 
 
 class SimulatorCore:
@@ -35,7 +37,9 @@ class SimulatorCore:
         self.risk_events: list[dict] = []
         self.consecutive_failures = 0
         self.last_snapshot: Optional[MarketSnapshot] = None
-        self.calibration_config = CalibrationConfig()
+        self.calibration_config = CalibrationConfig(mode="calibrated")
+        self.calibration_store = CalibrationSampleStore()
+        self.funding_store = FundingSnapshotStore()
 
     def now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -199,6 +203,9 @@ class SimulatorCore:
             return 0.0
         if self.execution.use_realistic_funding and snapshot.funding_rate is not None:
             return self.position.notional * snapshot.funding_rate
+        row = self.funding_store.lookup(snapshot.timestamp)
+        if row and row.get("funding_rate") is not None:
+            return self.position.notional * float(row["funding_rate"])
         return self.position.notional * (self.account.funding_rate_annual / (365 * (24 / max(self.execution.funding_interval_hours, 1))))
 
     def try_fill_order(self, order: Order, snapshot: MarketSnapshot) -> list[FillEvent]:
@@ -227,6 +234,28 @@ class SimulatorCore:
             timestamp=snapshot.timestamp,
         )
         fills.append(fill)
+        sample = sample_from_execution(
+            timestamp=snapshot.timestamp,
+            symbol=order.symbol,
+            mode=self.calibration_config.mode,
+            side=order.side.value,
+            order_type=order.order_type.value,
+            quantity=order.quantity,
+            notional=order.quantity * snapshot.close,
+            reference_price=snapshot.close,
+            executed_price=price,
+            fill_quantity=fill_qty,
+            spread_bps=(abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close)) / snapshot.close * 10000) if snapshot.close > 0 else None,
+            depth_notional=self.execution.simulated_depth_notional,
+            queue_model=self.execution.queue_priority_model,
+            funding_rate=snapshot.funding_rate,
+            funding_cost=None,
+            volatility_bucket="high" if snapshot.stale else "normal",
+            latency_ms=snapshot.latency_ms,
+            stale=snapshot.stale,
+            metadata={"calibration_version": self.calibration_config.version},
+        )
+        self.calibration_store.append(sample)
         order.filled_quantity += fill_qty
         order.avg_fill_price = price if order.avg_fill_price is None else ((order.avg_fill_price * (order.filled_quantity - fill_qty)) + price * fill_qty) / order.filled_quantity
         order.updated_at = self.now_iso()
@@ -304,6 +333,28 @@ class SimulatorCore:
         cost = self.funding_cost(snapshot)
         if cost == 0.0:
             return 0.0
+        sample = sample_from_execution(
+            timestamp=snapshot.timestamp,
+            symbol=snapshot.symbol,
+            mode=self.calibration_config.mode,
+            side="funding",
+            order_type="funding",
+            quantity=abs(self.position.quantity),
+            notional=self.position.notional,
+            reference_price=snapshot.close,
+            executed_price=snapshot.close,
+            fill_quantity=abs(self.position.quantity),
+            spread_bps=(abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close)) / snapshot.close * 10000) if snapshot.close > 0 else None,
+            depth_notional=self.execution.simulated_depth_notional,
+            queue_model=self.execution.queue_priority_model,
+            funding_rate=snapshot.funding_rate,
+            funding_cost=cost,
+            volatility_bucket="high" if snapshot.stale else "normal",
+            latency_ms=snapshot.latency_ms,
+            stale=snapshot.stale,
+            metadata={"calibration_version": self.calibration_config.version, "event": "funding"},
+        )
+        self.calibration_store.append(sample)
         self.capital -= cost
         return cost
 

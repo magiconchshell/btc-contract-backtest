@@ -14,6 +14,8 @@ from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
+from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
+from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
@@ -54,6 +56,7 @@ class GovernedLiveSession(TradingRuntime):
         self.approvals = OperatorApprovalQueue(approval_file)
         self.gov_state = GovernanceState(governance_state_file)
         self.recovery = LiveSessionRecovery(state_file)
+        self.calibration_store = CalibrationSampleStore()
         loader = getattr(self.persistence, "load_normalized_state", None)
         recovered = loader() if callable(loader) else self.recovery.load()
         wd = recovered.get("watchdog") or {}
@@ -158,6 +161,28 @@ class GovernedLiveSession(TradingRuntime):
                 exchange_order_id=(result.get("response") or {}).get("id"),
             )
             store.upsert_order(record.to_dict())
+            sample = sample_from_execution(
+                timestamp=self.now_iso(),
+                symbol=self.context.contract.symbol,
+                mode="governed_live",
+                side=order.side.value,
+                order_type=order.order_type.value,
+                quantity=order.quantity,
+                notional=float(intended.get("notional", 0.0)),
+                reference_price=float(payload["snapshot"]["close"]),
+                executed_price=float(payload["snapshot"]["ask"] if order.side.value == "buy" else payload["snapshot"]["bid"] or payload["snapshot"]["close"]),
+                fill_quantity=order.quantity,
+                spread_bps=(abs((payload["snapshot"].get("ask") or payload["snapshot"]["close"]) - (payload["snapshot"].get("bid") or payload["snapshot"]["close"])) / payload["snapshot"]["close"] * 10000) if payload["snapshot"]["close"] > 0 else None,
+                depth_notional=self.context.execution.simulated_depth_notional,
+                queue_model=self.context.execution.queue_priority_model,
+                funding_rate=payload["snapshot"].get("funding_rate"),
+                funding_cost=None,
+                volatility_bucket="normal",
+                latency_ms=self.context.execution.latency_ms,
+                stale=payload["snapshot"].get("stale", False),
+                metadata={"calibration_version": "t4-v1", "request_id": result.get("request_id")},
+            )
+            self.calibration_store.append(sample)
         payload["result"] = result
         self.audit.log("live_session_decision", payload)
         self.save_state(payload)

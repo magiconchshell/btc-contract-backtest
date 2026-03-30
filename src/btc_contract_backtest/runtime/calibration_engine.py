@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, CalibrationSample, ValidationResult
+from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
 
 
 def market_quality_score(*, spread_bps: float | None, depth_notional: float | None, funding_rate: float | None, stale: bool = False) -> float:
@@ -21,6 +22,8 @@ def market_quality_score(*, spread_bps: float | None, depth_notional: float | No
 
 
 def calibrate_slippage_bps(sample: CalibrationSample, config: CalibrationConfig) -> float:
+    if config.mode == "baseline":
+        return sample.spread_bps or 0.0
     spread_component = (sample.spread_bps or 0.0) * config.slippage_spread_weight
     if sample.depth_notional and sample.depth_notional > 0 and sample.notional > 0:
         depth_ratio = sample.notional / sample.depth_notional
@@ -52,15 +55,19 @@ def calibrate_queue_probability(sample: CalibrationSample, config: CalibrationCo
     return max(config.queue_probability_floor, min(config.queue_probability_ceiling, base))
 
 
-def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfig) -> float:
+def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfig, funding_store: FundingSnapshotStore | None = None) -> float:
     if sample.funding_rate is not None and sample.notional is not None:
         return sample.notional * sample.funding_rate
+    if funding_store is not None:
+        row = funding_store.lookup(sample.timestamp)
+        if row and row.get("funding_rate") is not None and sample.notional is not None:
+            return sample.notional * float(row["funding_rate"])
     if config.funding_fallback_to_config:
         return sample.funding_cost or 0.0
     return 0.0
 
 
-def validate_samples(samples: list[dict], config: CalibrationConfig) -> ValidationResult:
+def validate_samples(samples: list[dict], config: CalibrationConfig, funding_store: FundingSnapshotStore | None = None) -> ValidationResult:
     if not samples:
         return ValidationResult(sample_count=0, slippage_mae_bps=0.0, fill_ratio_mae=0.0, funding_mae=0.0, quality_weighted_score=0.0, notes=["no samples"])
 
@@ -79,7 +86,7 @@ def validate_samples(samples: list[dict], config: CalibrationConfig) -> Validati
         if sample.fill_ratio is not None:
             fill_ratio_errors.append(abs(predicted_fill_ratio - sample.fill_ratio))
 
-        predicted_funding = funding_cost_from_sample(sample, config)
+        predicted_funding = funding_cost_from_sample(sample, config, funding_store=funding_store)
         if sample.funding_cost is not None:
             funding_errors.append(abs(predicted_funding - sample.funding_cost))
 

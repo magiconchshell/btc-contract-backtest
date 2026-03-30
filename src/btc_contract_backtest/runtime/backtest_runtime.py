@@ -6,6 +6,8 @@ import pandas as pd
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
+from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
+from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -27,6 +29,7 @@ class BacktestRuntime(TradingRuntime):
         self.cursor = 0
         self.equity_curve: list[dict] = []
         self.liquidation_events = 0
+        self.calibration_store = CalibrationSampleStore()
 
     def fetch_recent_data(self, limit: int = 300):
         end = min(self.cursor + 1, len(self.market_data))
@@ -213,6 +216,27 @@ class BacktestRuntime(TradingRuntime):
                 self.core.apply_fill(fill)
                 self.core.position.atr_at_entry = atr
                 fills.append(asdict(fill))
+                self.calibration_store.append(sample_from_execution(
+                    timestamp=fill.timestamp or payload["timestamp"],
+                    symbol=self.context.contract.symbol,
+                    mode="backtest",
+                    side=order.side.value,
+                    order_type=order.order_type.value,
+                    quantity=order.quantity,
+                    notional=order.quantity * snapshot.close,
+                    reference_price=snapshot.close,
+                    executed_price=fill.fill_price,
+                    fill_quantity=fill.fill_quantity,
+                    spread_bps=(abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close)) / snapshot.close * 10000) if snapshot.close > 0 else None,
+                    depth_notional=self.context.execution.simulated_depth_notional,
+                    queue_model=self.context.execution.queue_priority_model,
+                    funding_rate=snapshot.funding_rate,
+                    funding_cost=None,
+                    volatility_bucket="normal",
+                    latency_ms=self.context.execution.latency_ms,
+                    stale=snapshot.stale,
+                    metadata={"calibration_version": "t4-v1"},
+                ))
             payload["fills"] = fills
             payload["event"] = "open"
         elif self.core.position.side != 0 and signal != self.core.position.side and qty > 0:

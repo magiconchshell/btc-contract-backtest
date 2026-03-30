@@ -13,6 +13,8 @@ from btc_contract_backtest.config.models import AccountConfig, ContractSpec, Exe
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
+from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
+from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
@@ -45,6 +47,7 @@ class PaperTradingSession(TradingRuntime):
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.recovery = SessionRecovery(str(self.state_path))
+        self.calibration_store = CalibrationSampleStore()
         self.state = self._load()
         self._restore_core_from_state()
         if self.context.live_risk.reconcile_on_startup:
@@ -181,6 +184,28 @@ class PaperTradingSession(TradingRuntime):
                 fills.append(vars(fill))
                 if hasattr(store, "append_fill"):
                     store.append_fill(vars(fill))
+                sample = sample_from_execution(
+                    timestamp=fill.timestamp or payload["timestamp"],
+                    symbol=self.context.contract.symbol,
+                    mode="paper",
+                    side=order.side.value,
+                    order_type=order.order_type.value,
+                    quantity=order.quantity,
+                    notional=order.quantity * snapshot_close,
+                    reference_price=snapshot_close,
+                    executed_price=fill.fill_price,
+                    fill_quantity=fill.fill_quantity,
+                    spread_bps=(abs((payload["snapshot"].get("ask") or snapshot_close) - (payload["snapshot"].get("bid") or snapshot_close)) / snapshot_close * 10000) if snapshot_close > 0 else None,
+                    depth_notional=self.context.execution.simulated_depth_notional,
+                    queue_model=self.context.execution.queue_priority_model,
+                    funding_rate=payload["snapshot"].get("funding_rate"),
+                    funding_cost=None,
+                    volatility_bucket="normal",
+                    latency_ms=self.context.execution.latency_ms,
+                    stale=payload["snapshot"].get("stale", False),
+                    metadata={"calibration_version": "t4-v1"},
+                )
+                self.calibration_store.append(sample)
                 if hasattr(store, "upsert_order"):
                     record = canonical_record_from_order(order, submission_mode="paper")
                     remote_status = order.status.value if hasattr(order.status, "value") else str(order.status)
