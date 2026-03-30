@@ -27,6 +27,9 @@ def parse_args():
     p.add_argument("--paper-loop", action="store_true")
     p.add_argument("--shadow-loop", action="store_true")
     p.add_argument("--shadow-audit-log", default="shadow_audit.jsonl")
+    p.add_argument("--shadow-state-file", default="shadow_state.json")
+    p.add_argument("--shadow-summary", action="store_true")
+    p.add_argument("--shadow-review", action="store_true")
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--iterations", type=int, default=None)
     p.add_argument("--stop-loss-pct", type=float, default=None)
@@ -68,6 +71,31 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    if args.shadow_summary:
+        from pathlib import Path
+        from research.shadow_audit_tools import load_jsonl, summarize, write_reports
+
+        audit_path = Path(args.shadow_audit_log)
+        rows = load_jsonl(audit_path)
+        summary = summarize(rows)
+        md, js = write_reports(audit_path, summary)
+        print({"summary": summary, "markdown": str(md), "json": str(js)})
+        return
+
+    if args.shadow_review:
+        from pathlib import Path
+        from research.shadow_audit_tools import load_jsonl, summarize
+        from research.shadow_review_report import build_review, write_review
+
+        audit_path = Path(args.shadow_audit_log)
+        rows = load_jsonl(audit_path)
+        summary = summarize(rows)
+        review = build_review(rows, summary)
+        md, js = write_review(audit_path, review)
+        print({"review": review, "markdown": str(md), "json": str(js)})
+        return
+
     contract = ContractSpec(symbol=args.symbol, leverage=args.leverage)
     account = AccountConfig(initial_capital=args.capital)
     risk = RiskConfig(
@@ -127,7 +155,7 @@ def main():
         return
 
     if args.shadow_loop:
-        shadow = ShadowTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk, audit_log=args.shadow_audit_log)
+        shadow = ShadowTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk, audit_log=args.shadow_audit_log, state_file=args.shadow_state_file)
         shadow.run_loop(interval_seconds=args.interval, iterations=args.iterations)
         return
 
