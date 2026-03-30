@@ -172,6 +172,14 @@ Governed live mode now also includes first-pass post-submit controls:
 - live incident summary tooling
 - stronger audit and alert coverage after submit attempts
 
+## Current Phase 10 controlled live readiness layer
+
+The governed live stack now also includes:
+- post-submit policy decisions for stuck / partial order outcomes
+- readiness checklist tooling
+- basic live experimentation runbook
+- file-based alert transport scaffold
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
