@@ -36,7 +36,16 @@ class GovernedLiveSession(TradingRuntime):
         alerts_file: str = "live_alerts.jsonl",
         state_file: str = "live_session_state.json",
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
+        super().__init__(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe,
+            execution,
+            live_risk,
+            persistence=JsonRuntimeStateStore(state_file, mode="governed_live", symbol=contract.symbol, leverage=contract.leverage),
+        )
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.audit = AuditLogger(audit_log)
@@ -44,11 +53,13 @@ class GovernedLiveSession(TradingRuntime):
         self.approvals = OperatorApprovalQueue(approval_file)
         self.gov_state = GovernanceState(governance_state_file)
         self.recovery = LiveSessionRecovery(state_file)
-        recovered = self.recovery.load()
-        self.watchdog.state.last_heartbeat_at = recovered.get("last_heartbeat_at")
-        self.watchdog.state.consecutive_failures = recovered.get("consecutive_failures", 0)
-        self.watchdog.state.halted = recovered.get("halted", False)
-        self.watchdog.state.halt_reason = recovered.get("halt_reason")
+        loader = getattr(self.persistence, "load_normalized_state", None)
+        recovered = loader() if callable(loader) else self.recovery.load()
+        wd = recovered.get("watchdog") or {}
+        self.watchdog.state.last_heartbeat_at = wd.get("last_heartbeat_at")
+        self.watchdog.state.consecutive_failures = wd.get("consecutive_failures", 0)
+        self.watchdog.state.halted = wd.get("halted", False)
+        self.watchdog.state.halt_reason = wd.get("halt_reason")
         state = self.gov_state.load()
         current_mode = TradingMode(state.get("mode", mode.value))
         self.policy = GovernancePolicy(risk, self.context.live_risk, current_mode)
@@ -56,11 +67,16 @@ class GovernedLiveSession(TradingRuntime):
 
     def save_state(self, payload: dict | None = None):
         self.persist_runtime_state(
-            last_heartbeat_at=self.watchdog.state.last_heartbeat_at,
-            consecutive_failures=self.watchdog.state.consecutive_failures,
-            halted=self.watchdog.state.halted,
-            halt_reason=self.watchdog.state.halt_reason,
-            last_payload=payload,
+            mode="governed_live",
+            governance_state=self.gov_state.load(),
+            operator_actions=[],
+            last_runtime_snapshot=payload or {},
+            watchdog={
+                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                "consecutive_failures": self.watchdog.state.consecutive_failures,
+                "halted": self.watchdog.state.halted,
+                "halt_reason": self.watchdog.state.halt_reason,
+            },
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
 

@@ -30,28 +30,44 @@ class ShadowTradingSession(TradingRuntime):
         audit_log: str = "shadow_audit.jsonl",
         state_file: str = "shadow_state.json",
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
+        super().__init__(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe,
+            execution,
+            live_risk,
+            persistence=JsonRuntimeStateStore(state_file, mode="shadow", symbol=contract.symbol, leverage=contract.leverage),
+        )
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.audit = AuditLogger(audit_log)
         self.recovery = ShadowRecovery(state_file)
-        self.state = self.recovery.load()
+        loader = getattr(self.persistence, "load_normalized_state", None)
+        self.state = loader() if callable(loader) else self.recovery.load()
         self._restore_state()
 
     def _restore_state(self):
-        self.watchdog.state.last_heartbeat_at = self.state.get("last_heartbeat_at")
-        self.watchdog.state.consecutive_failures = self.state.get("consecutive_failures", 0)
-        self.watchdog.state.halted = self.state.get("halted", False)
-        self.watchdog.state.halt_reason = self.state.get("halt_reason")
+        wd = self.state.get("watchdog") or {}
+        self.watchdog.state.last_heartbeat_at = wd.get("last_heartbeat_at")
+        self.watchdog.state.consecutive_failures = wd.get("consecutive_failures", 0)
+        self.watchdog.state.halted = wd.get("halted", False)
+        self.watchdog.state.halt_reason = wd.get("halt_reason")
         self.core.risk_events = self.state.get("risk_events", [])
 
     def save_state(self, last_payload: dict | None = None):
         payload = {
-            "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-            "consecutive_failures": self.watchdog.state.consecutive_failures,
-            "halted": self.watchdog.state.halted,
-            "halt_reason": self.watchdog.state.halt_reason,
-            "last_payload": last_payload,
+            "mode": "shadow",
+            "governance_state": {},
+            "operator_actions": self.state.get("operator_actions", []),
+            "last_runtime_snapshot": last_payload or {},
+            "watchdog": {
+                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                "consecutive_failures": self.watchdog.state.consecutive_failures,
+                "halted": self.watchdog.state.halted,
+                "halt_reason": self.watchdog.state.halt_reason,
+            },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.persist_runtime_state(**payload)

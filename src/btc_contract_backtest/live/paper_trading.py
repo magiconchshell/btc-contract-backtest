@@ -30,7 +30,16 @@ class PaperTradingSession(TradingRuntime):
         execution: ExecutionConfig | None = None,
         live_risk: LiveRiskConfig | None = None,
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk, persistence=JsonRuntimeStateStore(state_file))
+        super().__init__(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe,
+            execution,
+            live_risk,
+            persistence=JsonRuntimeStateStore(state_file, mode="paper", symbol=contract.symbol, leverage=contract.leverage),
+        )
         self.state_path = Path(state_file)
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
         self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
@@ -41,6 +50,9 @@ class PaperTradingSession(TradingRuntime):
             self.reconcile_with_exchange()
 
     def _load(self):
+        loader = getattr(self.persistence, "load_normalized_state", None)
+        if callable(loader):
+            return loader()
         loaded = self.recovery.load_state()
         if loaded:
             return loaded
@@ -81,6 +93,7 @@ class PaperTradingSession(TradingRuntime):
 
     def save(self):
         self.persist_runtime_state(
+            mode="paper",
             capital=self.core.capital,
             position={
                 "symbol": self.core.position.symbol,
@@ -100,8 +113,12 @@ class PaperTradingSession(TradingRuntime):
                 "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
             } if self.core.position.side != 0 else None,
             orders=[vars(o) for o in self.core.orders.values()],
+            fills=self.state.get("fills", []),
             trades=self.core.trades,
             risk_events=self.core.risk_events,
+            governance_state={},
+            operator_actions=self.state.get("operator_actions", []),
+            last_runtime_snapshot=self.state.get("last_runtime_snapshot", {}),
             watchdog={
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
