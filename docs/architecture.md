@@ -147,6 +147,15 @@ A first governance layer now exists for future real-order submission:
 - alert sink for governance blocks / submit failures
 - guarded live executor that prevents direct adapter bypass in intended order flow
 
+## Current Phase 7 real governance loop
+
+The governance stack now includes a first end-to-end real-order governance loop:
+- approval request / approve / reject / consume lifecycle
+- governance state storage for mode, maintenance, and emergency stop
+- governed live session skeleton
+- controlled handoff from intended order to guarded submit
+- emergency stop and maintenance propagation into the live session loop
+
 ## Next evolution
 
 - deeper orderbook replay / calibration

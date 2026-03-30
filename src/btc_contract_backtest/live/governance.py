@@ -4,7 +4,6 @@ import json
 from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
 
@@ -32,7 +31,7 @@ class OperatorApprovalQueue:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text(json.dumps({"requests": [], "approved_ids": []}, indent=2))
+            self.path.write_text(json.dumps({"requests": [], "approved_ids": [], "rejected_ids": []}, indent=2))
 
     def load(self) -> dict:
         return json.loads(self.path.read_text())
@@ -45,9 +44,38 @@ class OperatorApprovalQueue:
         data["requests"].append({"request_id": request_id, **payload})
         self.save(data)
 
+    def approve(self, request_id: str):
+        data = self.load()
+        if request_id not in data["approved_ids"]:
+            data["approved_ids"].append(request_id)
+        self.save(data)
+
+    def reject(self, request_id: str):
+        data = self.load()
+        if request_id not in data["rejected_ids"]:
+            data["rejected_ids"].append(request_id)
+        self.save(data)
+
     def is_approved(self, request_id: str) -> bool:
         data = self.load()
         return request_id in data.get("approved_ids", [])
+
+    def is_rejected(self, request_id: str) -> bool:
+        data = self.load()
+        return request_id in data.get("rejected_ids", [])
+
+    def consume_request(self, request_id: str) -> dict | None:
+        data = self.load()
+        req = None
+        remaining = []
+        for item in data.get("requests", []):
+            if item.get("request_id") == request_id and req is None:
+                req = item
+            else:
+                remaining.append(item)
+        data["requests"] = remaining
+        self.save(data)
+        return req
 
 
 class AlertSink:
@@ -58,6 +86,35 @@ class AlertSink:
     def emit(self, alert_type: str, payload: dict):
         with self.path.open("a", encoding="utf-8") as f:
             f.write(json.dumps({"alert_type": alert_type, **payload}, ensure_ascii=False, default=str) + "\n")
+
+
+class GovernanceState:
+    def __init__(self, path: str = "governance_state.json"):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.path.exists():
+            self.path.write_text(json.dumps({"mode": TradingMode.DISABLED.value, "emergency_stop": False, "maintenance": False}, indent=2))
+
+    def load(self) -> dict:
+        return json.loads(self.path.read_text())
+
+    def save(self, payload: dict):
+        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    def set_mode(self, mode: TradingMode):
+        data = self.load()
+        data["mode"] = mode.value
+        self.save(data)
+
+    def set_emergency_stop(self, enabled: bool):
+        data = self.load()
+        data["emergency_stop"] = enabled
+        self.save(data)
+
+    def set_maintenance(self, enabled: bool):
+        data = self.load()
+        data["maintenance"] = enabled
+        self.save(data)
 
 
 class GovernancePolicy:
@@ -75,9 +132,13 @@ class GovernancePolicy:
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
+        emergency_stop: bool = False,
+        maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
     ) -> GovernanceDecision:
-        if self.mode in {TradingMode.DISABLED, TradingMode.MAINTENANCE}:
+        if emergency_stop:
+            return GovernanceDecision(False, "emergency_stop", severity="critical")
+        if maintenance or self.mode in {TradingMode.DISABLED, TradingMode.MAINTENANCE}:
             return GovernanceDecision(False, f"mode={self.mode.value}", severity="critical")
         if watchdog_halted:
             return GovernanceDecision(False, "watchdog_halted", severity="critical")

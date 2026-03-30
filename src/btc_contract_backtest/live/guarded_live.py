@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from btc_contract_backtest.engine.execution_models import Order, OrderSide, OrderType
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
-from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, OperatorApprovalQueue, TradingMode
+from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, OperatorApprovalQueue
 
 
 class GuardedLiveExecutor:
@@ -34,6 +34,8 @@ class GuardedLiveExecutor:
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
+        emergency_stop: bool = False,
+        maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
     ):
         decision = self.governance.evaluate(
@@ -43,6 +45,8 @@ class GuardedLiveExecutor:
             stale=stale,
             reconcile_ok=reconcile_ok,
             watchdog_halted=watchdog_halted,
+            emergency_stop=emergency_stop,
+            maintenance=maintenance,
             current_daily_loss_pct=current_daily_loss_pct,
         )
         request_id = str(uuid.uuid4())
@@ -78,3 +82,25 @@ class GuardedLiveExecutor:
         self.alerts.emit("governance_submit_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "request_id": request_id, "error": result.error})
         self.audit.log("governance_submit_failed", {"request_id": request_id, "error": result.error})
         return {"status": "submit_failed", "request_id": request_id, "error": result.error}
+
+    def process_approved_request(self, request_id: str):
+        if self.approvals.is_rejected(request_id):
+            self.audit.log("governance_request_rejected", {"request_id": request_id})
+            return {"status": "rejected", "request_id": request_id}
+        if not self.approvals.is_approved(request_id):
+            return {"status": "not_approved", "request_id": request_id}
+        req = self.approvals.consume_request(request_id)
+        if req is None:
+            return {"status": "missing_request", "request_id": request_id}
+        return self.submit_intended_order(
+            symbol=req["symbol"],
+            signal=req["signal"],
+            quantity=req["quantity"],
+            notional=req["notional"],
+            stale=False,
+            reconcile_ok=True,
+            watchdog_halted=False,
+            emergency_stop=False,
+            maintenance=False,
+            current_daily_loss_pct=0.0,
+        )
