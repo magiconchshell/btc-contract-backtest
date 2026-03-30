@@ -83,6 +83,24 @@ class GuardedLiveExecutor:
         self.audit.log("governance_submit_failed", {"request_id": request_id, "error": result.error})
         return {"status": "submit_failed", "request_id": request_id, "error": result.error}
 
+    def governed_cancel_replace(self, cancel_order_id: str, symbol: str, new_signal: int, quantity: float, notional: float):
+        side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
+        new_order = Order(
+            order_id=str(uuid.uuid4()),
+            symbol=symbol,
+            side=side,
+            order_type=OrderType.MARKET,
+            quantity=quantity,
+            client_order_id=str(uuid.uuid4()),
+        )
+        result = self.adapter.cancel_replace_order(cancel_order_id, new_order)
+        if result.ok:
+            self.audit.log("governed_cancel_replace", {"cancel_order_id": cancel_order_id, "new_signal": new_signal, "quantity": quantity, "notional": notional, "response": result.payload})
+            return {"status": "cancel_replaced", "response": result.payload}
+        self.alerts.emit("governed_cancel_replace_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "cancel_order_id": cancel_order_id, "error": result.error})
+        self.audit.log("governed_cancel_replace_failed", {"cancel_order_id": cancel_order_id, "error": result.error})
+        return {"status": "cancel_replace_failed", "error": result.error}
+
     def process_approved_request(self, request_id: str):
         if self.approvals.is_rejected(request_id):
             self.audit.log("governance_request_rejected", {"request_id": request_id})

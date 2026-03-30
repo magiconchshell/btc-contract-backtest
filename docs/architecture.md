@@ -164,6 +164,14 @@ Governed live mode now also includes:
 - governed live session audit persistence
 - approval consumption and command-driven state transitions
 
+## Current Phase 9 post-submit control layer
+
+Governed live mode now also includes first-pass post-submit controls:
+- order lifecycle monitor for stuck / partial / reconciled states
+- governed cancel-replace path
+- live incident summary tooling
+- stronger audit and alert coverage after submit attempts
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
