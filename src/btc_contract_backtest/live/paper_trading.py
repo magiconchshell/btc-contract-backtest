@@ -92,10 +92,11 @@ class PaperTradingSession(TradingRuntime):
             self.core.emit_risk_event("reconcile_failed", result.error or "Unknown reconcile failure", severity="warning")
 
     def save(self):
-        self.persist_runtime_state(
-            mode="paper",
-            capital=self.core.capital,
-            position={
+        store = self.state_store()
+        if hasattr(store, "set_mode"):
+            store.set_mode("paper")
+            store.set_capital(self.core.capital)
+            store.set_position({
                 "symbol": self.core.position.symbol,
                 "side": self.core.position.side,
                 "quantity": self.core.position.quantity,
@@ -111,22 +112,21 @@ class PaperTradingSession(TradingRuntime):
                 "break_even_armed": self.core.position.break_even_armed,
                 "partial_taken": self.core.position.partial_taken,
                 "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
-            } if self.core.position.side != 0 else None,
-            orders=[vars(o) for o in self.core.orders.values()],
-            fills=self.state.get("fills", []),
-            trades=self.core.trades,
-            risk_events=self.core.risk_events,
-            governance_state={},
-            operator_actions=self.state.get("operator_actions", []),
-            last_runtime_snapshot=self.state.get("last_runtime_snapshot", {}),
-            watchdog={
+            } if self.core.position.side != 0 else None)
+            store.set_orders([vars(o) for o in self.core.orders.values()])
+            store.set_trades(self.core.trades)
+            store.set_governance_state({})
+            store.set_last_runtime_snapshot(store.get_state().get("last_runtime_snapshot", {}))
+            store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
                 "halted": self.watchdog.state.halted,
                 "halt_reason": self.watchdog.state.halt_reason,
-            },
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
+            })
+            store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
+            store.flush()
+            return
+        self.persist_runtime_state(updated_at=datetime.now(timezone.utc).isoformat())
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
@@ -168,11 +168,16 @@ class PaperTradingSession(TradingRuntime):
             qty = float(intended.get("quantity", 0.0))
             order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
             snapshot = type("Snapshot", (), payload["snapshot"])()
+            fills = []
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
                 self.core.position.atr_at_entry = atr
+                fills.append(vars(fill))
+                store = self.state_store()
+                if hasattr(store, "append_fill"):
+                    store.append_fill(vars(fill))
             self.save()
-            return {"event": "open", "summary": self.summary()}
+            return {"event": "open", "fills": fills, "summary": self.summary()}
 
         self.save()
         return payload

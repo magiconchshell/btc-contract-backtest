@@ -128,6 +128,9 @@ class TradingRuntime:
         if callable(saver):
             saver()
 
+    def state_store(self):
+        return self.persistence
+
     def on_blocked_snapshot(self, payload: dict):
         return payload
 

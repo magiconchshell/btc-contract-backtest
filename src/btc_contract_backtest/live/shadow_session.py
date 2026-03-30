@@ -57,20 +57,21 @@ class ShadowTradingSession(TradingRuntime):
         self.core.risk_events = self.state.get("risk_events", [])
 
     def save_state(self, last_payload: dict | None = None):
-        payload = {
-            "mode": "shadow",
-            "governance_state": {},
-            "operator_actions": self.state.get("operator_actions", []),
-            "last_runtime_snapshot": last_payload or {},
-            "watchdog": {
+        store = self.state_store()
+        if hasattr(store, "set_mode"):
+            store.set_mode("shadow")
+            store.set_governance_state({})
+            store.set_last_runtime_snapshot(last_payload or {})
+            store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
                 "halted": self.watchdog.state.halted,
                 "halt_reason": self.watchdog.state.halt_reason,
-            },
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        self.persist_runtime_state(**payload)
+            })
+            store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
+            store.flush()
+            return
+        self.persist_runtime_state(updated_at=datetime.now(timezone.utc).isoformat())
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)

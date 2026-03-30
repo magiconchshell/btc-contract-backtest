@@ -5,11 +5,12 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from btc_contract_backtest.runtime.engine_state_api import EngineStateStoreAPI
 from btc_contract_backtest.runtime.engine_state_schema import normalize_legacy_state
 from btc_contract_backtest.runtime.runtime_persistence import RuntimePersistence, RuntimeStepRecord
 
 
-class JsonRuntimeStateStore(RuntimePersistence):
+class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
     def __init__(self, path: str, *, mode: str = "unknown", symbol: str = "UNKNOWN", leverage: float = 1.0):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,8 +40,44 @@ class JsonRuntimeStateStore(RuntimePersistence):
         for key, value in fields.items():
             self.state[key] = self._serialize(value)
 
+    def get_state(self) -> dict[str, Any]:
+        return self.state
+
     def load_normalized_state(self) -> dict[str, Any]:
         return self.state
+
+    def set_mode(self, mode: str) -> None:
+        self.state["mode"] = mode
+
+    def set_capital(self, capital: float | None) -> None:
+        self.state["capital"] = capital
+
+    def set_position(self, position: dict[str, Any] | None) -> None:
+        self.state["position"] = self._serialize(position)
+
+    def set_orders(self, orders: list[dict[str, Any]]) -> None:
+        self.state["orders"] = self._serialize(orders)
+
+    def append_fill(self, fill: dict[str, Any]) -> None:
+        self.state.setdefault("fills", []).append(self._serialize(fill))
+
+    def set_trades(self, trades: list[dict[str, Any]]) -> None:
+        self.state["trades"] = self._serialize(trades)
+
+    def append_operator_action(self, action: dict[str, Any]) -> None:
+        self.state.setdefault("operator_actions", []).append(self._serialize(action))
+
+    def set_governance_state(self, governance_state: dict[str, Any]) -> None:
+        self.state["governance_state"] = self._serialize(governance_state)
+
+    def set_watchdog(self, watchdog: dict[str, Any]) -> None:
+        self.state["watchdog"] = self._serialize(watchdog)
+
+    def set_last_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
+        self.state["last_runtime_snapshot"] = self._serialize(snapshot)
+
+    def flush(self) -> None:
+        self.save()
 
     def record_runtime_step(self, record: RuntimeStepRecord) -> None:
         self.state.setdefault("runtime_steps", []).append(self._serialize(record))

@@ -66,19 +66,21 @@ class GovernedLiveSession(TradingRuntime):
         self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit)
 
     def save_state(self, payload: dict | None = None):
-        self.persist_runtime_state(
-            mode="governed_live",
-            governance_state=self.gov_state.load(),
-            operator_actions=[],
-            last_runtime_snapshot=payload or {},
-            watchdog={
+        store = self.state_store()
+        if hasattr(store, "set_mode"):
+            store.set_mode("governed_live")
+            store.set_governance_state(self.gov_state.load())
+            store.set_last_runtime_snapshot(payload or {})
+            store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
                 "halted": self.watchdog.state.halted,
                 "halt_reason": self.watchdog.state.halt_reason,
-            },
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
+            })
+            store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
+            store.flush()
+            return
+        self.persist_runtime_state(updated_at=datetime.now(timezone.utc).isoformat())
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
@@ -133,6 +135,16 @@ class GovernedLiveSession(TradingRuntime):
             maintenance=state.get("maintenance", False),
             current_daily_loss_pct=0.0,
         )
+        store = self.state_store()
+        if hasattr(store, "append_operator_action"):
+            store.append_operator_action({
+                "timestamp": self.now_iso(),
+                "action": "submit_intended_order",
+                "signal": payload["signal"],
+                "quantity": float(intended.get("quantity", 0.0)),
+                "notional": float(intended.get("notional", 0.0)),
+                "result": result.get("status"),
+            })
         payload["result"] = result
         self.audit.log("live_session_decision", payload)
         self.save_state(payload)
