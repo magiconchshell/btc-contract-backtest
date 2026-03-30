@@ -1,0 +1,409 @@
+{
+  "generated_at": "2026-03-30T16:16:33.233292+00:00",
+  "summary": {
+    "folds": 8,
+    "avg_test_return": 0.05030116241892556,
+    "avg_test_drawdown": -0.6158352154633425,
+    "profitable_test_folds": 2,
+    "overfit_warning": true,
+    "strategy_selection_counts": {
+      "long_only_regime": 3,
+      "regime_filtered": 4,
+      "extreme_downtrend_short": 1
+    }
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "train_window": [
+        "2022-11-16T16:16:13.128445",
+        "2023-03-16T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-03-16T16:16:13.128445",
+        "2023-04-15T16:16:13.128445"
+      ],
+      "selected_strategy": "long_only_regime",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 1.9793213119127244,
+        "sharpe_ratio": 0.25101727178179223,
+        "max_drawdown": -1.242540853787325,
+        "win_rate": 75.0,
+        "total_trades": 4,
+        "final_capital": 1019.7932131191272,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": 2.2315168439583544,
+        "sharpe_ratio": 0.6354310037135382,
+        "max_drawdown": -0.820125840951118,
+        "win_rate": 100.0,
+        "total_trades": 2,
+        "final_capital": 1022.3151684395835,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 2,
+      "train_window": [
+        "2022-12-16T16:16:13.128445",
+        "2023-04-15T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-04-15T16:16:13.128445",
+        "2023-05-15T16:16:13.128445"
+      ],
+      "selected_strategy": "regime_filtered",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 6.188035304009508,
+        "sharpe_ratio": 0.4500706210782235,
+        "max_drawdown": -1.6929321207044945,
+        "win_rate": 83.33333333333334,
+        "total_trades": 6,
+        "final_capital": 1061.880353040095,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": -0.15447540444801008,
+        "sharpe_ratio": -0.5920192456368717,
+        "max_drawdown": -0.15447540444801008,
+        "win_rate": 0.0,
+        "total_trades": 0,
+        "final_capital": 998.4552459555199,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 3,
+      "train_window": [
+        "2023-01-15T16:16:13.128445",
+        "2023-05-15T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-05-15T16:16:13.128445",
+        "2023-06-14T16:16:13.128445"
+      ],
+      "selected_strategy": "long_only_regime",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 5.268331226789269,
+        "sharpe_ratio": 0.5733014034250061,
+        "max_drawdown": -0.8668720178868365,
+        "win_rate": 100.0,
+        "total_trades": 4,
+        "final_capital": 1052.6833122678927,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "total_trades": 0,
+        "final_capital": 1000.0,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 4,
+      "train_window": [
+        "2023-02-14T16:16:13.128445",
+        "2023-06-14T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-06-14T16:16:13.128445",
+        "2023-07-14T16:16:13.128445"
+      ],
+      "selected_strategy": "regime_filtered",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 6.491589385345173,
+        "sharpe_ratio": 0.45388384568851176,
+        "max_drawdown": -1.6929321207044818,
+        "win_rate": 75.0,
+        "total_trades": 8,
+        "final_capital": 1064.9158938534517,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": -1.0682606312831469,
+        "sharpe_ratio": -0.40723414351570025,
+        "max_drawdown": -1.6501566225508901,
+        "win_rate": 0.0,
+        "total_trades": 2,
+        "final_capital": 989.3173936871685,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 5,
+      "train_window": [
+        "2023-03-16T16:16:13.128445",
+        "2023-07-14T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-07-14T16:16:13.128445",
+        "2023-08-13T16:16:13.128445"
+      ],
+      "selected_strategy": "long_only_regime",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 3.473013303045718,
+        "sharpe_ratio": 0.3730826962353011,
+        "max_drawdown": -1.6501566225508812,
+        "win_rate": 75.0,
+        "total_trades": 4,
+        "final_capital": 1034.7301330304572,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "total_trades": 0,
+        "final_capital": 1000.0,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 6,
+      "train_window": [
+        "2023-04-15T16:16:13.128445",
+        "2023-08-13T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-08-13T16:16:13.128445",
+        "2023-09-12T16:16:13.128445"
+      ],
+      "selected_strategy": "regime_filtered",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.45,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.03,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 48,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.01,
+        "atr_position_sizing_mult": 0.02,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 8.0,
+        "max_drawdown_scale_floor": 0.5,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": -0.6355965663667349,
+        "sharpe_ratio": -0.07195786410484707,
+        "max_drawdown": -2.2277160906065903,
+        "win_rate": 33.33333333333333,
+        "total_trades": 6,
+        "final_capital": 993.6440343363327,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": 0.28999709674136515,
+        "sharpe_ratio": 0.13369999311473424,
+        "max_drawdown": -1.270898011396012,
+        "win_rate": 66.66666666666666,
+        "total_trades": 3,
+        "final_capital": 1002.8999709674137,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 7,
+      "train_window": [
+        "2023-05-15T16:16:13.128445",
+        "2023-09-12T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-09-12T16:16:13.128445",
+        "2023-10-12T16:16:13.128445"
+      ],
+      "selected_strategy": "regime_filtered",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.4,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 72,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.008,
+        "atr_position_sizing_mult": 0.018,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 6.0,
+        "max_drawdown_scale_floor": 0.45,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": 1.5084218912006804,
+        "sharpe_ratio": 0.18120041046284785,
+        "max_drawdown": -2.055573239481928,
+        "win_rate": 44.44444444444444,
+        "total_trades": 9,
+        "final_capital": 1015.0842189120068,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": -0.8963686056171581,
+        "sharpe_ratio": -0.8105895211262989,
+        "max_drawdown": -1.03102584436071,
+        "win_rate": 0.0,
+        "total_trades": 2,
+        "final_capital": 991.0363139438284,
+        "liquidation_events": 0
+      }
+    },
+    {
+      "fold": 8,
+      "train_window": [
+        "2023-06-14T16:16:13.128445",
+        "2023-10-12T16:16:13.128445"
+      ],
+      "test_window": [
+        "2023-10-12T16:16:13.128445",
+        "2023-11-11T16:16:13.128445"
+      ],
+      "selected_strategy": "extreme_downtrend_short",
+      "selected_strategy_config": {},
+      "selected_risk": {
+        "max_position_notional_pct": 0.4,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04,
+        "trailing_stop_pct": null,
+        "max_holding_bars": 72,
+        "atr_stop_mult": 1.5,
+        "break_even_trigger_pct": 0.015,
+        "partial_take_profit_pct": null,
+        "partial_close_ratio": 0.5,
+        "stepped_trailing_stop_pct": null,
+        "risk_per_trade_pct": 0.008,
+        "atr_position_sizing_mult": 0.018,
+        "drawdown_position_scale": true,
+        "max_drawdown_scale_start_pct": 6.0,
+        "max_drawdown_scale_floor": 0.45,
+        "maintenance_margin_ratio": 0.005
+      },
+      "train_metrics": {
+        "total_return": -1.4683842890963432,
+        "sharpe_ratio": -0.15363000174342906,
+        "max_drawdown": -2.6938132388724685,
+        "win_rate": 15.384615384615385,
+        "total_trades": 13,
+        "final_capital": 985.3161571090366,
+        "liquidation_events": 0
+      },
+      "test_metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "total_trades": 0,
+        "final_capital": 1000.0,
+        "liquidation_events": 0
+      }
+    }
+  ]
+}

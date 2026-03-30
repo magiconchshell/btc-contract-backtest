@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-03-30T16:16:15.677548+00:00",
+  "metrics": {
+    "total_return": 5.272713711847359,
+    "sharpe_ratio": 0.16786708277457837,
+    "max_drawdown": -3.512877133776137,
+    "win_rate": 41.66666666666667,
+    "total_trades": 24,
+    "final_capital": 1052.7271371184736,
+    "liquidation_events": 0
+  },
+  "regime_counts": {
+    "neutral": 4526,
+    "bull": 4135,
+    "crash": 100
+  },
+  "attribution": {
+    "all_trades": {
+      "count": 24,
+      "pnl_after_costs": 52.727137118473564
+    },
+    "long_module": {
+      "count": 15,
+      "pnl_after_costs": -2.7170740169828815
+    },
+    "short_module": {
+      "count": 9,
+      "pnl_after_costs": 55.44421113545644
+    },
+    "flat": {
+      "count": 0,
+      "pnl_after_costs": 0.0
+    }
+  }
+}
