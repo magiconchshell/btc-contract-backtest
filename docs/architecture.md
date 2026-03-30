@@ -138,11 +138,20 @@ Shadow operations now also includes:
 - blocked-event and reconcile-mismatch counting
 - persistent shadow state with latest payload inspection
 
+## Current Phase 6 governance layer
+
+A first governance layer now exists for future real-order submission:
+- trading modes (`disabled`, `shadow`, `paper`, `approval_required`, `guarded_live`, `maintenance`)
+- hard pre-submit governance policy evaluation
+- operator approval request queue
+- alert sink for governance blocks / submit failures
+- guarded live executor that prevents direct adapter bypass in intended order flow
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
 - remote reconciliation and restart-safe recovery hardening for live order flow
 - exchange shadow-live analytics dashboarding
-- live operator controls / approvals
+- real operator command/control surfaces
 - richer liquidation tiers
 - multi-asset portfolio layer
