@@ -14,6 +14,7 @@ from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
+from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
 from btc_contract_backtest.live.watchdog import HeartbeatWatchdog
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -33,6 +34,7 @@ class GovernedLiveSession:
         approval_file: str = "operator_approvals.json",
         governance_state_file: str = "governance_state.json",
         alerts_file: str = "live_alerts.jsonl",
+        state_file: str = "live_session_state.json",
     ):
         self.contract = contract
         self.account = account
@@ -49,10 +51,26 @@ class GovernedLiveSession:
         self.alerts = AlertSink(alerts_file)
         self.approvals = OperatorApprovalQueue(approval_file)
         self.gov_state = GovernanceState(governance_state_file)
+        self.recovery = LiveSessionRecovery(state_file)
+        recovered = self.recovery.load()
+        self.watchdog.state.last_heartbeat_at = recovered.get("last_heartbeat_at")
+        self.watchdog.state.consecutive_failures = recovered.get("consecutive_failures", 0)
+        self.watchdog.state.halted = recovered.get("halted", False)
+        self.watchdog.state.halt_reason = recovered.get("halt_reason")
         state = self.gov_state.load()
         current_mode = TradingMode(state.get("mode", mode.value))
         self.policy = GovernancePolicy(risk, live_risk, current_mode)
         self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit)
+
+    def save_state(self, payload: dict | None = None):
+        self.recovery.save({
+            "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+            "consecutive_failures": self.watchdog.state.consecutive_failures,
+            "halted": self.watchdog.state.halted,
+            "halt_reason": self.watchdog.state.halt_reason,
+            "last_payload": payload,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     def fetch_recent_data(self, limit: int = 300):
         rows = self.exchange.fetch_ohlcv(self.contract.symbol, timeframe=self.timeframe, limit=limit)
@@ -66,10 +84,12 @@ class GovernedLiveSession:
         if state.get("emergency_stop"):
             payload = {"event": "halted", "reason": "emergency_stop", "timestamp": datetime.now(timezone.utc).isoformat()}
             self.audit.log("live_session_halt", payload)
+            self.save_state(payload)
             return payload
         if state.get("maintenance"):
             payload = {"event": "halted", "reason": "maintenance_mode", "timestamp": datetime.now(timezone.utc).isoformat()}
             self.audit.log("live_session_halt", payload)
+            self.save_state(payload)
             return payload
 
         self.watchdog.beat()
@@ -84,12 +104,14 @@ class GovernedLiveSession:
         if not self.core.check_snapshot_safety(snapshot):
             payload = {"event": "blocked", "reason": "snapshot_safety_failed", "timestamp": datetime.now(timezone.utc).isoformat()}
             self.audit.log("live_session_blocked", payload)
+            self.save_state(payload)
             return payload
 
         signal = int(latest.get("signal", 0))
         if signal == 0:
             payload = {"event": "hold", "reason": "no_signal", "timestamp": datetime.now(timezone.utc).isoformat()}
             self.audit.log("live_session_hold", payload)
+            self.save_state(payload)
             return payload
 
         atr = None if pd.isna(latest.get("atr")) else float(latest.get("atr"))
@@ -109,7 +131,9 @@ class GovernedLiveSession:
             maintenance=state.get("maintenance", False),
             current_daily_loss_pct=0.0,
         )
-        self.audit.log("live_session_decision", {"timestamp": datetime.now(timezone.utc).isoformat(), "signal": signal, "quantity": qty, "notional": notional, "result": result})
+        payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "signal": signal, "quantity": qty, "notional": notional, "result": result}
+        self.audit.log("live_session_decision", payload)
+        self.save_state(payload)
         return result
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
@@ -118,6 +142,7 @@ class GovernedLiveSession:
             if self.watchdog.check_timeout():
                 payload = {"event": "halted", "reason": "heartbeat_timeout", "timestamp": datetime.now(timezone.utc).isoformat()}
                 self.audit.log("live_session_halt", payload)
+                self.save_state(payload)
                 print(json.dumps(payload, indent=2, default=str))
                 break
             payload = self.step()

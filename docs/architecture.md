@@ -156,11 +156,19 @@ The governance stack now includes a first end-to-end real-order governance loop:
 - controlled handoff from intended order to guarded submit
 - emergency stop and maintenance propagation into the live session loop
 
+## Current Phase 8 governed live hardening layer
+
+Governed live mode now also includes:
+- live session state persistence and restart recovery
+- operator CLI for governance mode / maintenance / emergency stop / approval actions
+- governed live session audit persistence
+- approval consumption and command-driven state transitions
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
 - remote reconciliation and restart-safe recovery hardening for live order flow
 - exchange shadow-live analytics dashboarding
-- real operator command/control surfaces
+- richer real-time operator surfaces and notifications
 - richer liquidation tiers
 - multi-asset portfolio layer
