@@ -46,14 +46,48 @@ class FuturesBacktestEngine:
         entry_price = None
         entry_time = None
         notional = 0.0
+        bars_held = 0
+        peak_price = None
+        trough_price = None
         equity_curve = []
         trades = []
         liquidation_events = 0
+
+        def close_trade(ts, px, reason):
+            nonlocal capital, side, entry_price, entry_time, notional, bars_held, peak_price, trough_price
+            gross = ((px - entry_price) / entry_price) * notional * self.contract.leverage * side
+            fees = (notional * self.account.taker_fee_rate) * 2
+            funding = notional * (self.account.funding_rate_annual / 365) * max(bars_held, 1)
+            pnl = gross - fees - funding
+            capital += pnl
+            trades.append({
+                "entry_time": entry_time,
+                "exit_time": ts,
+                "entry_price": entry_price,
+                "exit_price": px,
+                "position": side,
+                "bars_held": bars_held,
+                "reason": reason,
+                "gross_pnl": gross,
+                "fees": fees,
+                "funding": funding,
+                "pnl_after_costs": pnl,
+            })
+            side = 0
+            entry_price = None
+            entry_time = None
+            notional = 0.0
+            bars_held = 0
+            peak_price = None
+            trough_price = None
 
         for ts, row in signal_df.iterrows():
             px = float(row["close"])
             unrealized = 0.0
             if side != 0 and entry_price is not None:
+                bars_held += 1
+                peak_price = px if peak_price is None else max(peak_price, px)
+                trough_price = px if trough_price is None else min(trough_price, px)
                 unrealized = ((px - entry_price) / entry_price) * notional * self.contract.leverage * side
                 margin_used = notional / self.contract.leverage
                 maintenance = notional * self.risk.maintenance_margin_ratio
@@ -64,6 +98,7 @@ class FuturesBacktestEngine:
                         "entry_price": entry_price,
                         "exit_price": px,
                         "position": side,
+                        "bars_held": bars_held,
                         "reason": "liquidation",
                         "pnl_after_costs": -(margin_used),
                     })
@@ -72,7 +107,38 @@ class FuturesBacktestEngine:
                     entry_price = None
                     entry_time = None
                     notional = 0.0
+                    bars_held = 0
+                    peak_price = None
+                    trough_price = None
                     liquidation_events += 1
+                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                    continue
+
+                stop_loss_pct = self.risk.stop_loss_pct
+                take_profit_pct = self.risk.take_profit_pct
+                trailing_stop_pct = self.risk.trailing_stop_pct
+                max_holding_bars = self.risk.max_holding_bars
+
+                pnl_pct = ((px - entry_price) / entry_price) * side
+                if stop_loss_pct is not None and pnl_pct <= -stop_loss_pct:
+                    close_trade(ts, px, "stop_loss")
+                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                    continue
+                if take_profit_pct is not None and pnl_pct >= take_profit_pct:
+                    close_trade(ts, px, "take_profit")
+                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                    continue
+                if trailing_stop_pct is not None:
+                    if side == 1 and peak_price is not None and px <= peak_price * (1 - trailing_stop_pct):
+                        close_trade(ts, px, "trailing_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+                    if side == -1 and trough_price is not None and px >= trough_price * (1 + trailing_stop_pct):
+                        close_trade(ts, px, "trailing_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+                if max_holding_bars is not None and bars_held >= max_holding_bars:
+                    close_trade(ts, px, "time_exit")
                     equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                     continue
 
@@ -85,29 +151,19 @@ class FuturesBacktestEngine:
                 entry_price = px
                 entry_time = ts
                 notional = capital * self.risk.max_position_notional_pct
+                bars_held = 0
+                peak_price = px
+                trough_price = px
                 continue
             if signal != side:
-                gross = ((px - entry_price) / entry_price) * notional * self.contract.leverage * side
-                fees = (notional * self.account.taker_fee_rate) * 2
-                funding = notional * (self.account.funding_rate_annual / 365)
-                pnl = gross - fees - funding
-                capital += pnl
-                trades.append({
-                    "entry_time": entry_time,
-                    "exit_time": ts,
-                    "entry_price": entry_price,
-                    "exit_price": px,
-                    "position": side,
-                    "reason": "reverse_signal",
-                    "gross_pnl": gross,
-                    "fees": fees,
-                    "funding": funding,
-                    "pnl_after_costs": pnl,
-                })
+                close_trade(ts, px, "reverse_signal")
                 side = signal
                 entry_price = px
                 entry_time = ts
                 notional = capital * self.risk.max_position_notional_pct
+                bars_held = 0
+                peak_price = px
+                trough_price = px
 
         trades_df = pd.DataFrame(trades)
         equity_df = pd.DataFrame(equity_curve)

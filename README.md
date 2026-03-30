@@ -49,6 +49,22 @@ docs/
 python -m btc_contract_backtest.cli.main --symbol BTC/USDT --timeframe 1h --days 180 --leverage 5 --capital 1000 --strategy rsi
 ```
 
+### Backtest with enhanced exit logic
+
+```bash
+python -m btc_contract_backtest.cli.main \
+  --symbol BTC/USDT \
+  --timeframe 1h \
+  --days 180 \
+  --leverage 5 \
+  --capital 1000 \
+  --strategy hybrid \
+  --stop-loss-pct 0.02 \
+  --take-profit-pct 0.04 \
+  --trailing-stop-pct 0.015 \
+  --max-holding-bars 48
+```
+
 ### Paper trading summary
 
 ```bash

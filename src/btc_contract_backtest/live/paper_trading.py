@@ -70,6 +70,9 @@ class PaperTradingSession:
             "notional": notional,
             "leverage": self.contract.leverage,
             "margin_used": notional / self.contract.leverage,
+            "bars_held": 0,
+            "peak_price": price,
+            "trough_price": price,
         }
         self.state["positions"] = [position]
         self.save()
@@ -93,6 +96,7 @@ class PaperTradingSession:
             "side": side,
             "notional": pos["notional"],
             "leverage": pos["leverage"],
+            "bars_held": pos.get("bars_held", 0),
             "gross_pnl": gross,
             "fees": fees,
             "funding": funding,
@@ -133,7 +137,32 @@ class PaperTradingSession:
             return {"event": "open", "position": pos, "summary": self.summary()}
 
         if current_pos is not None:
+            current_pos["bars_held"] = current_pos.get("bars_held", 0) + 1
+            current_pos["peak_price"] = max(current_pos.get("peak_price", price), price)
+            current_pos["trough_price"] = min(current_pos.get("trough_price", price), price)
             current_side = current_pos["side"]
+            pnl_pct = ((price - current_pos["entry_price"]) / current_pos["entry_price"]) * current_side
+
+            if self.risk.stop_loss_pct is not None and pnl_pct <= -self.risk.stop_loss_pct:
+                trade = self._close_position(price, reason="stop_loss")
+                return {"event": "close", "trade": trade, "summary": self.summary()}
+
+            if self.risk.take_profit_pct is not None and pnl_pct >= self.risk.take_profit_pct:
+                trade = self._close_position(price, reason="take_profit")
+                return {"event": "close", "trade": trade, "summary": self.summary()}
+
+            if self.risk.trailing_stop_pct is not None:
+                if current_side == 1 and price <= current_pos["peak_price"] * (1 - self.risk.trailing_stop_pct):
+                    trade = self._close_position(price, reason="trailing_stop")
+                    return {"event": "close", "trade": trade, "summary": self.summary()}
+                if current_side == -1 and price >= current_pos["trough_price"] * (1 + self.risk.trailing_stop_pct):
+                    trade = self._close_position(price, reason="trailing_stop")
+                    return {"event": "close", "trade": trade, "summary": self.summary()}
+
+            if self.risk.max_holding_bars is not None and current_pos["bars_held"] >= self.risk.max_holding_bars:
+                trade = self._close_position(price, reason="time_exit")
+                return {"event": "close", "trade": trade, "summary": self.summary()}
+
             if signal == 0:
                 trade = self._close_position(price, reason="flat_signal")
                 return {"event": "close", "trade": trade, "summary": self.summary()}

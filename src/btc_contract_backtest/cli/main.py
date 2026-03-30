@@ -22,6 +22,10 @@ def parse_args():
     p.add_argument("--paper-loop", action="store_true")
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--iterations", type=int, default=None)
+    p.add_argument("--stop-loss-pct", type=float, default=None)
+    p.add_argument("--take-profit-pct", type=float, default=None)
+    p.add_argument("--trailing-stop-pct", type=float, default=None)
+    p.add_argument("--max-holding-bars", type=int, default=None)
     return p.parse_args()
 
 
@@ -29,7 +33,12 @@ def main():
     args = parse_args()
     contract = ContractSpec(symbol=args.symbol, leverage=args.leverage)
     account = AccountConfig(initial_capital=args.capital)
-    risk = RiskConfig()
+    risk = RiskConfig(
+        stop_loss_pct=args.stop_loss_pct,
+        take_profit_pct=args.take_profit_pct,
+        trailing_stop_pct=args.trailing_stop_pct,
+        max_holding_bars=args.max_holding_bars,
+    )
 
     if args.strategy == "hybrid":
         strategy = VotingHybridStrategy([build_strategy("rsi"), build_strategy("macd")], required_votes=1)

@@ -23,4 +23,6 @@ class RiskConfig:
     max_position_notional_pct: float = 0.95
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
+    trailing_stop_pct: Optional[float] = None
+    max_holding_bars: Optional[int] = None
     maintenance_margin_ratio: float = 0.005
