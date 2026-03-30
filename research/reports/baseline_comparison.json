@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-03-30T16:08:56.329724+00:00",
+  "rows": [
+    {
+      "strategy": "extreme_downtrend_short",
+      "signal_count": 164,
+      "total_return": 11.46440749851654,
+      "sharpe_ratio": 0.213782188519868,
+      "max_drawdown": -6.719301208806801,
+      "win_rate": 39.39393939393939,
+      "total_trades": 66,
+      "final_capital": 1114.6440749851654,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "short_lite_regime",
+      "signal_count": 26,
+      "total_return": 5.610048689909536,
+      "sharpe_ratio": 0.19748107220763225,
+      "max_drawdown": -2.51504171663745,
+      "win_rate": 44.0,
+      "total_trades": 25,
+      "final_capital": 1056.1004868990954,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "regime_asymmetric",
+      "signal_count": 27,
+      "total_return": 4.67889872476137,
+      "sharpe_ratio": 0.16329498522879102,
+      "max_drawdown": -2.6427944300682698,
+      "win_rate": 42.30769230769231,
+      "total_trades": 26,
+      "final_capital": 1046.7889872476137,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "regime_filtered",
+      "signal_count": 29,
+      "total_return": 2.0601625309932388,
+      "sharpe_ratio": 0.06976452229332189,
+      "max_drawdown": -3.638874184566104,
+      "win_rate": 37.93103448275862,
+      "total_trades": 29,
+      "final_capital": 1020.6016253099324,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "long_only_regime",
+      "signal_count": 15,
+      "total_return": -0.2640870675788392,
+      "sharpe_ratio": -0.009793454474060702,
+      "max_drawdown": -2.775471395888303,
+      "win_rate": 33.33333333333333,
+      "total_trades": 15,
+      "final_capital": 997.3591293242116,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "buy_and_hold_long",
+      "signal_count": 1,
+      "total_return": -0.33219315890443113,
+      "sharpe_ratio": -0.03697029438405253,
+      "max_drawdown": -1.2220361172076488,
+      "win_rate": 0.0,
+      "total_trades": 1,
+      "final_capital": 996.6780684109557,
+      "liquidation_events": 0
+    },
+    {
+      "strategy": "ema_trend",
+      "signal_count": 62,
+      "total_return": -6.428456581722491,
+      "sharpe_ratio": -0.1675869624470858,
+      "max_drawdown": -12.811495671159513,
+      "win_rate": 29.310344827586203,
+      "total_trades": 58,
+      "final_capital": 935.7154341827751,
+      "liquidation_events": 0
+    }
+  ]
+}
