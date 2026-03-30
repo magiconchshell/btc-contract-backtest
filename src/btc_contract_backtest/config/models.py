@@ -30,4 +30,9 @@ class RiskConfig:
     partial_take_profit_pct: Optional[float] = None
     partial_close_ratio: float = 0.5
     stepped_trailing_stop_pct: Optional[float] = None
+    risk_per_trade_pct: Optional[float] = None
+    atr_position_sizing_mult: Optional[float] = None
+    drawdown_position_scale: bool = False
+    max_drawdown_scale_start_pct: float = 10.0
+    max_drawdown_scale_floor: float = 0.35
     maintenance_margin_ratio: float = 0.005

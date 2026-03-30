@@ -49,6 +49,7 @@ class FuturesBacktestEngine:
 
     def simulate(self, signal_df: pd.DataFrame) -> dict:
         capital = self.account.initial_capital
+        peak_equity = capital
         side = 0
         entry_price = None
         entry_time = None
@@ -68,6 +69,33 @@ class FuturesBacktestEngine:
         signal_df = signal_df.copy()
         if "atr" not in signal_df.columns:
             signal_df["atr"] = self._compute_atr(signal_df)
+
+        def current_position_scale(current_equity: float) -> float:
+            nonlocal peak_equity
+            peak_equity = max(peak_equity, current_equity)
+            if not self.risk.drawdown_position_scale:
+                return 1.0
+            drawdown_pct = 0.0 if peak_equity <= 0 else max(0.0, (peak_equity - current_equity) / peak_equity * 100)
+            if drawdown_pct <= self.risk.max_drawdown_scale_start_pct:
+                return 1.0
+            excess = min(drawdown_pct - self.risk.max_drawdown_scale_start_pct, 100.0)
+            scale = 1.0 - (excess / 100.0)
+            return max(self.risk.max_drawdown_scale_floor, scale)
+
+        def determine_notional(current_capital: float, atr_value: float | None, price: float) -> float:
+            scale = current_position_scale(current_capital)
+            base_cap = current_capital * self.risk.max_position_notional_pct * scale
+            candidates = [base_cap]
+            if self.risk.risk_per_trade_pct is not None and self.risk.stop_loss_pct is not None and self.risk.stop_loss_pct > 0:
+                risk_budget = current_capital * self.risk.risk_per_trade_pct * scale
+                stop_based_notional = risk_budget / (self.risk.stop_loss_pct * self.contract.leverage)
+                candidates.append(stop_based_notional)
+            if self.risk.atr_position_sizing_mult is not None and atr_value is not None and atr_value > 0 and price > 0:
+                atr_pct = atr_value / price
+                if atr_pct > 0:
+                    atr_based_notional = (current_capital * scale * self.risk.atr_position_sizing_mult) / (atr_pct * self.contract.leverage)
+                    candidates.append(atr_based_notional)
+            return max(0.0, min(candidates))
 
         def reset_position_state():
             nonlocal side, entry_price, entry_time, initial_notional, open_notional, bars_held
@@ -229,7 +257,7 @@ class FuturesBacktestEngine:
                 side = signal
                 entry_price = px
                 entry_time = ts
-                initial_notional = capital * self.risk.max_position_notional_pct
+                initial_notional = determine_notional(capital, atr, px)
                 open_notional = initial_notional
                 bars_held = 0
                 peak_price = px
@@ -244,7 +272,7 @@ class FuturesBacktestEngine:
                 side = signal
                 entry_price = px
                 entry_time = ts
-                initial_notional = capital * self.risk.max_position_notional_pct
+                initial_notional = determine_notional(capital, atr, px)
                 open_notional = initial_notional
                 bars_held = 0
                 peak_price = px
