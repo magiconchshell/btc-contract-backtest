@@ -83,19 +83,31 @@ This system intentionally models futures semantics:
 
 That is materially different from a spot portfolio tracker.
 
+## Current execution architecture
+
+The engine is now split into a shared simulation/execution core:
+- `engine/execution_models.py` → order / fill / market snapshot / reconcile models
+- `engine/simulator_core.py` → shared position, fill, risk, sizing, stale-data checks
+- `engine/futures_engine.py` → backtest runner using the shared core
+- `live/paper_trading.py` → paper/live-sim runner using the same core
+- `live/exchange_adapter.py` → exchange order / cancel / fetch / reconcile adapter skeleton
+- `live/session_recovery.py` → state restore / order restore / duplicate client id detection
+- `live/watchdog.py` → heartbeat timeout and failure halt logic
+
 ## Current limitations
 
 Still simplified compared with exchange-grade execution:
-- no orderbook simulation
-- no partial fills
-- no tiered maintenance margin
-- funding uses annualized approximation instead of exchange snapshots
-- no maker/taker routing engine yet
+- orderbook depth remains approximated rather than replayed tick-by-tick
+- queue priority is still coarse / probabilistic
+- funding mostly remains modeled unless real exchange funding snapshots are injected
+- no full cancel-replace state machine yet
+- no full restart reconciliation with remote order replay yet
+- no production-grade idempotent live execution loop yet
 
 ## Next evolution
 
+- richer orderbook and fill calibration
+- remote reconciliation and restart-safe recovery hardening
+- exchange shadow-live execution mode
 - richer liquidation tiers
-- explicit order model
-- walk-forward package integration
-- real-time notifications
 - multi-asset portfolio layer

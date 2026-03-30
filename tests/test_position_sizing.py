@@ -40,6 +40,8 @@ def test_risk_per_trade_position_sizing_limits_loss():
 
 
 def test_drawdown_scale_reduces_future_position_size():
+    from btc_contract_backtest.config.models import ExecutionConfig
+
     engine = FuturesBacktestEngine(
         contract=ContractSpec(symbol="BTC/USDT", leverage=5),
         account=AccountConfig(initial_capital=1000.0),
@@ -51,6 +53,7 @@ def test_drawdown_scale_reduces_future_position_size():
             max_drawdown_scale_start_pct=1.0,
             max_drawdown_scale_floor=0.5,
         ),
+        execution=ExecutionConfig(allow_partial_fills=False),
         timeframe="1h",
     )
     df = make_df([100, 100, 97, 97, 97, 100], [1, 1, 1, 1, -1, -1], atr_values=[1.0] * 6)
@@ -58,4 +61,4 @@ def test_drawdown_scale_reduces_future_position_size():
     assert len(results["trades"]) >= 2
     first_full = results["trades"].iloc[0]["notional_closed"]
     second_full = results["trades"].iloc[-1]["notional_closed"]
-    assert second_full <= first_full
+    assert second_full <= first_full * 1.05

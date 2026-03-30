@@ -4,7 +4,9 @@ import ccxt
 import numpy as np
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, RiskConfig
+from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
+from btc_contract_backtest.engine.simulator_core import SimulatorCore
 
 
 class FuturesBacktestEngine:
@@ -14,11 +16,15 @@ class FuturesBacktestEngine:
         account: AccountConfig,
         risk: RiskConfig,
         timeframe: str = "1h",
+        execution: ExecutionConfig | None = None,
+        live_risk: LiveRiskConfig | None = None,
     ):
         self.contract = contract
         self.account = account
         self.risk = risk
         self.timeframe = timeframe
+        self.execution = execution or ExecutionConfig()
+        self.live_risk = live_risk or LiveRiskConfig()
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
 
     def fetch_historical_data(self, start_date: str, end_date: str) -> pd.DataFrame:
@@ -48,249 +54,145 @@ class FuturesBacktestEngine:
         return tr.rolling(window).mean()
 
     def simulate(self, signal_df: pd.DataFrame) -> dict:
-        capital = self.account.initial_capital
-        peak_equity = capital
-        side = 0
-        entry_price = None
-        entry_time = None
-        initial_notional = 0.0
-        open_notional = 0.0
-        bars_held = 0
-        peak_price = None
-        trough_price = None
-        break_even_armed = False
-        partial_taken = False
-        stepped_stop_anchor = None
-        atr_at_entry = None
-        equity_curve = []
-        trades = []
-        liquidation_events = 0
-
         signal_df = signal_df.copy()
         if "atr" not in signal_df.columns:
             signal_df["atr"] = self._compute_atr(signal_df)
 
-        def current_position_scale(current_equity: float) -> float:
-            nonlocal peak_equity
-            peak_equity = max(peak_equity, current_equity)
-            if not self.risk.drawdown_position_scale:
-                return 1.0
-            drawdown_pct = 0.0 if peak_equity <= 0 else max(0.0, (peak_equity - current_equity) / peak_equity * 100)
-            if drawdown_pct <= self.risk.max_drawdown_scale_start_pct:
-                return 1.0
-            excess = min(drawdown_pct - self.risk.max_drawdown_scale_start_pct, 100.0)
-            scale = 1.0 - (excess / 100.0)
-            return max(self.risk.max_drawdown_scale_floor, scale)
-
-        def determine_notional(current_capital: float, atr_value: float | None, price: float) -> float:
-            scale = current_position_scale(current_capital)
-            base_cap = current_capital * self.risk.max_position_notional_pct * scale
-            candidates = [base_cap]
-            if self.risk.risk_per_trade_pct is not None and self.risk.stop_loss_pct is not None and self.risk.stop_loss_pct > 0:
-                risk_budget = current_capital * self.risk.risk_per_trade_pct * scale
-                stop_based_notional = risk_budget / (self.risk.stop_loss_pct * self.contract.leverage)
-                candidates.append(stop_based_notional)
-            if self.risk.atr_position_sizing_mult is not None and atr_value is not None and atr_value > 0 and price > 0:
-                atr_pct = atr_value / price
-                if atr_pct > 0:
-                    atr_based_notional = (current_capital * scale * self.risk.atr_position_sizing_mult) / (atr_pct * self.contract.leverage)
-                    candidates.append(atr_based_notional)
-            return max(0.0, min(candidates))
-
-        def reset_position_state():
-            nonlocal side, entry_price, entry_time, initial_notional, open_notional, bars_held
-            nonlocal peak_price, trough_price, break_even_armed, partial_taken, stepped_stop_anchor, atr_at_entry
-            side = 0
-            entry_price = None
-            entry_time = None
-            initial_notional = 0.0
-            open_notional = 0.0
-            bars_held = 0
-            peak_price = None
-            trough_price = None
-            break_even_armed = False
-            partial_taken = False
-            stepped_stop_anchor = None
-            atr_at_entry = None
-
-        def realized_pnl(px: float, notional_amount: float) -> tuple[float, float, float, float]:
-            gross = ((px - entry_price) / entry_price) * notional_amount * self.contract.leverage * side
-            fees = (notional_amount * self.account.taker_fee_rate) * 2
-            funding = notional_amount * (self.account.funding_rate_annual / 365) * max(bars_held, 1)
-            pnl = gross - fees - funding
-            return gross, fees, funding, pnl
-
-        def close_trade(ts, px, reason, notional_to_close: float | None = None, is_partial: bool = False):
-            nonlocal capital, open_notional, partial_taken
-            closing_notional = open_notional if notional_to_close is None else min(notional_to_close, open_notional)
-            gross, fees, funding, pnl = realized_pnl(px, closing_notional)
-            capital += pnl
-            trades.append({
-                "entry_time": entry_time,
-                "exit_time": ts,
-                "entry_price": entry_price,
-                "exit_price": px,
-                "position": side,
-                "bars_held": bars_held,
-                "notional_closed": closing_notional,
-                "remaining_notional": max(open_notional - closing_notional, 0.0),
-                "reason": reason,
-                "is_partial": is_partial,
-                "gross_pnl": gross,
-                "fees": fees,
-                "funding": funding,
-                "pnl_after_costs": pnl,
-            })
-            open_notional -= closing_notional
-            if is_partial and open_notional > 0:
-                partial_taken = True
-                return
-            reset_position_state()
+        core = SimulatorCore(self.contract, self.account, self.risk, self.execution, self.live_risk)
+        equity_curve = []
+        liquidation_events = 0
 
         for ts, row in signal_df.iterrows():
-            px = float(row["close"])
+            snapshot = core.snapshot_from_bar(ts, row)
+            if not core.check_snapshot_safety(snapshot):
+                equity_curve.append({"timestamp": ts, "equity": core.capital, "close": snapshot.close, "position": core.position.side})
+                continue
+
+            if core.position.side != 0:
+                core.position.bars_held += 1
+                core.position.peak_price = snapshot.close if core.position.peak_price is None else max(core.position.peak_price, snapshot.close)
+                core.position.trough_price = snapshot.close if core.position.trough_price is None else min(core.position.trough_price, snapshot.close)
+
+            price = snapshot.close
             atr = None if pd.isna(row.get("atr")) else float(row.get("atr"))
+
             unrealized = 0.0
-
-            if side != 0 and entry_price is not None:
-                bars_held += 1
-                peak_price = px if peak_price is None else max(peak_price, px)
-                trough_price = px if trough_price is None else min(trough_price, px)
-                unrealized = ((px - entry_price) / entry_price) * open_notional * self.contract.leverage * side
-                margin_used = open_notional / self.contract.leverage
-                maintenance = open_notional * self.risk.maintenance_margin_ratio
-
-                if capital + unrealized <= maintenance:
-                    trades.append({
-                        "entry_time": entry_time,
-                        "exit_time": ts,
-                        "entry_price": entry_price,
-                        "exit_price": px,
-                        "position": side,
-                        "bars_held": bars_held,
-                        "notional_closed": open_notional,
+            if core.position.side != 0 and core.position.entry_price is not None and core.position.quantity != 0:
+                unrealized = ((price - core.position.entry_price) / core.position.entry_price) * core.position.notional * self.contract.leverage * core.position.side
+                maintenance = core.position.notional * self.risk.maintenance_margin_ratio
+                if core.capital + unrealized <= maintenance:
+                    core.emit_risk_event("liquidation", "Maintenance margin breached", severity="critical")
+                    core.trades.append({
+                        "entry_time": core.position.entry_time,
+                        "exit_time": str(ts),
+                        "entry_price": core.position.entry_price,
+                        "exit_price": price,
+                        "position": core.position.side,
+                        "bars_held": core.position.bars_held,
+                        "notional_closed": core.position.notional,
                         "remaining_notional": 0.0,
                         "reason": "liquidation",
                         "is_partial": False,
-                        "pnl_after_costs": -(margin_used),
+                        "pnl_after_costs": -(core.position.margin_used),
                     })
-                    capital -= margin_used
+                    core.capital -= core.position.margin_used
                     liquidation_events += 1
-                    reset_position_state()
-                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                    core.position.quantity = 0.0
+                    core.position.side = 0
+                    core.position.entry_price = None
+                    core.position.notional = 0.0
+                    core.position.margin_used = 0.0
+                    equity_curve.append({"timestamp": ts, "equity": core.capital, "close": price, "position": 0})
                     continue
 
-                pnl_pct = ((px - entry_price) / entry_price) * side
-
-                if self.risk.partial_take_profit_pct is not None and not partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
-                    close_trade(ts, px, "partial_take_profit", open_notional * self.risk.partial_close_ratio, is_partial=True)
-                    if side != 0:
-                        equity_curve.append({"timestamp": ts, "equity": capital + ((px - entry_price) / entry_price) * open_notional * self.contract.leverage * side, "close": px, "position": side})
-                        continue
-
+                pnl_pct = ((price - core.position.entry_price) / core.position.entry_price) * core.position.side
+                should_close = None
+                if self.risk.partial_take_profit_pct is not None and not core.position.partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
+                    close_qty = abs(core.position.quantity) * self.risk.partial_close_ratio
+                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, close_qty, reduce_only=True)
+                    for fill in core.try_fill_order(order, snapshot):
+                        core.apply_fill(fill)
+                    core.position.partial_taken = True
                 if self.risk.break_even_trigger_pct is not None and pnl_pct >= self.risk.break_even_trigger_pct:
-                    break_even_armed = True
+                    core.position.break_even_armed = True
+                if self.risk.atr_stop_mult is not None and core.position.atr_at_entry is not None:
+                    if core.position.side == 1 and price <= core.position.entry_price - (core.position.atr_at_entry * self.risk.atr_stop_mult):
+                        should_close = "atr_stop"
+                    if core.position.side == -1 and price >= core.position.entry_price + (core.position.atr_at_entry * self.risk.atr_stop_mult):
+                        should_close = "atr_stop"
+                if core.position.break_even_armed and should_close is None:
+                    if core.position.side == 1 and price <= core.position.entry_price:
+                        should_close = "break_even_stop"
+                    if core.position.side == -1 and price >= core.position.entry_price:
+                        should_close = "break_even_stop"
+                if self.risk.stepped_trailing_stop_pct is not None and should_close is None:
+                    if core.position.side == 1:
+                        anchor = core.position.peak_price if core.position.stepped_stop_anchor is None else max(core.position.stepped_stop_anchor, core.position.peak_price)
+                        core.position.stepped_stop_anchor = anchor
+                        if price <= anchor * (1 - self.risk.stepped_trailing_stop_pct):
+                            should_close = "stepped_trailing_stop"
+                    if core.position.side == -1:
+                        anchor = core.position.trough_price if core.position.stepped_stop_anchor is None else min(core.position.stepped_stop_anchor, core.position.trough_price)
+                        core.position.stepped_stop_anchor = anchor
+                        if price >= anchor * (1 + self.risk.stepped_trailing_stop_pct):
+                            should_close = "stepped_trailing_stop"
+                if self.risk.stop_loss_pct is not None and should_close is None and pnl_pct <= -self.risk.stop_loss_pct:
+                    should_close = "stop_loss"
+                if self.risk.take_profit_pct is not None and should_close is None and pnl_pct >= self.risk.take_profit_pct:
+                    should_close = "take_profit"
+                if self.risk.trailing_stop_pct is not None and should_close is None:
+                    if core.position.side == 1 and core.position.peak_price is not None and price <= core.position.peak_price * (1 - self.risk.trailing_stop_pct):
+                        should_close = "trailing_stop"
+                    if core.position.side == -1 and core.position.trough_price is not None and price >= core.position.trough_price * (1 + self.risk.trailing_stop_pct):
+                        should_close = "trailing_stop"
+                if self.risk.max_holding_bars is not None and should_close is None and core.position.bars_held >= self.risk.max_holding_bars:
+                    should_close = "time_exit"
 
-                if self.risk.atr_stop_mult is not None and atr_at_entry is not None:
-                    if side == 1 and px <= entry_price - (atr_at_entry * self.risk.atr_stop_mult):
-                        close_trade(ts, px, "atr_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
-                    if side == -1 and px >= entry_price + (atr_at_entry * self.risk.atr_stop_mult):
-                        close_trade(ts, px, "atr_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
+                if should_close is not None:
+                    order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), reduce_only=True)
+                    for fill in core.try_fill_order(order, snapshot):
+                        core.apply_fill(fill)
+                    if core.trades:
+                        core.trades[-1]["reason"] = should_close
 
-                if break_even_armed:
-                    if side == 1 and px <= entry_price:
-                        close_trade(ts, px, "break_even_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
-                    if side == -1 and px >= entry_price:
-                        close_trade(ts, px, "break_even_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
+            equity_curve.append({"timestamp": ts, "equity": core.capital + unrealized, "close": price, "position": core.position.side})
 
-                if self.risk.stepped_trailing_stop_pct is not None:
-                    if side == 1:
-                        anchor = peak_price if stepped_stop_anchor is None else max(stepped_stop_anchor, peak_price)
-                        stepped_stop_anchor = anchor
-                        if px <= anchor * (1 - self.risk.stepped_trailing_stop_pct):
-                            close_trade(ts, px, "stepped_trailing_stop")
-                            equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                            continue
-                    if side == -1:
-                        anchor = trough_price if stepped_stop_anchor is None else min(stepped_stop_anchor, trough_price)
-                        stepped_stop_anchor = anchor
-                        if px >= anchor * (1 + self.risk.stepped_trailing_stop_pct):
-                            close_trade(ts, px, "stepped_trailing_stop")
-                            equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                            continue
-
-                if self.risk.stop_loss_pct is not None and pnl_pct <= -self.risk.stop_loss_pct:
-                    close_trade(ts, px, "stop_loss")
-                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                    continue
-                if self.risk.take_profit_pct is not None and pnl_pct >= self.risk.take_profit_pct:
-                    close_trade(ts, px, "take_profit")
-                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                    continue
-                if self.risk.trailing_stop_pct is not None:
-                    if side == 1 and peak_price is not None and px <= peak_price * (1 - self.risk.trailing_stop_pct):
-                        close_trade(ts, px, "trailing_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
-                    if side == -1 and trough_price is not None and px >= trough_price * (1 + self.risk.trailing_stop_pct):
-                        close_trade(ts, px, "trailing_stop")
-                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                        continue
-                if self.risk.max_holding_bars is not None and bars_held >= self.risk.max_holding_bars:
-                    close_trade(ts, px, "time_exit")
-                    equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
-                    continue
-
-            equity_curve.append({"timestamp": ts, "equity": capital + unrealized, "close": px, "position": side})
             signal = int(row.get("signal", 0))
+            if core.check_daily_loss_kill(core.capital + unrealized):
+                continue
             if signal == 0:
                 continue
-            if side == 0:
-                side = signal
-                entry_price = px
-                entry_time = ts
-                initial_notional = determine_notional(capital, atr, px)
-                open_notional = initial_notional
-                bars_held = 0
-                peak_price = px
-                trough_price = px
-                stepped_stop_anchor = px
-                atr_at_entry = atr
-                break_even_armed = False
-                partial_taken = False
+            if core.position.side == 0:
+                notional = core.determine_notional(price, atr)
+                qty = 0.0 if price <= 0 else notional / price
+                order = core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+                for fill in core.try_fill_order(order, snapshot):
+                    core.apply_fill(fill)
+                    core.position.atr_at_entry = atr
                 continue
-            if signal != side:
-                close_trade(ts, px, "reverse_signal")
-                side = signal
-                entry_price = px
-                entry_time = ts
-                initial_notional = determine_notional(capital, atr, px)
-                open_notional = initial_notional
-                bars_held = 0
-                peak_price = px
-                trough_price = px
-                stepped_stop_anchor = px
-                atr_at_entry = atr
-                break_even_armed = False
-                partial_taken = False
+            if signal != core.position.side:
+                close_order = core.create_order(OrderSide.SELL if core.position.side == 1 else OrderSide.BUY, abs(core.position.quantity), reduce_only=True)
+                for fill in core.try_fill_order(close_order, snapshot):
+                    core.apply_fill(fill)
+                notional = core.determine_notional(price, atr)
+                qty = 0.0 if price <= 0 else notional / price
+                open_order = core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+                for fill in core.try_fill_order(open_order, snapshot):
+                    core.apply_fill(fill)
+                    core.position.atr_at_entry = atr
+                if core.trades:
+                    core.trades[-1]["reason"] = "reverse_signal"
 
-        trades_df = pd.DataFrame(trades)
+        trades_df = pd.DataFrame(core.trades)
         equity_df = pd.DataFrame(equity_curve)
-        final_capital = float(equity_df.iloc[-1]["equity"]) if not equity_df.empty else capital
+        final_capital = float(equity_df.iloc[-1]["equity"]) if not equity_df.empty else core.capital
         return {
             "equity_curve": equity_df,
             "trades": trades_df,
             "initial_capital": self.account.initial_capital,
             "final_capital": final_capital,
             "liquidation_events": liquidation_events,
+            "risk_events": pd.DataFrame(core.risk_events),
         }
 
     def calculate_metrics(self, results: dict) -> dict:
@@ -310,4 +212,5 @@ class FuturesBacktestEngine:
             "total_trades": int(len(trades)),
             "final_capital": float(results["final_capital"]),
             "liquidation_events": int(results["liquidation_events"]),
+            "risk_events": 0 if "risk_events" not in results or results["risk_events"].empty else int(len(results["risk_events"])),
         }

@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import time
+
+import ccxt
+
+from btc_contract_backtest.engine.execution_models import Order, OrderStatus, ReconcileReport
+
+
+@dataclass
+class AdapterResult:
+    ok: bool
+    payload: dict | list | None = None
+    error: str | None = None
+
+
+class ExchangeExecutionAdapter:
+    def __init__(self, exchange: ccxt.Exchange, symbol: str, max_retries: int = 3, retry_delay_seconds: float = 1.0):
+        self.exchange = exchange
+        self.symbol = symbol
+        self.max_retries = max_retries
+        self.retry_delay_seconds = retry_delay_seconds
+
+    def _retry(self, fn):
+        last_error = None
+        for _ in range(self.max_retries):
+            try:
+                return AdapterResult(ok=True, payload=fn())
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                time.sleep(self.retry_delay_seconds)
+        return AdapterResult(ok=False, error=last_error)
+
+    def submit_order(self, order: Order) -> AdapterResult:
+        def op():
+            params = {}
+            if order.reduce_only:
+                params["reduceOnly"] = True
+            if order.client_order_id:
+                params["newClientOrderId"] = order.client_order_id
+            payload = self.exchange.create_order(
+                symbol=order.symbol,
+                type=order.order_type.value.replace("_", "-"),
+                side=order.side.value,
+                amount=order.quantity,
+                price=order.price,
+                params=params,
+            )
+            return payload
+
+        return self._retry(op)
+
+    def cancel_order(self, order_id: str) -> AdapterResult:
+        return self._retry(lambda: self.exchange.cancel_order(order_id, self.symbol))
+
+    def cancel_replace_order(self, cancel_order_id: str, new_order: Order) -> AdapterResult:
+        cancel_result = self.cancel_order(cancel_order_id)
+        if not cancel_result.ok:
+            return cancel_result
+        return self.submit_order(new_order)
+
+    def fetch_open_orders(self) -> AdapterResult:
+        return self._retry(lambda: self.exchange.fetch_open_orders(self.symbol))
+
+    def fetch_positions(self) -> AdapterResult:
+        return self._retry(lambda: self.exchange.fetch_positions([self.symbol]))
+
+    def fetch_order(self, order_id: str) -> AdapterResult:
+        return self._retry(lambda: self.exchange.fetch_order(order_id, self.symbol))
+
+    def reconcile_order_status(self, order: Order) -> AdapterResult:
+        def op():
+            remote = self.exchange.fetch_order(order.exchange_order_id or order.order_id, order.symbol)
+            status = str(remote.get("status", "")).lower()
+            mapped = OrderStatus.FILLED if status == "closed" else OrderStatus.CANCELED if status == "canceled" else OrderStatus.PARTIALLY_FILLED if remote.get("filled", 0) not in (0, None) else OrderStatus.NEW
+            return {"remote": remote, "mapped_status": mapped.value}
+
+        return self._retry(op)
+
+    def reconcile_state(self, local_position_side: int, local_open_orders: int) -> AdapterResult:
+        positions = self.fetch_positions()
+        open_orders = self.fetch_open_orders()
+        if not positions.ok:
+            return AdapterResult(ok=False, error=positions.error)
+        if not open_orders.ok:
+            return AdapterResult(ok=False, error=open_orders.error)
+
+        remote_position_side = 0
+        remote_positions = positions.payload or []
+        for pos in remote_positions:
+            contracts = float(pos.get("contracts") or pos.get("positionAmt") or 0.0)
+            if contracts > 0:
+                remote_position_side = 1
+                break
+            if contracts < 0:
+                remote_position_side = -1
+                break
+
+        remote_open_order_count = len(open_orders.payload or [])
+        differences = []
+        if remote_position_side != local_position_side:
+            differences.append(f"position side mismatch local={local_position_side} remote={remote_position_side}")
+        if remote_open_order_count != local_open_orders:
+            differences.append(f"open order count mismatch local={local_open_orders} remote={remote_open_order_count}")
+
+        report = ReconcileReport(
+            ok=len(differences) == 0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            local_position_side=local_position_side,
+            remote_position_side=remote_position_side,
+            local_open_orders=local_open_orders,
+            remote_open_orders=remote_open_order_count,
+            differences=differences,
+        )
+        return AdapterResult(ok=True, payload=report.__dict__)

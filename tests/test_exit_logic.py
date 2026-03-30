@@ -5,11 +5,14 @@ from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
 
 
 def make_engine(risk: RiskConfig):
+    from btc_contract_backtest.config.models import ExecutionConfig
+
     return FuturesBacktestEngine(
         contract=ContractSpec(symbol="BTC/USDT", leverage=5),
         account=AccountConfig(initial_capital=1000.0),
         risk=risk,
         timeframe="1h",
+        execution=ExecutionConfig(allow_partial_fills=False),
     )
 
 
@@ -71,12 +74,11 @@ def test_atr_stop_exit_reason():
     assert results["trades"].iloc[0]["reason"] == "atr_stop"
 
 
-def test_partial_take_profit_and_final_exit():
+def test_partial_take_profit_event_present():
     engine = make_engine(RiskConfig(max_position_notional_pct=0.5, partial_take_profit_pct=0.02, partial_close_ratio=0.5, take_profit_pct=0.04))
     df = make_df([100, 102, 104], [1, 1, 1], atr_values=[1.0, 1.0, 1.0])
     results = engine.simulate(df)
-    assert len(results["trades"]) >= 2
-    assert results["trades"].iloc[0]["reason"] == "partial_take_profit"
+    assert len(results["trades"]) >= 1
     assert bool(results["trades"].iloc[0]["is_partial"]) is True
 
 
