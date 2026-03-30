@@ -129,10 +129,20 @@ Shadow mode now also includes:
 - explicit unsafe-market event analytics from shadow audit logs
 - persistent last-payload tracking for restart-safe shadow inspection
 
+## Current Phase 5 shadow operations layer
+
+Shadow operations now also includes:
+- audit log rotation
+- audit summary generation
+- operator review report generation
+- blocked-event and reconcile-mismatch counting
+- persistent shadow state with latest payload inspection
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
 - remote reconciliation and restart-safe recovery hardening for live order flow
 - exchange shadow-live analytics dashboarding
+- live operator controls / approvals
 - richer liquidation tiers
 - multi-asset portfolio layer
