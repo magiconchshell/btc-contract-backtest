@@ -8,6 +8,8 @@ import uuid
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import FillEvent, MarketSnapshot, Order, OrderSide, OrderStatus, OrderType, PositionState, RiskEvent
+from btc_contract_backtest.runtime.calibration_engine import calibrate_fill_ratio, calibrate_slippage_bps
+from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, CalibrationSample
 
 
 class SimulatorCore:
@@ -33,6 +35,7 @@ class SimulatorCore:
         self.risk_events: list[dict] = []
         self.consecutive_failures = 0
         self.last_snapshot: Optional[MarketSnapshot] = None
+        self.calibration_config = CalibrationConfig()
 
     def now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -135,6 +138,28 @@ class SimulatorCore:
         order.updated_at = self.now_iso()
         return order
 
+    def _calibration_sample(self, snapshot: MarketSnapshot, side: OrderSide, order_type: OrderType, quantity: float) -> CalibrationSample:
+        spread_bps = 0.0
+        if snapshot.bid is not None and snapshot.ask is not None and snapshot.close > 0:
+            spread_bps = abs(snapshot.ask - snapshot.bid) / snapshot.close * 10000
+        return CalibrationSample(
+            timestamp=snapshot.timestamp,
+            symbol=snapshot.symbol,
+            mode="simulation",
+            side=side.value,
+            order_type=order_type.value,
+            quantity=quantity,
+            notional=quantity * snapshot.close,
+            reference_price=snapshot.close,
+            spread_bps=spread_bps,
+            depth_notional=self.execution.simulated_depth_notional,
+            queue_model=self.execution.queue_priority_model,
+            funding_rate=snapshot.funding_rate,
+            funding_cost=None,
+            volatility_bucket="high" if spread_bps > 8 else "normal",
+            latency_ms=snapshot.latency_ms,
+        )
+
     def _depth_impact_bps(self, order_notional: float, depth_notional: float) -> float:
         if depth_notional <= 0:
             return self.execution.simulated_slippage_bps
@@ -145,9 +170,10 @@ class SimulatorCore:
         base = snapshot.ask if side == OrderSide.BUY else snapshot.bid
         if base is None:
             base = snapshot.close
-        depth_notional = self.execution.simulated_depth_notional
-        order_notional = quantity * snapshot.close
-        slip_bps = self._depth_impact_bps(order_notional, depth_notional)
+        sample = self._calibration_sample(snapshot, side, order_type, quantity)
+        calibrated_bps = calibrate_slippage_bps(sample, self.calibration_config)
+        heuristic_bps = self._depth_impact_bps(quantity * snapshot.close, self.execution.simulated_depth_notional)
+        slip_bps = max(calibrated_bps, heuristic_bps)
         slip = snapshot.close * (slip_bps / 10000)
         if order_type == OrderType.MARKET:
             return base + slip if side == OrderSide.BUY else base - slip
@@ -156,6 +182,11 @@ class SimulatorCore:
     def _fill_ratio(self, order: Order) -> float:
         if not self.execution.allow_partial_fills:
             return 1.0
+        snapshot = self.last_snapshot
+        if snapshot is not None:
+            sample = self._calibration_sample(snapshot, order.side, order.order_type, order.quantity)
+            calibrated = calibrate_fill_ratio(sample, self.calibration_config)
+            return min(1.0, max(0.0, calibrated))
         base = self.execution.max_fill_ratio_per_bar
         if self.execution.queue_priority_model == "probabilistic" and order.order_type == OrderType.LIMIT:
             return min(1.0, max(0.0, base * self.execution.maker_fill_probability))
