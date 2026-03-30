@@ -11,14 +11,13 @@ import pandas as pd
 
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
-from btc_contract_backtest.engine.simulator_core import SimulatorCore
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
-from btc_contract_backtest.live.watchdog import HeartbeatWatchdog
+from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
 
-class PaperTradingSession:
+class PaperTradingSession(TradingRuntime):
     def __init__(
         self,
         contract: ContractSpec,
@@ -30,29 +29,21 @@ class PaperTradingSession:
         execution: ExecutionConfig | None = None,
         live_risk: LiveRiskConfig | None = None,
     ):
-        self.contract = contract
-        self.account = account
-        self.risk = risk
-        self.strategy = strategy
-        self.timeframe = timeframe
-        self.execution = execution or ExecutionConfig()
-        self.live_risk = live_risk or LiveRiskConfig()
+        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
         self.state_path = Path(state_file)
         self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
-        self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.live_risk.max_consecutive_failures)
-        self.watchdog = HeartbeatWatchdog(self.live_risk.heartbeat_timeout_seconds, self.live_risk.max_consecutive_failures)
-        self.core = SimulatorCore(contract, account, risk, self.execution, self.live_risk)
+        self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
         self.recovery = SessionRecovery(str(self.state_path))
         self.state = self._load()
         self._restore_core_from_state()
-        if self.live_risk.reconcile_on_startup:
+        if self.context.live_risk.reconcile_on_startup:
             self.reconcile_with_exchange()
 
     def _load(self):
         if self.state_path.exists():
             return json.loads(self.state_path.read_text())
         return {
-            "capital": self.account.initial_capital,
+            "capital": self.context.account.initial_capital,
             "position": None,
             "orders": [],
             "trades": [],
@@ -62,7 +53,7 @@ class PaperTradingSession:
         }
 
     def _restore_core_from_state(self):
-        self.core.capital = self.state.get("capital", self.account.initial_capital)
+        self.core.capital = self.state.get("capital", self.context.account.initial_capital)
         pos = self.state.get("position")
         if pos:
             for key, value in pos.items():
@@ -118,124 +109,45 @@ class PaperTradingSession:
         self.state_path.write_text(json.dumps(self.state, indent=2, default=str))
 
     def fetch_recent_data(self, limit: int = 300):
-        rows = self.exchange.fetch_ohlcv(self.contract.symbol, timeframe=self.timeframe, limit=limit)
+        rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
         df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
         return df
 
     def mark_price(self) -> float:
-        ticker = self.exchange.fetch_ticker(self.contract.symbol)
+        ticker = self.exchange.fetch_ticker(self.context.contract.symbol)
         return float(ticker["last"])
 
-    def _latest_snapshot(self, df: pd.DataFrame):
-        latest = df.iloc[-1]
-        snapshot = self.core.snapshot_from_bar(df.index[-1], latest)
+    def enrich_snapshot(self, signal_df: pd.DataFrame, latest):
+        snapshot = super().enrich_snapshot(signal_df, latest)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        bar_ms = int(df.index[-1].timestamp() * 1000)
-        snapshot.stale = (now_ms - bar_ms) > (self.risk.stale_data_threshold_seconds * 1000)
-        return latest, snapshot
+        bar_ms = int(signal_df.index[-1].timestamp() * 1000)
+        snapshot.stale = (now_ms - bar_ms) > (self.context.risk.stale_data_threshold_seconds * 1000)
+        return snapshot
 
-    def step(self):
-        if self.watchdog.state.halted:
-            self.save()
-            return {"event": "halted", "reason": self.watchdog.state.halt_reason, "summary": self.summary()}
+    def on_blocked_snapshot(self, payload: dict):
+        self.save()
+        return payload
 
-        df = self.fetch_recent_data()
-        signal_df = self.strategy.generate_signals(df)
-        latest, snapshot = self._latest_snapshot(signal_df)
-        signal = int(latest.get("signal", 0))
-        atr = None if pd.isna(latest.get("atr")) else float(latest.get("atr"))
+    def on_hold(self, payload: dict):
+        self.save()
+        return payload
 
-        self.watchdog.beat()
-
-        if not self.core.check_snapshot_safety(snapshot):
-            self.save()
-            return {"event": "blocked", "reason": "stale_data", "summary": self.summary()}
-
-        if self.core.position.side != 0:
-            self.core.position.bars_held += 1
-            self.core.position.peak_price = snapshot.close if self.core.position.peak_price is None else max(self.core.position.peak_price, snapshot.close)
-            self.core.position.trough_price = snapshot.close if self.core.position.trough_price is None else min(self.core.position.trough_price, snapshot.close)
-            self.core.apply_periodic_funding(snapshot)
-            pnl_pct = ((snapshot.close - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.side if self.core.position.entry_price else 0.0
-            should_close = None
-
-            if self.risk.partial_take_profit_pct is not None and not self.core.position.partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
-                qty = abs(self.core.position.quantity) * self.risk.partial_close_ratio
-                order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, qty, OrderType.MARKET, reduce_only=True)
-                for fill in self.core.try_fill_order(order, snapshot):
-                    self.core.apply_fill(fill)
-                self.core.position.partial_taken = True
-                self.save()
-                return {"event": "partial_close", "summary": self.summary()}
-
-            if self.risk.break_even_trigger_pct is not None and pnl_pct >= self.risk.break_even_trigger_pct:
-                self.core.position.break_even_armed = True
-            if self.risk.atr_stop_mult is not None and self.core.position.atr_at_entry is not None:
-                if self.core.position.side == 1 and snapshot.close <= self.core.position.entry_price - (self.core.position.atr_at_entry * self.risk.atr_stop_mult):
-                    should_close = "atr_stop"
-                if self.core.position.side == -1 and snapshot.close >= self.core.position.entry_price + (self.core.position.atr_at_entry * self.risk.atr_stop_mult):
-                    should_close = "atr_stop"
-            if self.core.position.break_even_armed and should_close is None:
-                if self.core.position.side == 1 and snapshot.close <= self.core.position.entry_price:
-                    should_close = "break_even_stop"
-                if self.core.position.side == -1 and snapshot.close >= self.core.position.entry_price:
-                    should_close = "break_even_stop"
-            if self.risk.stepped_trailing_stop_pct is not None and should_close is None:
-                if self.core.position.side == 1:
-                    anchor = self.core.position.peak_price if self.core.position.stepped_stop_anchor is None else max(self.core.position.stepped_stop_anchor, self.core.position.peak_price)
-                    self.core.position.stepped_stop_anchor = anchor
-                    if snapshot.close <= anchor * (1 - self.risk.stepped_trailing_stop_pct):
-                        should_close = "stepped_trailing_stop"
-                if self.core.position.side == -1:
-                    anchor = self.core.position.trough_price if self.core.position.stepped_stop_anchor is None else min(self.core.position.stepped_stop_anchor, self.core.position.trough_price)
-                    self.core.position.stepped_stop_anchor = anchor
-                    if snapshot.close >= anchor * (1 + self.risk.stepped_trailing_stop_pct):
-                        should_close = "stepped_trailing_stop"
-            if self.risk.stop_loss_pct is not None and should_close is None and pnl_pct <= -self.risk.stop_loss_pct:
-                should_close = "stop_loss"
-            if self.risk.take_profit_pct is not None and should_close is None and pnl_pct >= self.risk.take_profit_pct:
-                should_close = "take_profit"
-            if self.risk.trailing_stop_pct is not None and should_close is None:
-                if self.core.position.side == 1 and snapshot.close <= self.core.position.peak_price * (1 - self.risk.trailing_stop_pct):
-                    should_close = "trailing_stop"
-                if self.core.position.side == -1 and snapshot.close >= self.core.position.trough_price * (1 + self.risk.trailing_stop_pct):
-                    should_close = "trailing_stop"
-            if self.risk.max_holding_bars is not None and should_close is None and self.core.position.bars_held >= self.risk.max_holding_bars:
-                should_close = "time_exit"
-            if signal == 0 and should_close is None:
-                should_close = "flat_signal"
-            if signal != 0 and signal != self.core.position.side and should_close is None:
-                should_close = "reverse_signal"
-
-            if should_close is not None:
-                order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, abs(self.core.position.quantity), OrderType.MARKET, reduce_only=True)
-                for fill in self.core.try_fill_order(order, snapshot):
-                    self.core.apply_fill(fill)
-                if self.core.trades:
-                    self.core.trades[-1]["reason"] = should_close
-                if should_close == "reverse_signal" and signal != 0:
-                    notional = self.core.determine_notional(snapshot.close, atr)
-                    qty = 0.0 if snapshot.close <= 0 else notional / snapshot.close
-                    open_order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
-                    for fill in self.core.try_fill_order(open_order, snapshot):
-                        self.core.apply_fill(fill)
-                        self.core.position.atr_at_entry = atr
-                    self.save()
-                    return {"event": "reverse", "summary": self.summary()}
-                self.save()
-                return {"event": "close", "reason": should_close, "summary": self.summary()}
-
+    def on_decision(self, payload: dict):
+        signal = payload["signal"]
+        snapshot_close = float(payload["snapshot"]["close"])
+        atr = None
         if self.core.check_daily_loss_kill(self.core.capital):
             self.watchdog.record_failure("daily_loss_kill")
             self.save()
             return {"event": "kill_switch", "summary": self.summary()}
 
         if self.core.position.side == 0 and signal != 0:
-            notional = self.core.determine_notional(snapshot.close, atr)
-            qty = 0.0 if snapshot.close <= 0 else notional / snapshot.close
+            intended = payload["intended_order"] or {}
+            qty = float(intended.get("quantity", 0.0))
             order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+            snapshot = type("Snapshot", (), payload["snapshot"])()
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
                 self.core.position.atr_at_entry = atr
@@ -243,7 +155,7 @@ class PaperTradingSession:
             return {"event": "open", "summary": self.summary()}
 
         self.save()
-        return {"event": "hold", "summary": self.summary()}
+        return payload
 
     def summary(self):
         current = self.mark_price()
@@ -251,9 +163,9 @@ class PaperTradingSession:
         if self.core.position.side != 0 and self.core.position.entry_price is not None:
             unrealized = ((current - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.notional * self.core.position.leverage * self.core.position.side
         return {
-            "symbol": self.contract.symbol,
-            "market_type": self.contract.market_type,
-            "timeframe": self.timeframe,
+            "symbol": self.context.contract.symbol,
+            "market_type": self.context.contract.market_type,
+            "timeframe": self.context.timeframe,
             "capital": self.core.capital,
             "position_side": self.core.position.side,
             "position_qty": self.core.position.quantity,
@@ -261,18 +173,13 @@ class PaperTradingSession:
             "mark_price": current,
             "unrealized_pnl": unrealized,
             "risk_events": len(self.core.risk_events),
-            "watchdog_halted": self.watchdog.state.halted,
         }
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
         count = 0
         while True:
-            if self.watchdog.check_timeout():
-                self.save()
-                print(json.dumps({"event": "halted", "reason": "heartbeat_timeout", "summary": self.summary()}, indent=2, default=str))
-                break
-            event = self.step()
-            print(json.dumps(event, indent=2, default=str))
+            payload = self.step()
+            print(json.dumps(payload, indent=2, default=str))
             count += 1
             if iterations is not None and count >= iterations:
                 break

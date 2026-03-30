@@ -7,6 +7,7 @@ import pandas as pd
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.engine.simulator_core import SimulatorCore
+from btc_contract_backtest.runtime.backtest_runtime import BacktestRuntime
 
 
 class FuturesBacktestEngine:
