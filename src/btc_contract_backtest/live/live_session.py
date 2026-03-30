@@ -13,6 +13,7 @@ from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
+from btc_contract_backtest.live.incident_store import IncidentRecord, IncidentStore
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
@@ -55,6 +56,7 @@ class GovernedLiveSession(TradingRuntime):
         self.alerts = AlertSink(alerts_file)
         self.approvals = OperatorApprovalQueue(approval_file)
         self.gov_state = GovernanceState(governance_state_file)
+        self.incidents = IncidentStore()
         self.recovery = LiveSessionRecovery(state_file)
         self.calibration_store = CalibrationSampleStore()
         loader = getattr(self.persistence, "load_normalized_state", None)
@@ -116,11 +118,15 @@ class GovernedLiveSession(TradingRuntime):
         if state.get("emergency_stop"):
             halted = {"event": "halted", "reason": "emergency_stop", "timestamp": self.now_iso()}
             self.audit.log("live_session_halt", halted)
+            self.alerts.emit("pilot_blocking", {"timestamp": self.now_iso(), "reason": "emergency_stop"}, severity="critical")
+            self.incidents.append(IncidentRecord(incident_id=f"incident-{int(time.time())}", incident_type="governance", severity="critical", state="detected", timestamp=self.now_iso(), summary="Emergency stop active", metadata=halted))
             self.save_state(halted)
             return halted
         if state.get("maintenance"):
             halted = {"event": "halted", "reason": "maintenance_mode", "timestamp": self.now_iso()}
             self.audit.log("live_session_halt", halted)
+            self.alerts.emit("pilot_blocking", {"timestamp": self.now_iso(), "reason": "maintenance_mode"}, severity="critical")
+            self.incidents.append(IncidentRecord(incident_id=f"incident-{int(time.time())}", incident_type="maintenance", severity="warning", state="detected", timestamp=self.now_iso(), summary="Maintenance mode active", metadata=halted))
             self.save_state(halted)
             return halted
 
