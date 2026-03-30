@@ -7,7 +7,6 @@ from btc_contract_backtest.reporting.metrics import summarize_results
 from btc_contract_backtest.strategies import build_strategy
 from btc_contract_backtest.strategies.hybrid import VotingHybridStrategy
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
-from btc_contract_backtest.strategies.hybrid import VotingHybridStrategy
 
 
 def parse_args():
@@ -17,7 +16,7 @@ def parse_args():
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--leverage", type=int, default=5)
     p.add_argument("--capital", type=float, default=1000.0)
-    p.add_argument("--strategy", default="rsi", choices=["rsi", "sma_cross", "macd", "hybrid"])
+    p.add_argument("--strategy", default="rsi", choices=["rsi", "sma_cross", "macd", "hybrid", "regime_filtered"])
     p.add_argument("--paper-summary", action="store_true")
     p.add_argument("--paper-loop", action="store_true")
     p.add_argument("--interval", type=int, default=60)
@@ -26,6 +25,11 @@ def parse_args():
     p.add_argument("--take-profit-pct", type=float, default=None)
     p.add_argument("--trailing-stop-pct", type=float, default=None)
     p.add_argument("--max-holding-bars", type=int, default=None)
+    p.add_argument("--atr-stop-mult", type=float, default=None)
+    p.add_argument("--break-even-trigger-pct", type=float, default=None)
+    p.add_argument("--partial-take-profit-pct", type=float, default=None)
+    p.add_argument("--partial-close-ratio", type=float, default=0.5)
+    p.add_argument("--stepped-trailing-stop-pct", type=float, default=None)
     return p.parse_args()
 
 
@@ -38,6 +42,11 @@ def main():
         take_profit_pct=args.take_profit_pct,
         trailing_stop_pct=args.trailing_stop_pct,
         max_holding_bars=args.max_holding_bars,
+        atr_stop_mult=args.atr_stop_mult,
+        break_even_trigger_pct=args.break_even_trigger_pct,
+        partial_take_profit_pct=args.partial_take_profit_pct,
+        partial_close_ratio=args.partial_close_ratio,
+        stepped_trailing_stop_pct=args.stepped_trailing_stop_pct,
     )
 
     if args.strategy == "hybrid":

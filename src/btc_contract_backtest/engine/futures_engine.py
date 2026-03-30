@@ -40,25 +40,62 @@ class FuturesBacktestEngine:
         mapping = {"1m": 60000, "5m": 300000, "15m": 900000, "30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000}
         return mapping.get(self.timeframe, 3600000)
 
+    def _compute_atr(self, df: pd.DataFrame, window: int = 14) -> pd.Series:
+        tr1 = df["high"] - df["low"]
+        tr2 = (df["high"] - df["close"].shift(1)).abs()
+        tr3 = (df["low"] - df["close"].shift(1)).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        return tr.rolling(window).mean()
+
     def simulate(self, signal_df: pd.DataFrame) -> dict:
         capital = self.account.initial_capital
         side = 0
         entry_price = None
         entry_time = None
-        notional = 0.0
+        initial_notional = 0.0
+        open_notional = 0.0
         bars_held = 0
         peak_price = None
         trough_price = None
+        break_even_armed = False
+        partial_taken = False
+        stepped_stop_anchor = None
+        atr_at_entry = None
         equity_curve = []
         trades = []
         liquidation_events = 0
 
-        def close_trade(ts, px, reason):
-            nonlocal capital, side, entry_price, entry_time, notional, bars_held, peak_price, trough_price
-            gross = ((px - entry_price) / entry_price) * notional * self.contract.leverage * side
-            fees = (notional * self.account.taker_fee_rate) * 2
-            funding = notional * (self.account.funding_rate_annual / 365) * max(bars_held, 1)
+        signal_df = signal_df.copy()
+        if "atr" not in signal_df.columns:
+            signal_df["atr"] = self._compute_atr(signal_df)
+
+        def reset_position_state():
+            nonlocal side, entry_price, entry_time, initial_notional, open_notional, bars_held
+            nonlocal peak_price, trough_price, break_even_armed, partial_taken, stepped_stop_anchor, atr_at_entry
+            side = 0
+            entry_price = None
+            entry_time = None
+            initial_notional = 0.0
+            open_notional = 0.0
+            bars_held = 0
+            peak_price = None
+            trough_price = None
+            break_even_armed = False
+            partial_taken = False
+            stepped_stop_anchor = None
+            atr_at_entry = None
+
+        def realized_pnl(px: float, notional_amount: float) -> tuple[float, float, float, float]:
+            gross = ((px - entry_price) / entry_price) * notional_amount * self.contract.leverage * side
+            fees = (notional_amount * self.account.taker_fee_rate) * 2
+            funding = notional_amount * (self.account.funding_rate_annual / 365) * max(bars_held, 1)
             pnl = gross - fees - funding
+            return gross, fees, funding, pnl
+
+        def close_trade(ts, px, reason, notional_to_close: float | None = None, is_partial: bool = False):
+            nonlocal capital, open_notional, partial_taken
+            closing_notional = open_notional if notional_to_close is None else min(notional_to_close, open_notional)
+            gross, fees, funding, pnl = realized_pnl(px, closing_notional)
             capital += pnl
             trades.append({
                 "entry_time": entry_time,
@@ -67,30 +104,34 @@ class FuturesBacktestEngine:
                 "exit_price": px,
                 "position": side,
                 "bars_held": bars_held,
+                "notional_closed": closing_notional,
+                "remaining_notional": max(open_notional - closing_notional, 0.0),
                 "reason": reason,
+                "is_partial": is_partial,
                 "gross_pnl": gross,
                 "fees": fees,
                 "funding": funding,
                 "pnl_after_costs": pnl,
             })
-            side = 0
-            entry_price = None
-            entry_time = None
-            notional = 0.0
-            bars_held = 0
-            peak_price = None
-            trough_price = None
+            open_notional -= closing_notional
+            if is_partial and open_notional > 0:
+                partial_taken = True
+                return
+            reset_position_state()
 
         for ts, row in signal_df.iterrows():
             px = float(row["close"])
+            atr = None if pd.isna(row.get("atr")) else float(row.get("atr"))
             unrealized = 0.0
+
             if side != 0 and entry_price is not None:
                 bars_held += 1
                 peak_price = px if peak_price is None else max(peak_price, px)
                 trough_price = px if trough_price is None else min(trough_price, px)
-                unrealized = ((px - entry_price) / entry_price) * notional * self.contract.leverage * side
-                margin_used = notional / self.contract.leverage
-                maintenance = notional * self.risk.maintenance_margin_ratio
+                unrealized = ((px - entry_price) / entry_price) * open_notional * self.contract.leverage * side
+                margin_used = open_notional / self.contract.leverage
+                maintenance = open_notional * self.risk.maintenance_margin_ratio
+
                 if capital + unrealized <= maintenance:
                     trades.append({
                         "entry_time": entry_time,
@@ -99,45 +140,83 @@ class FuturesBacktestEngine:
                         "exit_price": px,
                         "position": side,
                         "bars_held": bars_held,
+                        "notional_closed": open_notional,
+                        "remaining_notional": 0.0,
                         "reason": "liquidation",
+                        "is_partial": False,
                         "pnl_after_costs": -(margin_used),
                     })
                     capital -= margin_used
-                    side = 0
-                    entry_price = None
-                    entry_time = None
-                    notional = 0.0
-                    bars_held = 0
-                    peak_price = None
-                    trough_price = None
                     liquidation_events += 1
+                    reset_position_state()
                     equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                     continue
 
-                stop_loss_pct = self.risk.stop_loss_pct
-                take_profit_pct = self.risk.take_profit_pct
-                trailing_stop_pct = self.risk.trailing_stop_pct
-                max_holding_bars = self.risk.max_holding_bars
-
                 pnl_pct = ((px - entry_price) / entry_price) * side
-                if stop_loss_pct is not None and pnl_pct <= -stop_loss_pct:
+
+                if self.risk.partial_take_profit_pct is not None and not partial_taken and pnl_pct >= self.risk.partial_take_profit_pct:
+                    close_trade(ts, px, "partial_take_profit", open_notional * self.risk.partial_close_ratio, is_partial=True)
+                    if side != 0:
+                        equity_curve.append({"timestamp": ts, "equity": capital + ((px - entry_price) / entry_price) * open_notional * self.contract.leverage * side, "close": px, "position": side})
+                        continue
+
+                if self.risk.break_even_trigger_pct is not None and pnl_pct >= self.risk.break_even_trigger_pct:
+                    break_even_armed = True
+
+                if self.risk.atr_stop_mult is not None and atr_at_entry is not None:
+                    if side == 1 and px <= entry_price - (atr_at_entry * self.risk.atr_stop_mult):
+                        close_trade(ts, px, "atr_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+                    if side == -1 and px >= entry_price + (atr_at_entry * self.risk.atr_stop_mult):
+                        close_trade(ts, px, "atr_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+
+                if break_even_armed:
+                    if side == 1 and px <= entry_price:
+                        close_trade(ts, px, "break_even_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+                    if side == -1 and px >= entry_price:
+                        close_trade(ts, px, "break_even_stop")
+                        equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                        continue
+
+                if self.risk.stepped_trailing_stop_pct is not None:
+                    if side == 1:
+                        anchor = peak_price if stepped_stop_anchor is None else max(stepped_stop_anchor, peak_price)
+                        stepped_stop_anchor = anchor
+                        if px <= anchor * (1 - self.risk.stepped_trailing_stop_pct):
+                            close_trade(ts, px, "stepped_trailing_stop")
+                            equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                            continue
+                    if side == -1:
+                        anchor = trough_price if stepped_stop_anchor is None else min(stepped_stop_anchor, trough_price)
+                        stepped_stop_anchor = anchor
+                        if px >= anchor * (1 + self.risk.stepped_trailing_stop_pct):
+                            close_trade(ts, px, "stepped_trailing_stop")
+                            equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
+                            continue
+
+                if self.risk.stop_loss_pct is not None and pnl_pct <= -self.risk.stop_loss_pct:
                     close_trade(ts, px, "stop_loss")
                     equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                     continue
-                if take_profit_pct is not None and pnl_pct >= take_profit_pct:
+                if self.risk.take_profit_pct is not None and pnl_pct >= self.risk.take_profit_pct:
                     close_trade(ts, px, "take_profit")
                     equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                     continue
-                if trailing_stop_pct is not None:
-                    if side == 1 and peak_price is not None and px <= peak_price * (1 - trailing_stop_pct):
+                if self.risk.trailing_stop_pct is not None:
+                    if side == 1 and peak_price is not None and px <= peak_price * (1 - self.risk.trailing_stop_pct):
                         close_trade(ts, px, "trailing_stop")
                         equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                         continue
-                    if side == -1 and trough_price is not None and px >= trough_price * (1 + trailing_stop_pct):
+                    if side == -1 and trough_price is not None and px >= trough_price * (1 + self.risk.trailing_stop_pct):
                         close_trade(ts, px, "trailing_stop")
                         equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                         continue
-                if max_holding_bars is not None and bars_held >= max_holding_bars:
+                if self.risk.max_holding_bars is not None and bars_held >= self.risk.max_holding_bars:
                     close_trade(ts, px, "time_exit")
                     equity_curve.append({"timestamp": ts, "equity": capital, "close": px, "position": 0})
                     continue
@@ -150,20 +229,30 @@ class FuturesBacktestEngine:
                 side = signal
                 entry_price = px
                 entry_time = ts
-                notional = capital * self.risk.max_position_notional_pct
+                initial_notional = capital * self.risk.max_position_notional_pct
+                open_notional = initial_notional
                 bars_held = 0
                 peak_price = px
                 trough_price = px
+                stepped_stop_anchor = px
+                atr_at_entry = atr
+                break_even_armed = False
+                partial_taken = False
                 continue
             if signal != side:
                 close_trade(ts, px, "reverse_signal")
                 side = signal
                 entry_price = px
                 entry_time = ts
-                notional = capital * self.risk.max_position_notional_pct
+                initial_notional = capital * self.risk.max_position_notional_pct
+                open_notional = initial_notional
                 bars_held = 0
                 peak_price = px
                 trough_price = px
+                stepped_stop_anchor = px
+                atr_at_entry = atr
+                break_even_armed = False
+                partial_taken = False
 
         trades_df = pd.DataFrame(trades)
         equity_df = pd.DataFrame(equity_curve)
@@ -183,7 +272,8 @@ class FuturesBacktestEngine:
         sharpe = 0.0 if len(returns) < 2 or returns.std() == 0 else (returns.mean() / returns.std()) * np.sqrt(252)
         dd = 0.0 if equity.empty else ((equity - equity.cummax()) / equity.cummax()).min() * 100
         trades = results["trades"]
-        win_rate = 0.0 if trades.empty else (len(trades[trades["pnl_after_costs"] > 0]) / len(trades)) * 100
+        closed = trades[~trades.get("is_partial", False)] if not trades.empty and "is_partial" in trades.columns else trades
+        win_rate = 0.0 if closed.empty else (len(closed[closed["pnl_after_costs"] > 0]) / len(closed)) * 100
         return {
             "total_return": total_return,
             "sharpe_ratio": float(sharpe),

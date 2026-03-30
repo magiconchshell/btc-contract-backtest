@@ -25,4 +25,9 @@ class RiskConfig:
     take_profit_pct: Optional[float] = None
     trailing_stop_pct: Optional[float] = None
     max_holding_bars: Optional[int] = None
+    atr_stop_mult: Optional[float] = None
+    break_even_trigger_pct: Optional[float] = None
+    partial_take_profit_pct: Optional[float] = None
+    partial_close_ratio: float = 0.5
+    stepped_trailing_stop_pct: Optional[float] = None
     maintenance_margin_ratio: float = 0.005

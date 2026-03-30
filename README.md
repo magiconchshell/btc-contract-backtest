@@ -23,6 +23,8 @@ This repo is **not intended as a spot-only buy/sell portfolio tracker**.
 - Fee + funding integration
 - RSI / SMA / MACD strategies
 - Voting hybrid strategy
+- Regime / trend / volatility-filtered strategy
+- Enhanced exit framework: ATR stop, break-even, partial take profit, stepped trailing stop
 - Paper trading session state
 - Walk-forward analysis foundation
 
@@ -58,11 +60,21 @@ python -m btc_contract_backtest.cli.main \
   --days 180 \
   --leverage 5 \
   --capital 1000 \
-  --strategy hybrid \
+  --strategy regime_filtered \
   --stop-loss-pct 0.02 \
   --take-profit-pct 0.04 \
-  --trailing-stop-pct 0.015 \
-  --max-holding-bars 48
+  --max-holding-bars 48 \
+  --atr-stop-mult 1.5 \
+  --break-even-trigger-pct 0.015 \
+  --partial-take-profit-pct 0.02 \
+  --partial-close-ratio 0.5 \
+  --stepped-trailing-stop-pct 0.015
+```
+
+### Run systematic search
+
+```bash
+PYTHONPATH=src ../.venv/bin/python research/systematic_exit_search.py
 ```
 
 ### Paper trading summary
