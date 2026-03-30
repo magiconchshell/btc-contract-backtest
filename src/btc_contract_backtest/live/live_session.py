@@ -14,6 +14,7 @@ from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
+from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -145,6 +146,18 @@ class GovernedLiveSession(TradingRuntime):
                 "notional": float(intended.get("notional", 0.0)),
                 "result": result.get("status"),
             })
+        order = result.get("order") if isinstance(result, dict) else None
+        if order is not None and hasattr(store, "upsert_order"):
+            record = canonical_record_from_order(order, submission_mode="governed_live")
+            record = apply_local_submit(record, timestamp=order.created_at, payload={"signal": payload["signal"], "quantity": float(intended.get("quantity", 0.0))})
+            record = apply_remote_status(
+                record,
+                status="new",
+                timestamp=self.now_iso(),
+                payload=result.get("response") or {},
+                exchange_order_id=(result.get("response") or {}).get("id"),
+            )
+            store.upsert_order(record.to_dict())
         payload["result"] = result
         self.audit.log("live_session_decision", payload)
         self.save_state(payload)

@@ -13,6 +13,7 @@ from btc_contract_backtest.config.models import AccountConfig, ContractSpec, Exe
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
+from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -167,15 +168,32 @@ class PaperTradingSession(TradingRuntime):
             intended = payload["intended_order"] or {}
             qty = float(intended.get("quantity", 0.0))
             order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+            store = self.state_store()
+            if hasattr(store, "upsert_order"):
+                record = canonical_record_from_order(order, submission_mode="paper")
+                record = apply_local_submit(record, timestamp=order.created_at, payload={"signal": signal, "quantity": qty})
+                store.upsert_order(record.to_dict())
             snapshot = type("Snapshot", (), payload["snapshot"])()
             fills = []
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
                 self.core.position.atr_at_entry = atr
                 fills.append(vars(fill))
-                store = self.state_store()
                 if hasattr(store, "append_fill"):
                     store.append_fill(vars(fill))
+                if hasattr(store, "upsert_order"):
+                    record = canonical_record_from_order(order, submission_mode="paper")
+                    remote_status = order.status.value if hasattr(order.status, "value") else str(order.status)
+                    record = apply_remote_status(
+                        record,
+                        status=remote_status,
+                        timestamp=fill.timestamp,
+                        payload=vars(fill),
+                        filled_quantity=order.filled_quantity,
+                        avg_fill_price=order.avg_fill_price,
+                        exchange_order_id=order.exchange_order_id,
+                    )
+                    store.upsert_order(record.to_dict())
             self.save()
             return {"event": "open", "fills": fills, "summary": self.summary()}
 

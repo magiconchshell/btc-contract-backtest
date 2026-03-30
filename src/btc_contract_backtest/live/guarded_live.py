@@ -78,7 +78,7 @@ class GuardedLiveExecutor:
         result = self.adapter.submit_order(order)
         if result.ok:
             self.audit.log("governance_submit", {"request_id": request_id, "symbol": symbol, "signal": signal, "quantity": quantity, "notional": notional, "response": result.payload})
-            return {"status": "submitted", "request_id": request_id, "response": result.payload}
+            return {"status": "submitted", "request_id": request_id, "response": result.payload, "order": order}
         self.alerts.emit("governance_submit_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "request_id": request_id, "error": result.error})
         self.audit.log("governance_submit_failed", {"request_id": request_id, "error": result.error})
         return {"status": "submit_failed", "request_id": request_id, "error": result.error}
