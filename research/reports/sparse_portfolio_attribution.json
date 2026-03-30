@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-03-30T16:37:18.695796+00:00",
+  "metrics": {
+    "total_return": 8.340169976489802,
+    "sharpe_ratio": 0.20406320468854194,
+    "max_drawdown": -4.201998666740938,
+    "win_rate": 33.33333333333333,
+    "total_trades": 21,
+    "final_capital": 1083.401699764898,
+    "liquidation_events": 0
+  },
+  "occupancy": {
+    "flat": 8724,
+    "short_overlay": 29,
+    "strong_bull_long": 8
+  },
+  "regime_counts": {
+    "bull": 4470,
+    "neutral": 4172,
+    "crash": 119
+  },
+  "trade_buckets": {
+    "short_overlay": {
+      "count": 15,
+      "pnl_after_costs": 117.98232251675434
+    },
+    "strong_bull_long": {
+      "count": 6,
+      "pnl_after_costs": -34.58062275185615
+    }
+  }
+}
