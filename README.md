@@ -1,6 +1,6 @@
 # 💰 Bitcoin Contract Trading Backtest System
 
-Professional-grade cryptocurrency trading backtesting platform with advanced strategy support, risk management, and comprehensive analytics.
+Professional-grade cryptocurrency **futures / perpetual contract** backtesting platform with advanced strategy support, leverage-aware long/short simulation, risk management, and comprehensive analytics.
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -8,7 +8,8 @@ Professional-grade cryptocurrency trading backtesting platform with advanced str
 
 ## 🚀 Features
 
-- **6 Advanced Strategies**: SMA Crossover, RSI Reversal, MACD, Bollinger Bands, Hybrid Voting, Trend Filtering
+- **6 Advanced Futures Strategies**: SMA Crossover, RSI Reversal, MACD, Bollinger Bands, Hybrid Voting, Trend Filtering
+- **Contract-first Simulation**: Long and short positions, leverage support, perpetual/futures workflow
 - **Transaction Cost Modeling**: Realistic fees, slippage, and funding rate simulation
 - **Risk Management**: Position sizing, stop-loss/take-profit, trailing stops, portfolio limits
 - **Performance Analytics**: Sharpe ratio, Sortino ratio, win rate, profit factor, max drawdown
@@ -32,14 +33,17 @@ uv run python scripts/main.py --days 30 --strategy rsi
 ## 🎯 Quick Start
 
 ```bash
-# Test different strategies
+# Test different futures strategies
 uv run python scripts/main.py --days 60 --strategy rsi
 uv run python scripts/main.py --days 90 --strategy macd --timeframe 4h
 uv run python scripts/main.py --strategy hybrid \
     --config '{"base_strategies": [{"name":"rsi"}, {"name":"macd"}], "required_votes": 1}'
 
 # With cost modeling and risk management
-uv run python scripts/main.py --days 60 --include-costs --risk conservative
+uv run python scripts/main.py --days 60 --include-costs --risk conservative --leverage 5
+
+# Important: this repo targets CONTRACT / FUTURES testing, not spot-only trading.
+# Signals are leverage-aware and can go both LONG and SHORT.
 ```
 
 ## 📊 Example Output
