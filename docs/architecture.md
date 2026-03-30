@@ -113,10 +113,18 @@ The engine now also supports a more detailed execution-cost and market-consisten
 - mark-vs-bid/ask consistency checks to block stale or broken market states
 - spread / slippage / funding behavior shared by backtest and paper trading
 
+## Current Phase 4 shadow-live layer
+
+A shadow-live orchestration layer now exists:
+- `live/shadow_session.py` runs signal generation against live market data without placing exchange orders
+- `live/audit_logger.py` records shadow decisions, reconcile outputs, and blocked states as an audit trail
+- shadow mode compares local intended execution against live exchange state via the adapter
+- watchdog and reconcile hooks remain active to surface unsafe market/runtime states
+
 ## Next evolution
 
 - deeper orderbook replay / calibration
 - remote reconciliation and restart-safe recovery hardening
-- exchange shadow-live execution mode
+- exchange shadow-live execution loop hardening and analytics
 - richer liquidation tiers
 - multi-asset portfolio layer

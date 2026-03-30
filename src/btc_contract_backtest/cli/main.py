@@ -7,6 +7,7 @@ from btc_contract_backtest.reporting.metrics import summarize_results
 from btc_contract_backtest.strategies import build_strategy
 from btc_contract_backtest.strategies.hybrid import VotingHybridStrategy
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
+from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 
 
 def parse_args():
@@ -24,6 +25,8 @@ def parse_args():
     ])
     p.add_argument("--paper-summary", action="store_true")
     p.add_argument("--paper-loop", action="store_true")
+    p.add_argument("--shadow-loop", action="store_true")
+    p.add_argument("--shadow-audit-log", default="shadow_audit.jsonl")
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--iterations", type=int, default=None)
     p.add_argument("--stop-loss-pct", type=float, default=None)
@@ -121,6 +124,11 @@ def main():
     if args.paper_loop:
         paper = PaperTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk)
         paper.run_loop(interval_seconds=args.interval, iterations=args.iterations)
+        return
+
+    if args.shadow_loop:
+        shadow = ShadowTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk, audit_log=args.shadow_audit_log)
+        shadow.run_loop(interval_seconds=args.interval, iterations=args.iterations)
         return
 
     engine = FuturesBacktestEngine(contract, account, risk, timeframe=args.timeframe, execution=execution, live_risk=live_risk)
