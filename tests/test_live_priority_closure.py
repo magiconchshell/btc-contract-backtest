@@ -45,6 +45,41 @@ def test_guarded_live_recovers_unknown_submit_via_client_order_lookup(tmp_path):
     assert intent["exchange_order_id"] == "ex-1"
 
 
+def test_guarded_live_dedupes_pending_submit_intent(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    ledger = SubmitLedger(str(Path(tmp_path) / "submit_ledger.json"))
+    ledger.upsert({
+        "request_id": "r-pending",
+        "client_order_id": "c-pending",
+        "symbol": "BTC/USDT",
+        "signal": 1,
+        "quantity": 0.001,
+        "notional": 10.0,
+        "state": "submit_pending",
+        "attempts": [],
+    })
+    executor = GuardedLiveExecutor(RecoveringAdapter(), policy, approvals, alerts, audit, submit_ledger=ledger)
+
+    result = executor.submit_intended_order(
+        request_id="r-pending",
+        client_order_id="c-pending",
+        symbol="BTC/USDT",
+        signal=1,
+        quantity=0.001,
+        notional=10.0,
+        stale=False,
+        reconcile_ok=True,
+        watchdog_halted=False,
+    )
+
+    assert result["status"] == "deduped_pending"
+    assert result["request_id"] == "r-pending"
+    assert executor.adapter.submits == 0
+
+
 def test_order_monitor_advances_canonical_record_on_partial_fill(tmp_path):
     alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
     audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))

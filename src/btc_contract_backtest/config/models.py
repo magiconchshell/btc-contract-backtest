@@ -3,6 +3,13 @@ from typing import Optional
 
 
 @dataclass
+class LeverageBracket:
+    notional_cap: float
+    initial_leverage: int
+    maintenance_margin_ratio: float = 0.0
+
+
+@dataclass
 class ContractSpec:
     symbol: str = "BTC/USDT"
     market_type: str = "perpetual"
@@ -21,6 +28,7 @@ class ContractSpec:
     position_mode: str = "one_way"
     metadata_source: str = "static"
     metadata_as_of: Optional[str] = None
+    leverage_brackets: list[LeverageBracket] = field(default_factory=list)
 
 
 @dataclass

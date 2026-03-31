@@ -51,6 +51,8 @@ class GuardedLiveExecutor:
         signal: int,
         quantity: float,
         notional: float,
+        request_id: Optional[str] = None,
+        client_order_id: Optional[str] = None,
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
@@ -63,8 +65,33 @@ class GuardedLiveExecutor:
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
     ):
-        request_id = str(uuid.uuid4())
-        client_order_id = request_id
+        request_id = request_id or str(uuid.uuid4())
+        client_order_id = client_order_id or request_id
+        existing = self.submit_ledger.get_by_client_order_id(client_order_id)
+        if existing is not None and self.submit_ledger.is_pending(existing):
+            self.audit.log(
+                "governance_submit_deduped_pending",
+                {
+                    "request_id": request_id,
+                    "client_order_id": client_order_id,
+                    "existing": existing,
+                },
+            )
+            self.event_source.emit(
+                "submit_intent_deduped_pending",
+                datetime.now(timezone.utc).isoformat(),
+                {
+                    "request_id": request_id,
+                    "client_order_id": client_order_id,
+                    "existing": existing,
+                },
+            )
+            return {
+                "status": "deduped_pending",
+                "request_id": existing.get("request_id", request_id),
+                "client_order_id": client_order_id,
+                "existing": existing,
+            }
         intent = SubmitIntent(
             request_id=request_id,
             client_order_id=client_order_id,
@@ -453,6 +480,28 @@ class GuardedLiveExecutor:
                     "record": record,
                 }
         side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
+        constraint_checker = getattr(self.governance, "constraint_checker", None)
+        if constraint_checker is not None:
+            constraint_result = constraint_checker.validate_order(
+                quantity=residual_quantity,
+                price=None,
+                side=side.value,
+                order_type=OrderType.MARKET.value,
+                notional=notional,
+                reduce_only=bool(getattr(record, "reduce_only", False)),
+                position_side=getattr(record, "side", 0) if record is not None else 0,
+                account_mode=getattr(self.governance.contract, "position_mode", "one_way") if self.governance.contract is not None else "one_way",
+                current_position_notional=notional,
+                current_position_side=getattr(record, "side", 0) if record is not None else 0,
+                max_open_positions=self.governance.live_risk.max_open_positions,
+                current_open_positions=1 if record is not None else 0,
+            )
+            if not constraint_result.ok:
+                first = constraint_result.violations[0]
+                self.event_source.emit("cancel_replace_blocked", timestamp, {"cancel_order_id": cancel_order_id, "reason": first["code"], "violations": constraint_result.violations})
+                self.alerts.emit("governed_cancel_replace_blocked", {"timestamp": timestamp, "cancel_order_id": cancel_order_id, "reason": first["code"]}, severity="critical")
+                self.audit.log("governed_cancel_replace_blocked", {"cancel_order_id": cancel_order_id, "reason": first["code"], "violations": constraint_result.violations})
+                return {"status": "blocked", "reason": first["code"], "violations": constraint_result.violations, "record": record}
         new_order = Order(
             order_id=str(uuid.uuid4()),
             symbol=symbol,

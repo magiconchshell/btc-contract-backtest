@@ -214,15 +214,19 @@ class GovernancePolicy:
                 metadata={"quantity": quantity},
             )
         if self.constraint_checker is not None and quantity is not None:
-            constraint_result = self.constraint_checker.check(
+            constraint_result = self.constraint_checker.validate_order(
                 quantity=quantity,
                 price=None,
+                side="buy" if signal == 1 else "sell",
+                order_type="market",
                 notional=notional,
                 available_margin=available_margin,
                 leverage=leverage,
                 reduce_only=reduce_only,
                 position_side=position_side,
                 account_mode=account_mode,
+                current_position_notional=notional,
+                current_position_side=position_side,
                 max_open_positions=self.live_risk.max_open_positions,
                 current_open_positions=current_open_positions,
             )

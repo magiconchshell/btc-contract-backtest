@@ -4,6 +4,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional, Any
+import os
+
+
+PENDING_STATES = {"created", "pending_approval", "submit_pending", "submitted", "unknown"}
+TERMINAL_STATES = {"blocked", "rejected", "filled", "canceled", "expired", "failed"}
 
 
 @dataclass
@@ -48,7 +53,9 @@ class SubmitLedger:
         return json.loads(self.path.read_text())
 
     def save(self, payload: dict[str, Any]) -> None:
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+        os.replace(tmp_path, self.path)
 
     def list_intents(self) -> list[dict[str, Any]]:
         return self.load().get("intents", [])
@@ -73,12 +80,28 @@ class SubmitLedger:
             if existing.get("request_id") == payload.get("request_id") or (
                 existing.get("client_order_id") == payload.get("client_order_id")
             ):
+                payload.setdefault("attempts", existing.get("attempts", []))
+                payload.setdefault("metadata", existing.get("metadata", {}))
                 intents[idx] = payload
                 self.save(data)
                 return payload
         intents.append(payload)
         self.save(data)
         return payload
+
+    def get_by_request_or_client_order_id(self, request_id: str, client_order_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+        existing = self.get(request_id)
+        if existing is not None:
+            return existing
+        if client_order_id is not None:
+            return self.get_by_client_order_id(client_order_id)
+        return None
+
+    def is_pending(self, intent: dict[str, Any]) -> bool:
+        return str(intent.get("state") or "").lower() in PENDING_STATES
+
+    def is_terminal(self, intent: dict[str, Any]) -> bool:
+        return str(intent.get("state") or "").lower() in TERMINAL_STATES
 
     def append_attempt(self, request_id: str, attempt: Any) -> Optional[dict[str, Any]]:
         data = self.load()
@@ -124,12 +147,5 @@ class SubmitLedger:
         return [
             item
             for item in self.list_intents()
-            if item.get("state")
-            in {
-                "created",
-                "pending_approval",
-                "submit_pending",
-                "submitted",
-                "unknown",
-            }
+            if self.is_pending(item)
         ]

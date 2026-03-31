@@ -22,8 +22,8 @@ SAMPLE_EXCHANGE_INFO = {
     "timezone": "UTC",
     "serverTime": 1710000000000,
     "symbols": [
-        {
-            "symbol": "BTCUSDT",
+            {
+                "symbol": "BTCUSDT",
             "pair": "BTCUSDT",
             "contractType": "PERPETUAL",
             "status": "TRADING",
@@ -32,13 +32,17 @@ SAMPLE_EXCHANGE_INFO = {
             "marginAsset": "USDT",
             "pricePrecision": 2,
             "quantityPrecision": 3,
-            "filters": [
-                {"filterType": "PRICE_FILTER", "tickSize": "0.10"},
-                {"filterType": "LOT_SIZE", "minQty": "0.001", "maxQty": "1000", "stepSize": "0.001"},
-                {"filterType": "MARKET_LOT_SIZE", "minQty": "0.001", "maxQty": "1000", "stepSize": "0.001"},
-                {"filterType": "MIN_NOTIONAL", "notional": "100"},
-            ],
-        }
+                "filters": [
+                    {"filterType": "PRICE_FILTER", "tickSize": "0.10"},
+                    {"filterType": "LOT_SIZE", "minQty": "0.001", "maxQty": "1000", "stepSize": "0.001"},
+                    {"filterType": "MARKET_LOT_SIZE", "minQty": "0.001", "maxQty": "1000", "stepSize": "0.001"},
+                    {"filterType": "MIN_NOTIONAL", "notional": "100"},
+                ],
+                "leverageBrackets": [
+                    {"notionalCap": "5000", "initialLeverage": 20, "maintenanceMarginRatio": "0.004"},
+                    {"notionalCap": "10000", "initialLeverage": 10, "maintenanceMarginRatio": "0.01"},
+                ],
+            }
     ],
 }
 
@@ -55,6 +59,9 @@ def test_metadata_sync_parses_and_persists_symbol_rules(tmp_path):
     assert rules.tick_size == 0.1
     assert rules.lot_size == 0.001
     assert rules.min_notional == 100.0
+    assert len(rules.leverage_brackets) == 2
+    assert rules.leverage_brackets[0].notional_cap == 5000.0
+    assert rules.leverage_brackets[0].initial_leverage == 20
     assert rules.price_precision == 2
     assert rules.quantity_precision == 3
     assert reloaded.source_url.endswith("/fapi/v1/exchangeInfo")
@@ -78,9 +85,23 @@ def test_contract_spec_is_enriched_from_binance_rules(tmp_path):
     assert contract.tick_size == 0.1
     assert contract.lot_size == 0.001
     assert contract.min_notional == 100.0
+    assert len(contract.leverage_brackets) == 2
     assert contract.quantity_precision == 3
     assert contract.metadata_source == "binance_futures_testnet"
     assert contract.metadata_as_of is not None
+
+
+def test_metadata_sync_prefers_cached_rules_for_constraint_validation(tmp_path):
+    cache = tmp_path / "exchange_info.json"
+    sync = BinanceFuturesMetadataSync(cache_path=str(cache))
+    snapshot = sync.build_snapshot(SAMPLE_EXCHANGE_INFO)
+    sync.save_snapshot(snapshot)
+
+    contract = with_binance_symbol_rules(
+        ContractSpec(symbol="BTC/USDT", leverage=15, exchange_profile="binance_futures_testnet"),
+        sync.get_symbol_rules("BTCUSDT"),
+    )
+    assert contract.leverage_brackets[0].initial_leverage == 20
 
 
 def test_exchange_factory_uses_profile_specific_endpoints():

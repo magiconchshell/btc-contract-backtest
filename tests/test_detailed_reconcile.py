@@ -35,12 +35,16 @@ def test_detailed_reconcile_detects_order_and_position_mismatches():
 
     assert report["ok"] is False
     assert report["position_mismatch"] is not None
+    assert report["position_mismatch"]["classification"] == "position_mismatch"
     assert report["summary"]["order_mismatch_count"] == 1
+    assert report["summary"]["position_mismatch_types"] == ["quantity", "entry_price"]
+    assert report["summary"]["order_mismatch_classifications"] == ["order_partial_fill_divergence"]
     mismatch = report["order_mismatches"][0]
     assert "side" in mismatch["mismatch_types"]
     assert "quantity" in mismatch["mismatch_types"]
     assert "filled_quantity" in mismatch["mismatch_types"]
     assert "reduce_only" in mismatch["mismatch_types"]
+    assert mismatch["classification"] == "order_partial_fill_divergence"
 
 
 def test_detailed_reconcile_detects_orphan_orders():

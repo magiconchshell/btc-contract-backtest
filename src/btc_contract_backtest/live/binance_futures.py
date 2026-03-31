@@ -10,6 +10,7 @@ from typing import Any, Mapping, Optional
 from urllib.request import urlopen
 
 from btc_contract_backtest.config.models import ContractSpec
+from btc_contract_backtest.config.models import LeverageBracket
 
 
 DEFAULT_BINANCE_FUTURES_RUNTIME_ROOT = "var/exchanges/binance_futures"
@@ -121,6 +122,16 @@ class BinanceSymbolRules:
     leverage: Optional[int] = None
     margin_mode: str = "isolated"
     position_mode: str = "one_way"
+    leverage_brackets: list[LeverageBracket] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        normalized: list[LeverageBracket] = []
+        for bracket in self.leverage_brackets:
+            if isinstance(bracket, LeverageBracket):
+                normalized.append(bracket)
+            elif isinstance(bracket, dict):
+                normalized.append(LeverageBracket(**bracket))
+        self.leverage_brackets = normalized
 
     def to_contract_spec(self, leverage: int = 5, profile: str = BINANCE_FUTURES_TESTNET.key) -> ContractSpec:
         return ContractSpec(
@@ -141,7 +152,32 @@ class BinanceSymbolRules:
             position_mode=self.position_mode,
             metadata_source=self.metadata_source,
             metadata_as_of=self.metadata_as_of,
+            leverage_brackets=list(self.leverage_brackets),
         )
+
+
+def _parse_leverage_brackets(payload: Any) -> list[LeverageBracket]:
+    brackets: list[LeverageBracket] = []
+    if not isinstance(payload, list):
+        return brackets
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        notional_cap = row.get("notionalCap") or row.get("notional_cap") or row.get("qtyCap")
+        initial_leverage = row.get("initialLeverage") or row.get("initial_leverage")
+        if notional_cap is None or initial_leverage is None:
+            continue
+        brackets.append(
+            LeverageBracket(
+                notional_cap=_decimal_to_float(notional_cap, 0.0),
+                initial_leverage=int(initial_leverage),
+                maintenance_margin_ratio=_decimal_to_float(
+                    row.get("maintenanceMarginRatio") or row.get("maintenance_margin_ratio"),
+                    0.0,
+                ),
+            )
+        )
+    return sorted(brackets, key=lambda item: item.notional_cap)
 
 
 @dataclass
@@ -156,6 +192,12 @@ class BinanceExchangeMetadataSnapshot:
 
     def get_symbol_rules(self, symbol: str) -> BinanceSymbolRules:
         payload = self.symbols[symbol]
+        if isinstance(payload.get("leverage_brackets"), list):
+            payload = dict(payload)
+            payload["leverage_brackets"] = [
+                bracket if isinstance(bracket, LeverageBracket) else LeverageBracket(**bracket)
+                for bracket in payload["leverage_brackets"]
+            ]
         return BinanceSymbolRules(**payload)
 
     def to_dict(self) -> dict[str, Any]:
@@ -344,6 +386,9 @@ class BinanceFuturesMetadataSync:
             margin_asset=str(row.get("marginAsset") or quote),
             metadata_source=self.profile.key,
             metadata_as_of=fetched_at,
+            leverage_brackets=_parse_leverage_brackets(
+                row.get("leverageBrackets") or row.get("brackets") or row.get("leverage_bracket")
+            ),
         )
 
     def build_snapshot(self, exchange_info: dict[str, Any]) -> BinanceExchangeMetadataSnapshot:
@@ -440,4 +485,5 @@ def with_binance_symbol_rules(contract: ContractSpec, rules: BinanceSymbolRules)
         position_mode=contract.position_mode,
         metadata_source=rules.metadata_source,
         metadata_as_of=rules.metadata_as_of,
+        leverage_brackets=list(rules.leverage_brackets) or list(contract.leverage_brackets),
     )

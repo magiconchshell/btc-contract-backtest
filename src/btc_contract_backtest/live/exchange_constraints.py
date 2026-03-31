@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from math import floor
 from typing import Optional, Any
 
-from btc_contract_backtest.config.models import ContractSpec
+from btc_contract_backtest.config.models import ContractSpec, LeverageBracket
 
 
 @dataclass
@@ -48,6 +48,72 @@ class ExchangeConstraintChecker:
             return price
         units = floor(price / tick)
         return round(units * tick, 12)
+
+    def _select_leverage_bracket(self, notional: float) -> Optional[LeverageBracket]:
+        brackets = sorted(self.contract.leverage_brackets, key=lambda b: b.notional_cap)
+        for bracket in brackets:
+            if notional <= bracket.notional_cap + 1e-12:
+                return bracket
+        return brackets[-1] if brackets else None
+
+    def validate_order(
+        self,
+        *,
+        quantity: float,
+        price: Optional[float],
+        side: str,
+        order_type: str = "market",
+        notional: Optional[float] = None,
+        available_margin: Optional[float] = None,
+        leverage: Optional[int] = None,
+        reduce_only: bool = False,
+        position_side: int = 0,
+        account_mode: str = "one_way",
+        current_position_notional: float = 0.0,
+        current_position_side: int = 0,
+        max_open_positions: Optional[int] = None,
+        current_open_positions: int = 0,
+    ) -> ConstraintCheckResult:
+        order_notional = notional if notional is not None else quantity * (price or 0.0)
+        result = self.check(
+            quantity=quantity,
+            price=price,
+            notional=order_notional,
+            available_margin=available_margin,
+            leverage=leverage,
+            reduce_only=reduce_only,
+            position_side=position_side,
+            account_mode=account_mode,
+            max_open_positions=max_open_positions,
+            current_open_positions=current_open_positions,
+        )
+        violations = list(result.violations)
+        if self.contract.margin_mode not in {"isolated", "cross"}:
+            violations.append(ConstraintViolation("unknown_margin_mode", "Unsupported margin mode", metadata={"margin_mode": self.contract.margin_mode}).to_dict())
+        current_side = current_position_side
+        if isinstance(current_side, str):
+            current_side = -1 if current_side.lower() in {"sell", "short", "-1"} else 1 if current_side.lower() in {"buy", "long", "1"} else 0
+        if reduce_only:
+            closing_buy = side.lower() == "buy" and current_side < 0
+            closing_sell = side.lower() == "sell" and current_side > 0
+            if not (closing_buy or closing_sell):
+                violations.append(ConstraintViolation("reduce_only_direction_invalid", "Reduce-only order does not reduce the current position", metadata={"side": side, "current_position_side": current_position_side}).to_dict())
+            if current_position_notional <= 0:
+                violations.append(ConstraintViolation("reduce_only_without_position", "Reduce-only order has no open position to reduce").to_dict())
+            if order_notional > current_position_notional + 1e-12:
+                violations.append(ConstraintViolation("reduce_only_exceeds_position", "Reduce-only quantity exceeds current position exposure", metadata={"order_notional": order_notional, "current_position_notional": current_position_notional}).to_dict())
+        if leverage is not None:
+            bracket = self._select_leverage_bracket(order_notional)
+            if bracket is not None:
+                if leverage > bracket.initial_leverage:
+                    violations.append(ConstraintViolation("leverage_bracket_violation", "Requested leverage exceeds bracket maximum", metadata={"requested": leverage, "bracket_max": bracket.initial_leverage, "notional_cap": bracket.notional_cap}).to_dict())
+                if bracket.maintenance_margin_ratio and available_margin is not None:
+                    required = order_notional * bracket.maintenance_margin_ratio
+                    if available_margin + 1e-12 < required:
+                        violations.append(ConstraintViolation("maintenance_margin_violation", "Available margin below maintenance margin requirement", metadata={"available_margin": available_margin, "required_margin": required, "notional": order_notional}).to_dict())
+        result.violations = violations
+        result.ok = len(violations) == 0
+        return result
 
     def check(
         self,

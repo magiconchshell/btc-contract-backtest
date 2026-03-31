@@ -94,7 +94,7 @@ class GovernedLiveSession(TradingRuntime):
             cache_path=metadata_cache_file,
         )
         try:
-            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol, refresh_on_miss=False)
+            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol, allow_stale=True, refresh_on_miss=True)
             contract = with_binance_symbol_rules(contract, symbol_rules)
         except Exception:  # noqa: BLE001
             pass
@@ -314,31 +314,19 @@ class GovernedLiveSession(TradingRuntime):
             return halted
 
         intended = payload.get("intended_order") or {}
-        local_orders = []
         store = self.state_store()
-        if hasattr(store, "get_state"):
-            local_orders = store.get_state().get("orders", [])
+        canonical_state = self.exchange_events.execution_state
+        local_orders = canonical_state.active_orders() or []
         balance = self.adapter.fetch_balance()
         available_margin = None
         if balance.ok and isinstance(balance.payload, dict):
             usdt_raw = balance.payload.get("USDT")
             usdt = usdt_raw if isinstance(usdt_raw, dict) else {}
             available_margin = usdt.get("free")
-        local_position = {
-            "side": self.core.position.side,
-            "quantity": abs(self.core.position.quantity),
-            "entry_price": self.core.position.entry_price,
-        }
-        open_local_orders = len(
-            [
-                o
-                for o in local_orders
-                if str(o.get("state") or o.get("status") or "").lower()
-                not in {"filled", "canceled", "rejected", "expired"}
-            ]
-        )
+        local_position = canonical_state.derived_position()
+        open_local_orders = len(local_orders)
         reconcile = self.adapter.reconcile_state(
-            self.core.position.side,
+            local_position.get("side", self.core.position.side),
             open_local_orders,
             local_position=local_position,
             local_orders=local_orders,
@@ -366,7 +354,7 @@ class GovernedLiveSession(TradingRuntime):
             leverage=self.context.contract.leverage,
             position_side=self.core.position.side,
             account_mode="one_way",
-            current_open_positions=0 if self.core.position.side == 0 else 1,
+            current_open_positions=0 if local_position.get("side", 0) == 0 else 1,
             emergency_stop=state.get("emergency_stop", False),
             maintenance=state.get("maintenance", False),
             current_daily_loss_pct=0.0,

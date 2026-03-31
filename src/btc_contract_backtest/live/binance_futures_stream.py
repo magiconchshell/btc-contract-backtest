@@ -23,7 +23,6 @@ TransportFactory = Callable[[str], WebsocketTransport]
 Clock = Callable[[], datetime]
 SleepFn = Callable[[float], None]
 
-
 DEFAULT_LISTEN_KEY_KEEPALIVE_SECONDS = 30 * 60
 
 
@@ -40,6 +39,15 @@ def _iso_from_millis(value: Any) -> Optional[str]:
         return None
     try:
         return datetime.fromtimestamp(float(value) / 1000.0, tz=timezone.utc).isoformat()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _to_int(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value))
     except Exception:  # noqa: BLE001
         return None
 
@@ -117,6 +125,136 @@ class RunLoopResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class StreamGapObservation:
+    status: str
+    event_type: str
+    expected_external_sequence: Optional[int]
+    external_sequence: Optional[int]
+    gap_size: int = 0
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class BinanceFuturesExecutionState:
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+        self.orders: dict[str, dict[str, Any]] = {}
+        self.positions: dict[str, dict[str, Any]] = {}
+        self.balance: dict[str, Any] = {}
+        self.observations: list[dict[str, Any]] = []
+        self.last_external_sequence: dict[str, int] = {}
+        self.event_ids: set[str] = set()
+        self.last_event_timestamp: Optional[str] = None
+        self.needs_rest_reconciliation: bool = False
+
+    def _order_key(self, payload: dict[str, Any]) -> str:
+        return str(payload.get("client_order_id") or payload.get("clientOrderId") or payload.get("order_id") or payload.get("orderId") or payload.get("exchange_order_id") or payload.get("id") or "")
+
+    def _account_position_key(self, payload: dict[str, Any]) -> str:
+        return str(payload.get("symbol") or payload.get("s") or self.symbol)
+
+    def observe(self, event: ExecutionEvent | dict[str, Any]) -> tuple[bool, Optional[dict[str, Any]]]:
+        row = event.to_dict() if isinstance(event, ExecutionEvent) else dict(event)
+        event_id = row.get("event_id")
+        if event_id and event_id in self.event_ids:
+            return False, None
+        if event_id:
+            self.event_ids.add(str(event_id))
+        self.last_event_timestamp = row.get("timestamp") or self.last_event_timestamp
+        event_type = str(row.get("event_type") or "")
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        external_seq = _to_int(row.get("external_sequence"))
+        key = event_type
+        if external_seq is not None:
+            previous = self.last_external_sequence.get(key)
+            if previous is not None:
+                expected = previous + 1
+                if external_seq > expected:
+                    obs = StreamGapObservation(
+                        status="gap",
+                        event_type=event_type,
+                        expected_external_sequence=expected,
+                        external_sequence=external_seq,
+                        gap_size=external_seq - expected,
+                        details={"previous_external_sequence": previous, "event_id": event_id},
+                    )
+                    self.observations.append(obs.to_dict())
+                    self.needs_rest_reconciliation = True
+                elif external_seq <= previous:
+                    obs = StreamGapObservation(
+                        status="reorder_or_duplicate",
+                        event_type=event_type,
+                        expected_external_sequence=expected,
+                        external_sequence=external_seq,
+                        details={"previous_external_sequence": previous, "event_id": event_id},
+                    )
+                    self.observations.append(obs.to_dict())
+                    return False, None
+            self.last_external_sequence[key] = external_seq
+
+        if event_type == "order_trade_update" or event_type.startswith("order_"):
+            order_id = self._order_key(payload)
+            if not order_id:
+                return True, None
+            current = self.orders.get(order_id, {})
+            merged = dict(current)
+            merged.update(payload)
+            merged.setdefault("client_order_id", payload.get("client_order_id") or payload.get("clientOrderId"))
+            self.orders[order_id] = merged
+            return True, {"kind": "order", "order_id": order_id, "state": merged}
+        if event_type == "account_update":
+            balances = payload.get("balances") or []
+            positions = payload.get("positions") or []
+            for position in positions:
+                if isinstance(position, dict):
+                    self.positions[self._account_position_key(position)] = dict(position)
+            if isinstance(balances, list):
+                self.balance["balances"] = balances
+            return True, {"kind": "account", "positions": list(self.positions.values())}
+        return True, None
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "orders": list(self.orders.values()),
+            "positions": list(self.positions.values()),
+            "balance": self.balance,
+            "observations": list(self.observations),
+            "needs_rest_reconciliation": self.needs_rest_reconciliation,
+            "last_event_timestamp": self.last_event_timestamp,
+            "last_external_sequence": dict(self.last_external_sequence),
+        }
+
+    def active_orders(self) -> list[dict[str, Any]]:
+        terminal_states = {"filled", "canceled", "rejected", "expired"}
+        return [
+            dict(order)
+            for order in self.orders.values()
+            if str(order.get("status") or order.get("state") or "").lower() not in terminal_states
+        ]
+
+    def derived_position(self) -> dict[str, Any]:
+        if self.positions:
+            latest = next(iter(self.positions.values()))
+            qty = float(
+                latest.get("contracts")
+                or latest.get("positionAmt")
+                or latest.get("quantity")
+                or latest.get("pa")
+                or 0.0
+            )
+            return {
+                "side": 0 if qty == 0 else (1 if qty > 0 else -1),
+                "quantity": abs(qty),
+                "entry_price": float(latest.get("entryPrice") or latest.get("entry_price") or latest.get("ep") or 0.0),
+                "symbol": str(latest.get("symbol") or self.symbol),
+            }
+        return {"side": 0, "quantity": 0.0, "entry_price": 0.0, "symbol": self.symbol}
 
 
 class BinanceFuturesEventNormalizer:
@@ -284,6 +422,7 @@ class BinanceFuturesUserDataEventSource:
         self.listen_key_state = ListenKeyState()
         self.transport_state = TransportState()
         self.transport: Optional[WebsocketTransport] = None
+        self.execution_state = BinanceFuturesExecutionState(config.symbol)
 
     def source_name(self) -> str:
         mode = "testnet" if self.config.use_testnet else "mainnet"
@@ -316,6 +455,7 @@ class BinanceFuturesUserDataEventSource:
             "transport": asdict(self.transport_state),
             "mark_price_stream_url": self.config.mark_price_stream_url(),
             "user_data_stream_url": self.config.user_data_stream_url(self.listen_key_state.current or "<listenKey>"),
+            "execution_state": self.execution_state.snapshot(),
         }
 
     def acquire_listen_key(self) -> Optional[str]:
@@ -443,8 +583,33 @@ class BinanceFuturesUserDataEventSource:
     def ingest_once(self, sink: EventDrivenExecutionSource) -> list[dict[str, Any]]:
         emitted = []
         for event in self.read_once():
-            emitted.append(sink.ingest(event))
+            ingested = sink.ingest(event)
+            emitted.append(ingested)
+            self.execution_state.observe(ingested)
+            if event.event_type == "user_data_stream_expired":
+                self.execution_state.needs_rest_reconciliation = False
         return emitted
+
+    def sync_from_rest(self) -> dict[str, Any]:
+        positions_result = self.adapter.fetch_positions()
+        orders_result = self.adapter.fetch_open_orders()
+        if not positions_result.ok or not orders_result.ok:
+            self.execution_state.needs_rest_reconciliation = True
+            return {"ok": False, "positions_error": positions_result.error, "orders_error": orders_result.error}
+        remote_positions = positions_result.payload if isinstance(positions_result.payload, list) else []
+        remote_orders = orders_result.payload if isinstance(orders_result.payload, list) else []
+        self.execution_state.positions = {}
+        for position in remote_positions:
+            if isinstance(position, dict):
+                self.execution_state.positions[str(position.get("symbol") or self.config.symbol)] = dict(position)
+        self.execution_state.orders = {}
+        for order in remote_orders:
+            if isinstance(order, dict):
+                key = str(order.get("clientOrderId") or order.get("id") or order.get("orderId") or order.get("client_order_id") or "")
+                if key:
+                    self.execution_state.orders[key] = dict(order)
+        self.execution_state.needs_rest_reconciliation = False
+        return {"ok": True, "positions": remote_positions, "orders": remote_orders}
 
     def _backoff_then_reconnect(self) -> bool:
         self.transport_state.reconnect_attempts += 1
@@ -482,6 +647,7 @@ class BinanceFuturesUserDataEventSource:
             except Exception as exc:  # noqa: BLE001
                 self.detach_transport(error=str(exc))
                 notes.append(f"transport_error:{exc}")
+                self.execution_state.needs_rest_reconciliation = True
                 if stop_on_error:
                     return RunLoopResult(ok=False, events=emitted, notes=notes, state=self.describe())
                 if not self._backoff_then_reconnect():
@@ -489,4 +655,6 @@ class BinanceFuturesUserDataEventSource:
                     return RunLoopResult(ok=False, events=emitted, notes=notes, state=self.describe())
                 notes.append("reconnected")
                 continue
-        return RunLoopResult(ok=True, events=emitted, notes=notes, state=self.describe())
+        if self.execution_state.needs_rest_reconciliation:
+            notes.append("rest_reconciliation_required")
+        return RunLoopResult(ok=not self.execution_state.needs_rest_reconciliation, events=emitted, notes=notes, state=self.describe())

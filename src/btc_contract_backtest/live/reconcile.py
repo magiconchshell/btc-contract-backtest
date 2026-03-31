@@ -16,6 +16,7 @@ class OrderMismatch:
     local: Optional[dict[str, Any]] = None
     remote: Optional[dict[str, Any]] = None
     severity: str = "warning"
+    classification: str = "order_divergence"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -27,6 +28,7 @@ class PositionMismatch:
     local: Optional[dict[str, Any]] = None
     remote: Optional[dict[str, Any]] = None
     severity: str = "warning"
+    classification: str = "position_divergence"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -211,6 +213,7 @@ def build_detailed_reconcile_report(
                 or "quantity" in position_mismatch_types
                 else "warning"
             ),
+            classification="position_mismatch",
         ).to_dict()
 
     local_index = {}
@@ -286,6 +289,15 @@ def build_detailed_reconcile_report(
                     local=local,
                     remote=remote,
                     severity=severity,
+                    classification=(
+                        "order_status_only"
+                        if mismatch_types == ["status"]
+                        else "order_partial_fill_divergence"
+                        if "filled_quantity" in mismatch_types or "avg_fill_price" in mismatch_types
+                        else "order_critical_divergence"
+                        if severity == "critical"
+                        else "order_warning_divergence"
+                    ),
                 ).to_dict()
             )
 
@@ -299,6 +311,8 @@ def build_detailed_reconcile_report(
         "order_mismatch_count": len(order_mismatches),
         "orphan_local_order_count": len(orphan_local_orders),
         "orphan_remote_order_count": len(orphan_remote_orders),
+        "position_mismatch_types": position_mismatch_types,
+        "order_mismatch_classifications": [item["classification"] for item in order_mismatches],
     }
 
     return DetailedReconcileReport(
