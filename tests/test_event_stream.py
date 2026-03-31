@@ -8,7 +8,10 @@ from btc_contract_backtest.live.binance_futures_stream import (
     BinanceFuturesUserDataEventSource,
     ReconnectPolicy,
 )
-from btc_contract_backtest.live.event_stream import EventDrivenExecutionSource, EventRecorder
+from btc_contract_backtest.live.event_stream import (
+    EventDrivenExecutionSource,
+    EventRecorder,
+)
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 
 
@@ -71,8 +74,18 @@ def test_event_stream_records_and_replays_sequence(tmp_path):
     recorder = EventRecorder(str(tmp_path / "events.jsonl"))
     source = EventDrivenExecutionSource(recorder)
 
-    evt1 = source.emit("submit_intent_created", "2026-01-01T00:00:00+00:00", {"request_id": "r1"}, source="runtime")
-    evt2 = source.emit("submit_intent_submitted", "2026-01-01T00:00:01+00:00", {"request_id": "r1"}, source="exchange")
+    evt1 = source.emit(
+        "submit_intent_created",
+        "2026-01-01T00:00:00+00:00",
+        {"request_id": "r1"},
+        source="runtime",
+    )
+    evt2 = source.emit(
+        "submit_intent_submitted",
+        "2026-01-01T00:00:01+00:00",
+        {"request_id": "r1"},
+        source="exchange",
+    )
     replay = source.replay()
 
     assert evt1["sequence"] == 1
@@ -83,22 +96,26 @@ def test_event_stream_records_and_replays_sequence(tmp_path):
 
 def test_event_stream_replay_sorts_by_sequence_and_tracks_numeric_watermarks(tmp_path):
     recorder = EventRecorder(str(tmp_path / "events.jsonl"))
-    recorder.append({
-        "event_type": "order_trade_update",
-        "timestamp": "2026-01-01T00:00:03+00:00",
-        "payload": {"client_order_id": "c1"},
-        "sequence": 10,
-        "external_sequence": "100",
-        "received_at": "2026-01-01T00:00:03+00:00",
-    })
-    recorder.append({
-        "event_type": "order_new",
-        "timestamp": "2026-01-01T00:00:01+00:00",
-        "payload": {"client_order_id": "c1"},
-        "sequence": 2,
-        "external_sequence": "9",
-        "received_at": "2026-01-01T00:00:01+00:00",
-    })
+    recorder.append(
+        {
+            "event_type": "order_trade_update",
+            "timestamp": "2026-01-01T00:00:03+00:00",
+            "payload": {"client_order_id": "c1"},
+            "sequence": 10,
+            "external_sequence": "100",
+            "received_at": "2026-01-01T00:00:03+00:00",
+        }
+    )
+    recorder.append(
+        {
+            "event_type": "order_new",
+            "timestamp": "2026-01-01T00:00:01+00:00",
+            "payload": {"client_order_id": "c1"},
+            "sequence": 2,
+            "external_sequence": "9",
+            "received_at": "2026-01-01T00:00:01+00:00",
+        }
+    )
     source = EventDrivenExecutionSource(recorder)
 
     replay = source.replay()
@@ -115,7 +132,9 @@ def test_event_stream_boundary_requires_polling_without_live_upstream(tmp_path):
         adapter,
         BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
     )
-    source = EventDrivenExecutionSource(EventRecorder(str(tmp_path / "events.jsonl")), upstream=upstream)
+    source = EventDrivenExecutionSource(
+        EventRecorder(str(tmp_path / "events.jsonl")), upstream=upstream
+    )
 
     boundary = source.boundary_state()
 
@@ -193,7 +212,11 @@ def test_binance_event_normalizer_maps_account_and_mark_price_updates():
             "e": "ACCOUNT_UPDATE",
             "E": 1735689600123,
             "T": 1735689600456,
-            "a": {"m": "ORDER", "B": [{"a": "USDT", "wb": "1000"}], "P": [{"s": "BTCUSDT", "pa": "0.001"}]},
+            "a": {
+                "m": "ORDER",
+                "B": [{"a": "USDT", "wb": "1000"}],
+                "P": [{"s": "BTCUSDT", "pa": "0.001"}],
+            },
         },
         source="binance_futures_user_data:testnet",
     )
@@ -216,7 +239,9 @@ def test_binance_event_normalizer_maps_account_and_mark_price_updates():
     assert mark_events[0].payload["mark_price"] == "45123.4"
 
 
-def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive(tmp_path):
+def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive(
+    tmp_path,
+):
     exchange = FakeListenKeyExchange()
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     clock = ClockHarness()
@@ -232,7 +257,11 @@ def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive
                 "e": "ACCOUNT_UPDATE",
                 "E": 1735689601123,
                 "T": 1735689601456,
-                "a": {"m": "ORDER", "B": [{"a": "USDT", "wb": "1000"}], "P": [{"s": "BTCUSDT", "pa": "0.001"}]},
+                "a": {
+                    "m": "ORDER",
+                    "B": [{"a": "USDT", "wb": "1000"}],
+                    "P": [{"s": "BTCUSDT", "pa": "0.001"}],
+                },
             },
         ]
     ]
@@ -242,12 +271,16 @@ def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive
 
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True, listen_key_keepalive_seconds=1),
+        BinanceFuturesStreamConfig(
+            symbol="BTC/USDT", use_testnet=True, listen_key_keepalive_seconds=1
+        ),
         transport_factory=transport_factory,
         clock=clock,
         sleep_fn=clock.sleep,
     )
-    sink = EventDrivenExecutionSource(EventRecorder(str(tmp_path / "events.jsonl")), upstream=source)
+    sink = EventDrivenExecutionSource(
+        EventRecorder(str(tmp_path / "events.jsonl")), upstream=source
+    )
 
     source.acquire_listen_key()
     clock.advance(2)
@@ -255,7 +288,10 @@ def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive
     rows = sink.replay()
 
     assert result.ok is True
-    assert [row["event_type"] for row in rows] == ["order_trade_update", "account_update"]
+    assert [row["event_type"] for row in rows] == [
+        "order_trade_update",
+        "account_update",
+    ]
     assert source.listen_key_state.last_keepalive_ok is True
     assert source.transport_state.connected is True
     assert source.transport_state.last_message_at is not None
@@ -269,7 +305,17 @@ def test_user_data_run_loop_reconnects_with_backoff_and_continues_ingest(tmp_pat
     scripts = [
         [RuntimeError("socket dropped")],
         [{"e": "listenKeyExpired", "E": 1735689602000}],
-        [{"e": "markPriceUpdate", "E": 1735689603000, "p": "45000", "i": "44990", "P": "45010", "r": "0.0001", "T": 1735718400000}],
+        [
+            {
+                "e": "markPriceUpdate",
+                "E": 1735689603000,
+                "p": "45000",
+                "i": "44990",
+                "P": "45010",
+                "r": "0.0001",
+                "T": 1735718400000,
+            }
+        ],
     ]
 
     def transport_factory(_url):
@@ -278,12 +324,16 @@ def test_user_data_run_loop_reconnects_with_backoff_and_continues_ingest(tmp_pat
     source = BinanceFuturesUserDataEventSource(
         adapter,
         BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
-        reconnect_policy=ReconnectPolicy(initial_delay_seconds=2, max_delay_seconds=10, multiplier=2.0),
+        reconnect_policy=ReconnectPolicy(
+            initial_delay_seconds=2, max_delay_seconds=10, multiplier=2.0
+        ),
         transport_factory=transport_factory,
         clock=clock,
         sleep_fn=clock.sleep,
     )
-    sink = EventDrivenExecutionSource(EventRecorder(str(tmp_path / "events.jsonl")), upstream=source)
+    sink = EventDrivenExecutionSource(
+        EventRecorder(str(tmp_path / "events.jsonl")), upstream=source
+    )
 
     result = source.run_loop(sink, max_messages=3)
     rows = sink.replay()
@@ -303,7 +353,9 @@ def test_mainnet_requires_explicit_opt_in():
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=False, allow_mainnet=False),
+        BinanceFuturesStreamConfig(
+            symbol="BTC/USDT", use_testnet=False, allow_mainnet=False
+        ),
     )
 
     try:
@@ -311,4 +363,6 @@ def test_mainnet_requires_explicit_opt_in():
     except ValueError as exc:
         assert "explicit opt-in" in str(exc)
     else:
-        raise AssertionError("expected mainnet opt-in guard to reject unapproved websocket mode")
+        raise AssertionError(
+            "expected mainnet opt-in guard to reject unapproved websocket mode"
+        )

@@ -1,6 +1,11 @@
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.runtime.backtest_runtime import BacktestRuntime
 from btc_contract_backtest.runtime.runtime_persistence import InMemoryRuntimePersistence
 from btc_contract_backtest.strategies.base import BaseStrategy

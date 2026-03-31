@@ -19,7 +19,12 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def score(row: dict) -> float:
-    return row["final_capital"] + row["total_return"] * 2 - abs(row["max_drawdown"]) + row["win_rate"] * 0.25
+    return (
+        row["final_capital"]
+        + row["total_return"] * 2
+        - abs(row["max_drawdown"])
+        + row["win_rate"] * 0.25
+    )
 
 
 def main():
@@ -28,10 +33,19 @@ def main():
     base_engine = FuturesBacktestEngine(contract, account, RiskConfig(), timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = base_engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = base_engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     rows = []
-    for breakdown_lookback, adx_threshold, stop_loss, take_profit, max_bars, atr_mult in product(
+    for (
+        breakdown_lookback,
+        adx_threshold,
+        stop_loss,
+        take_profit,
+        max_bars,
+        atr_mult,
+    ) in product(
         [12, 16, 20],
         [20.0, 24.0, 28.0],
         [0.015, 0.02],
@@ -39,10 +53,13 @@ def main():
         [24, 48],
         [1.2, 1.5],
     ):
-        strategy = build_strategy("extreme_downtrend_short", {
-            "breakdown_lookback": breakdown_lookback,
-            "adx_threshold": adx_threshold,
-        })
+        strategy = build_strategy(
+            "extreme_downtrend_short",
+            {
+                "breakdown_lookback": breakdown_lookback,
+                "adx_threshold": adx_threshold,
+            },
+        )
         signal_df = strategy.generate_signals(df.copy())
         risk = RiskConfig(
             max_position_notional_pct=0.45,
@@ -77,7 +94,9 @@ def main():
     rows.sort(key=lambda x: x["score"], reverse=True)
     top = rows[:20]
     payload = {"generated_at": datetime.now(UTC).isoformat(), "top": top}
-    (OUT_DIR / "short_overlay_search.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "short_overlay_search.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Short Overlay Search",

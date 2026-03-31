@@ -31,7 +31,9 @@ class BacktestRuntime(TradingRuntime):
         execution: Optional[ExecutionConfig] = None,
         live_risk: Optional[LiveRiskConfig] = None,
     ):
-        super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
+        super().__init__(
+            contract, account, risk, strategy, timeframe, execution, live_risk
+        )
         self.market_data = market_data.copy()
         self.cursor = 0
         self.equity_curve: list[dict] = []
@@ -93,9 +95,7 @@ class BacktestRuntime(TradingRuntime):
         peak_price = self.core.position.peak_price
         trough_price = self.core.position.trough_price
         self.core.position.peak_price = (
-            snapshot.close
-            if peak_price is None
-            else max(peak_price, snapshot.close)
+            snapshot.close if peak_price is None else max(peak_price, snapshot.close)
         )
         self.core.position.trough_price = (
             snapshot.close
@@ -112,7 +112,9 @@ class BacktestRuntime(TradingRuntime):
         ):
             return False
         unrealized = self._current_equity(snapshot.close) - self.core.capital
-        maintenance = self.core.position.notional * self.context.risk.maintenance_margin_ratio
+        maintenance = (
+            self.core.position.notional * self.context.risk.maintenance_margin_ratio
+        )
         if self.core.capital + unrealized > maintenance:
             return False
         self.core.emit_risk_event(
@@ -148,7 +150,9 @@ class BacktestRuntime(TradingRuntime):
         if self.core.position.side == 0 or self.core.position.entry_price is None:
             return None
         price = snapshot.close
-        pnl_pct = ((price - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.side
+        pnl_pct = (
+            (price - self.core.position.entry_price) / self.core.position.entry_price
+        ) * self.core.position.side
         should_close = None
         if (
             self.context.risk.partial_take_profit_pct is not None
@@ -156,13 +160,10 @@ class BacktestRuntime(TradingRuntime):
             and pnl_pct >= self.context.risk.partial_take_profit_pct
         ):
             close_qty = (
-                abs(self.core.position.quantity)
-                * self.context.risk.partial_close_ratio
+                abs(self.core.position.quantity) * self.context.risk.partial_close_ratio
             )
             order = self.core.create_order(
-                OrderSide.SELL
-                if self.core.position.side == 1
-                else OrderSide.BUY,
+                OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
                 close_qty,
                 OrderType.MARKET,
                 reduce_only=True,
@@ -183,27 +184,18 @@ class BacktestRuntime(TradingRuntime):
                 self.core.position.side == 1
                 and price
                 <= self.core.position.entry_price
-                - (
-                    self.core.position.atr_at_entry
-                    * self.context.risk.atr_stop_mult
-                )
+                - (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult)
             ):
                 should_close = "atr_stop"
             if (
                 self.core.position.side == -1
                 and price
                 >= self.core.position.entry_price
-                + (
-                    self.core.position.atr_at_entry
-                    * self.context.risk.atr_stop_mult
-                )
+                + (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult)
             ):
                 should_close = "atr_stop"
         if self.core.position.break_even_armed and should_close is None:
-            if (
-                self.core.position.side == 1
-                and price <= self.core.position.entry_price
-            ):
+            if self.core.position.side == 1 and price <= self.core.position.entry_price:
                 should_close = "break_even_stop"
             if (
                 self.core.position.side == -1
@@ -228,11 +220,7 @@ class BacktestRuntime(TradingRuntime):
                         )
                     )
                 self.core.position.stepped_stop_anchor = anchor
-                if (
-                    price
-                    <= anchor
-                    * (1 - self.context.risk.stepped_trailing_stop_pct)
-                ):
+                if price <= anchor * (1 - self.context.risk.stepped_trailing_stop_pct):
                     should_close = "stepped_trailing_stop"
             if self.core.position.side == -1:
                 trough_price = self.core.position.trough_price
@@ -248,11 +236,7 @@ class BacktestRuntime(TradingRuntime):
                         )
                     )
                 self.core.position.stepped_stop_anchor = anchor
-                if (
-                    price
-                    >= anchor
-                    * (1 + self.context.risk.stepped_trailing_stop_pct)
-                ):
+                if price >= anchor * (1 + self.context.risk.stepped_trailing_stop_pct):
                     should_close = "stepped_trailing_stop"
         if (
             self.context.risk.stop_loss_pct is not None
@@ -266,10 +250,7 @@ class BacktestRuntime(TradingRuntime):
             and pnl_pct >= self.context.risk.take_profit_pct
         ):
             should_close = "take_profit"
-        if (
-            self.context.risk.trailing_stop_pct is not None
-            and should_close is None
-        ):
+        if self.context.risk.trailing_stop_pct is not None and should_close is None:
             if (
                 self.core.position.side == 1
                 and self.core.position.peak_price is not None
@@ -289,8 +270,7 @@ class BacktestRuntime(TradingRuntime):
         if (
             self.context.risk.max_holding_bars is not None
             and should_close is None
-            and self.core.position.bars_held
-            >= self.context.risk.max_holding_bars
+            and self.core.position.bars_held >= self.context.risk.max_holding_bars
         ):
             should_close = "time_exit"
         if should_close is not None:
@@ -404,7 +384,11 @@ class BacktestRuntime(TradingRuntime):
                 )
             payload["fills"] = fills
             payload["event"] = "open"
-        elif self.core.position.side != 0 and signal != self.core.position.side and qty > 0:
+        elif (
+            self.core.position.side != 0
+            and signal != self.core.position.side
+            and qty > 0
+        ):
             close_order = self.core.create_order(
                 OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
                 abs(self.core.position.quantity),
@@ -452,7 +436,11 @@ class BacktestRuntime(TradingRuntime):
             "equity_curve": pd.DataFrame(self.equity_curve),
             "trades": pd.DataFrame(self.core.trades),
             "initial_capital": self.context.account.initial_capital,
-            "final_capital": self.equity_curve[-1]["equity"] if self.equity_curve else self.core.capital,
+            "final_capital": (
+                self.equity_curve[-1]["equity"]
+                if self.equity_curve
+                else self.core.capital
+            ),
             "liquidation_events": self.liquidation_events,
             "risk_events": pd.DataFrame(self.core.risk_events),
         }

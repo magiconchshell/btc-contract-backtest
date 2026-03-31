@@ -53,7 +53,9 @@ class SimulatorCore:
         self.capital = account.initial_capital
         self.peak_equity = self.capital
         self.day_start_equity = self.capital
-        self.position = PositionState(symbol=contract.symbol, leverage=contract.leverage)
+        self.position = PositionState(
+            symbol=contract.symbol, leverage=contract.leverage
+        )
         self.orders: dict[str, Order] = {}
         self.trades: list[dict] = []
         self.risk_events: list[dict] = []
@@ -161,7 +163,9 @@ class SimulatorCore:
             and self.risk.stop_loss_pct > 0
         ):
             risk_budget = self.capital * self.risk.risk_per_trade_pct * scale
-            stop_based_notional = risk_budget / (self.risk.stop_loss_pct * self.contract.leverage)
+            stop_based_notional = risk_budget / (
+                self.risk.stop_loss_pct * self.contract.leverage
+            )
             candidates.append(stop_based_notional)
         if (
             self.risk.atr_position_sizing_mult is not None
@@ -172,9 +176,7 @@ class SimulatorCore:
             atr_pct = atr_value / price
             if atr_pct > 0:
                 atr_based_notional = (
-                    self.capital
-                    * scale
-                    * self.risk.atr_position_sizing_mult
+                    self.capital * scale * self.risk.atr_position_sizing_mult
                 ) / (atr_pct * self.contract.leverage)
                 candidates.append(atr_based_notional)
         if self.risk.max_symbol_exposure_pct is not None:
@@ -212,7 +214,12 @@ class SimulatorCore:
         order = self.orders.get(order_id)
         if not order:
             return None
-        if order.status in {OrderStatus.FILLED, OrderStatus.CANCELED, OrderStatus.REJECTED, OrderStatus.EXPIRED}:
+        if order.status in {
+            OrderStatus.FILLED,
+            OrderStatus.CANCELED,
+            OrderStatus.REJECTED,
+            OrderStatus.EXPIRED,
+        }:
             return order
         order.status = OrderStatus.CANCELED
         order.updated_at = self.now_iso()
@@ -250,7 +257,9 @@ class SimulatorCore:
         if depth_notional <= 0:
             return self.execution.simulated_slippage_bps
         ratio = max(order_notional / depth_notional, 0.0)
-        return self.execution.simulated_slippage_bps * math.pow(max(ratio, 1e-9), self.execution.impact_exponent)
+        return self.execution.simulated_slippage_bps * math.pow(
+            max(ratio, 1e-9), self.execution.impact_exponent
+        )
 
     def _fill_price(
         self,
@@ -288,9 +297,15 @@ class SimulatorCore:
             calibrated = calibrate_fill_ratio(sample, self.calibration_config)
             return min(1.0, max(0.0, calibrated))
         base = self.execution.max_fill_ratio_per_bar
-        if self.execution.queue_priority_model == "probabilistic" and order.order_type == OrderType.LIMIT:
+        if (
+            self.execution.queue_priority_model == "probabilistic"
+            and order.order_type == OrderType.LIMIT
+        ):
             return min(1.0, max(0.0, base * self.execution.maker_fill_probability))
-        if self.execution.queue_priority_model == "conservative" and order.order_type == OrderType.LIMIT:
+        if (
+            self.execution.queue_priority_model == "conservative"
+            and order.order_type == OrderType.LIMIT
+        ):
             return min(1.0, max(0.0, base * 0.5))
         return min(1.0, max(0.0, base))
 
@@ -354,10 +369,7 @@ class SimulatorCore:
             executed_price=price,
             fill_quantity=fill_qty,
             spread_bps=(
-                abs(
-                    (snapshot.ask or snapshot.close)
-                    - (snapshot.bid or snapshot.close)
-                )
+                abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close))
                 / snapshot.close
                 * 10000
                 if snapshot.close > 0
@@ -378,10 +390,7 @@ class SimulatorCore:
             price
             if order.avg_fill_price is None
             else (
-                (
-                    order.avg_fill_price
-                    * (order.filled_quantity - fill_qty)
-                )
+                (order.avg_fill_price * (order.filled_quantity - fill_qty))
                 + price * fill_qty
             )
             / order.filled_quantity
@@ -395,7 +404,9 @@ class SimulatorCore:
         return fills
 
     def apply_fill(self, fill: FillEvent):
-        signed_qty = fill.fill_quantity if fill.side == OrderSide.BUY else -fill.fill_quantity
+        signed_qty = (
+            fill.fill_quantity if fill.side == OrderSide.BUY else -fill.fill_quantity
+        )
         previous_qty = self.position.quantity
         new_qty = previous_qty + signed_qty
         fill_notional = fill.fill_quantity * fill.fill_price
@@ -405,22 +416,20 @@ class SimulatorCore:
             or (previous_qty > 0 and signed_qty > 0)
             or (previous_qty < 0 and signed_qty < 0)
         )
-        reducing_or_closing = (
-            previous_qty != 0
-            and (
-                (previous_qty > 0 and signed_qty < 0)
-                or (previous_qty < 0 and signed_qty > 0)
-            )
+        reducing_or_closing = previous_qty != 0 and (
+            (previous_qty > 0 and signed_qty < 0)
+            or (previous_qty < 0 and signed_qty > 0)
         )
 
         if increasing_same_side:
             total_notional = (
-                abs(previous_qty)
-                * (self.position.entry_price or fill.fill_price)
+                abs(previous_qty) * (self.position.entry_price or fill.fill_price)
                 + fill_notional
             )
             total_qty = abs(previous_qty) + fill.fill_quantity
-            self.position.entry_price = total_notional / total_qty if total_qty else fill.fill_price
+            self.position.entry_price = (
+                total_notional / total_qty if total_qty else fill.fill_price
+            )
             self.position.entry_time = fill.timestamp
         elif reducing_or_closing:
             closed_qty = min(abs(previous_qty), fill.fill_quantity)
@@ -450,8 +459,7 @@ class SimulatorCore:
                     ),
                     "reason": "execution_close",
                     "is_partial": (
-                        abs(new_qty) > 0
-                        and (1 if new_qty > 0 else -1) == side
+                        abs(new_qty) > 0 and (1 if new_qty > 0 else -1) == side
                     ),
                     "gross_pnl": gross,
                     "fees": fill.fee,
@@ -516,10 +524,7 @@ class SimulatorCore:
             executed_price=snapshot.close,
             fill_quantity=abs(self.position.quantity),
             spread_bps=(
-                abs(
-                    (snapshot.ask or snapshot.close)
-                    - (snapshot.bid or snapshot.close)
-                )
+                abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close))
                 / snapshot.close
                 * 10000
                 if snapshot.close > 0

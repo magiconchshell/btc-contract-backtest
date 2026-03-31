@@ -26,13 +26,19 @@ def load_jsonl(path: Path):
 
 def main():
     if len(sys.argv) < 4:
-        raise SystemExit("usage: live_readiness_check.py <governance_state.json> <shadow_or_live_audit.jsonl> <approval.json>")
+        raise SystemExit(
+            "usage: live_readiness_check.py <governance_state.json> <shadow_or_live_audit.jsonl> <approval.json>"
+        )
 
     gov = read_json(Path(sys.argv[1]))
     audit_rows = load_jsonl(Path(sys.argv[2]))
     approvals = read_json(Path(sys.argv[3]))
 
-    blocked = sum(1 for r in audit_rows if r.get("event_type") in {"shadow_blocked", "live_session_blocked"})
+    blocked = sum(
+        1
+        for r in audit_rows
+        if r.get("event_type") in {"shadow_blocked", "live_session_blocked"}
+    )
     mismatches = 0
     for r in audit_rows:
         result = r.get("result") or r.get("reconcile") or {}

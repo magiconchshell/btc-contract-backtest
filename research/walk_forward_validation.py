@@ -23,9 +23,20 @@ FOLDS = 4
 
 STRATEGY_CANDIDATES = [
     ("regime_filtered", {}),
-    ("regime_filtered", {"adx_threshold": 20.0, "min_atr_pct": 0.004, "max_atr_pct": 0.03}),
+    (
+        "regime_filtered",
+        {"adx_threshold": 20.0, "min_atr_pct": 0.004, "max_atr_pct": 0.03},
+    ),
     ("regime_asymmetric", {}),
-    ("regime_asymmetric", {"long_adx_threshold": 15.0, "short_adx_threshold": 24.0, "long_rsi_threshold": 42.0, "short_rsi_threshold": 66.0}),
+    (
+        "regime_asymmetric",
+        {
+            "long_adx_threshold": 15.0,
+            "short_adx_threshold": 24.0,
+            "long_rsi_threshold": 42.0,
+            "short_rsi_threshold": 66.0,
+        },
+    ),
 ]
 
 RISK_CANDIDATES = [
@@ -59,7 +70,12 @@ RISK_CANDIDATES = [
 
 
 def score(metrics: dict) -> float:
-    return metrics["total_return"] + metrics["sharpe_ratio"] * 10 - abs(metrics["max_drawdown"]) * 0.5 + metrics["win_rate"] * 0.1
+    return (
+        metrics["total_return"]
+        + metrics["sharpe_ratio"] * 10
+        - abs(metrics["max_drawdown"]) * 0.5
+        + metrics["win_rate"] * 0.1
+    )
 
 
 def evaluate(df, strategy_name, strategy_config, risk, contract, account):
@@ -79,7 +95,9 @@ def main():
     engine = FuturesBacktestEngine(contract, account, RiskConfig(), timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=(TRAIN_DAYS + TEST_DAYS) * FOLDS + 15)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     folds = []
     fold_start = start_dt
@@ -87,21 +105,30 @@ def main():
         train_start = fold_start
         train_end = train_start + timedelta(days=TRAIN_DAYS)
         test_end = train_end + timedelta(days=TEST_DAYS)
-        train_df = df[(df.index >= pd.Timestamp(train_start)) & (df.index < pd.Timestamp(train_end))]
-        test_df = df[(df.index >= pd.Timestamp(train_end)) & (df.index < pd.Timestamp(test_end))]
+        train_df = df[
+            (df.index >= pd.Timestamp(train_start))
+            & (df.index < pd.Timestamp(train_end))
+        ]
+        test_df = df[
+            (df.index >= pd.Timestamp(train_end)) & (df.index < pd.Timestamp(test_end))
+        ]
 
         best = None
         best_score = None
         for strategy_name, strategy_config in STRATEGY_CANDIDATES:
             for risk in RISK_CANDIDATES:
-                train_metrics = evaluate(train_df, strategy_name, strategy_config, risk, contract, account)
+                train_metrics = evaluate(
+                    train_df, strategy_name, strategy_config, risk, contract, account
+                )
                 train_score = score(train_metrics)
                 if best is None or train_score > best_score:
                     best = (strategy_name, strategy_config, risk, train_metrics)
                     best_score = train_score
 
         strategy_name, strategy_config, risk, train_metrics = best
-        test_metrics = evaluate(test_df, strategy_name, strategy_config, risk, contract, account)
+        test_metrics = evaluate(
+            test_df, strategy_name, strategy_config, risk, contract, account
+        )
         folds.append(
             {
                 "fold": i + 1,
@@ -131,7 +158,9 @@ def main():
         "folds": folds,
     }
 
-    (OUT_DIR / "walk_forward_validation.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "walk_forward_validation.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Walk-Forward Validation",
@@ -151,7 +180,9 @@ def main():
             f"| {f['fold']} | {f['selected_strategy']} | {tm['total_return']:.2f}% | {tm['max_drawdown']:.2f}% | {tm['win_rate']:.2f}% | {tm['total_trades']} |"
         )
 
-    (OUT_DIR / "walk_forward_validation.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "walk_forward_validation.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines))
 
 

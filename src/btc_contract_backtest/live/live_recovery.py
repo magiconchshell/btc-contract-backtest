@@ -15,4 +15,6 @@ class LiveSessionRecovery:
         return json.loads(self.path.read_text())
 
     def save(self, payload: dict):
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+        self.path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+        )

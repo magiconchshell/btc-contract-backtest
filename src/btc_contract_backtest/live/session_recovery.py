@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from btc_contract_backtest.engine.execution_models import Order, OrderSide, OrderStatus, OrderType
+from btc_contract_backtest.engine.execution_models import (
+    Order,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
 
 
 class SessionRecovery:

@@ -7,12 +7,18 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from btc_contract_backtest.live.governance import GovernanceState, OperatorApprovalQueue, TradingMode
+from btc_contract_backtest.live.governance import (
+    GovernanceState,
+    OperatorApprovalQueue,
+    TradingMode,
+)
 
 
 def main():
     if len(sys.argv) < 3:
-        raise SystemExit("usage: governance_cli.py <state-file|approvals-file> <command> [args]")
+        raise SystemExit(
+            "usage: governance_cli.py <state-file|approvals-file> <command> [args]"
+        )
 
     target = sys.argv[1]
     command = sys.argv[2]

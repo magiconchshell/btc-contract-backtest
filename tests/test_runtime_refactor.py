@@ -1,6 +1,12 @@
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 from btc_contract_backtest.live.live_session import GovernedLiveSession
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -19,7 +25,10 @@ class StaticStrategy(BaseStrategy):
 
 class FakeExchange:
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=300):
-        return [[1735689600000, 100, 101, 99, 100, 10], [1735693200000, 100, 102, 99, 101, 12]]
+        return [
+            [1735689600000, 100, 101, 99, 100, 10],
+            [1735693200000, 100, 102, 99, 101, 12],
+        ]
 
     def fetch_ticker(self, symbol):
         return {"last": 101.0, "bid": 100.95, "ask": 101.05}
@@ -62,6 +71,13 @@ def test_governed_live_session_still_runs_after_runtime_refactor(tmp_path):
         state_file=str(tmp_path / "live_state.json"),
         exchange=FakeExchange(),
     )
-    sess.gov_state.set_mode(__import__('btc_contract_backtest.live.governance', fromlist=['TradingMode']).TradingMode.APPROVAL_REQUIRED)
+    sess.gov_state.set_mode(
+        __import__(
+            "btc_contract_backtest.live.governance", fromlist=["TradingMode"]
+        ).TradingMode.APPROVAL_REQUIRED
+    )
     payload = sess.step()
-    assert payload["event"] in {"decision", "halted", "blocked", "hold"} or "result" in payload
+    assert (
+        payload["event"] in {"decision", "halted", "blocked", "hold"}
+        or "result" in payload
+    )

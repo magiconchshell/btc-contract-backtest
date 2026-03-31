@@ -82,7 +82,9 @@ class FuturesBacktestEngine:
             if not nxt:
                 break
             rows.extend(nxt)
-        df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df = df[df["timestamp"] <= pd.Timestamp(end_date)]
         df.set_index("timestamp", inplace=True)
@@ -134,7 +136,10 @@ class FuturesBacktestEngine:
     def calculate_metrics(self, results: dict) -> dict:
         equity = results["equity_curve"]["equity"]
         returns = equity.pct_change().dropna()
-        total_return = ((results["final_capital"] - results["initial_capital"]) / results["initial_capital"]) * 100
+        total_return = (
+            (results["final_capital"] - results["initial_capital"])
+            / results["initial_capital"]
+        ) * 100
         sharpe = (
             0.0
             if len(returns) < 2 or returns.std() == 0
@@ -169,6 +174,10 @@ class FuturesBacktestEngine:
                 if "risk_events" not in results or results["risk_events"].empty
                 else int(len(results["risk_events"]))
             ),
-            "calibration_mode": getattr(self.execution, "calibration_mode", "calibrated"),
-            "calibration_version": getattr(self.execution, "calibration_version", "t4-v1"),
+            "calibration_mode": getattr(
+                self.execution, "calibration_mode", "calibrated"
+            ),
+            "calibration_version": getattr(
+                self.execution, "calibration_version", "t4-v1"
+            ),
         }

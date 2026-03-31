@@ -59,7 +59,12 @@ RISK_CANDIDATES = [
 
 
 def score(metrics: dict) -> float:
-    return metrics["total_return"] + metrics["sharpe_ratio"] * 12 - abs(metrics["max_drawdown"]) * 0.6 + metrics["win_rate"] * 0.08
+    return (
+        metrics["total_return"]
+        + metrics["sharpe_ratio"] * 12
+        - abs(metrics["max_drawdown"]) * 0.6
+        + metrics["win_rate"] * 0.08
+    )
 
 
 def evaluate(df, strategy_name, strategy_config, risk, contract, account):
@@ -79,7 +84,9 @@ def main():
     engine = FuturesBacktestEngine(contract, account, RiskConfig(), timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=(TRAIN_DAYS + TEST_DAYS) * FOLDS + 30)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     folds = []
     fold_start = start_dt
@@ -87,21 +94,30 @@ def main():
         train_start = fold_start
         train_end = train_start + timedelta(days=TRAIN_DAYS)
         test_end = train_end + timedelta(days=TEST_DAYS)
-        train_df = df[(df.index >= pd.Timestamp(train_start)) & (df.index < pd.Timestamp(train_end))]
-        test_df = df[(df.index >= pd.Timestamp(train_end)) & (df.index < pd.Timestamp(test_end))]
+        train_df = df[
+            (df.index >= pd.Timestamp(train_start))
+            & (df.index < pd.Timestamp(train_end))
+        ]
+        test_df = df[
+            (df.index >= pd.Timestamp(train_end)) & (df.index < pd.Timestamp(test_end))
+        ]
 
         best = None
         best_score = None
         for strategy_name, strategy_config in STRATEGY_CANDIDATES:
             for risk in RISK_CANDIDATES:
-                train_metrics = evaluate(train_df, strategy_name, strategy_config, risk, contract, account)
+                train_metrics = evaluate(
+                    train_df, strategy_name, strategy_config, risk, contract, account
+                )
                 train_score = score(train_metrics)
                 if best is None or train_score > best_score:
                     best = (strategy_name, strategy_config, risk, train_metrics)
                     best_score = train_score
 
         strategy_name, strategy_config, risk, train_metrics = best
-        test_metrics = evaluate(test_df, strategy_name, strategy_config, risk, contract, account)
+        test_metrics = evaluate(
+            test_df, strategy_name, strategy_config, risk, contract, account
+        )
         folds.append(
             {
                 "fold": i + 1,
@@ -121,7 +137,9 @@ def main():
     profitable_tests = sum(1 for f in folds if f["test_metrics"]["total_return"] > 0)
     strategy_counts = {}
     for f in folds:
-        strategy_counts[f["selected_strategy"]] = strategy_counts.get(f["selected_strategy"], 0) + 1
+        strategy_counts[f["selected_strategy"]] = (
+            strategy_counts.get(f["selected_strategy"], 0) + 1
+        )
 
     payload = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -136,7 +154,9 @@ def main():
         "folds": folds,
     }
 
-    (OUT_DIR / "walk_forward_validation_v3.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "walk_forward_validation_v3.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Walk-Forward Validation v3",
@@ -157,7 +177,9 @@ def main():
             f"| {f['fold']} | {f['selected_strategy']} | {tm['total_return']:.2f}% | {tm['max_drawdown']:.2f}% | {tm['win_rate']:.2f}% | {tm['total_trades']} |"
         )
 
-    (OUT_DIR / "walk_forward_validation_v3.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "walk_forward_validation_v3.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines))
 
 

@@ -1,5 +1,15 @@
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, RiskConfig
-from btc_contract_backtest.engine.execution_models import MarketSnapshot, OrderSide, OrderStatus, OrderType
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    RiskConfig,
+)
+from btc_contract_backtest.engine.execution_models import (
+    MarketSnapshot,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
 from btc_contract_backtest.engine.simulator_core import SimulatorCore
 
 

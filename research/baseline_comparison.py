@@ -36,7 +36,9 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     candidates = [
         ("buy_and_hold_long", {}),
@@ -54,15 +56,19 @@ def main():
         signal_df = strategy.generate_signals(df.copy())
         results = engine.simulate(signal_df)
         metrics = engine.calculate_metrics(results)
-        rows.append({
-            "strategy": name,
-            "signal_count": int((signal_df["signal"] != 0).sum()),
-            **metrics,
-        })
+        rows.append(
+            {
+                "strategy": name,
+                "signal_count": int((signal_df["signal"] != 0).sum()),
+                **metrics,
+            }
+        )
 
     rows.sort(key=lambda x: x["final_capital"], reverse=True)
     payload = {"generated_at": datetime.now(UTC).isoformat(), "rows": rows}
-    (OUT_DIR / "baseline_comparison.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "baseline_comparison.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Baseline Comparison",

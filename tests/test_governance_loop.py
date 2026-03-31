@@ -1,7 +1,13 @@
 from pathlib import Path
 
 from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
-from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
+from btc_contract_backtest.live.governance import (
+    AlertSink,
+    GovernancePolicy,
+    GovernanceState,
+    OperatorApprovalQueue,
+    TradingMode,
+)
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import AdapterResult
@@ -37,7 +43,9 @@ def test_process_approved_request_submits(tmp_path):
     alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
     audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
     executor = GuardedLiveExecutor(FakeAdapter(), policy, approvals, alerts, audit)
-    approvals.request_approval("req-1", {"symbol": "BTC/USDT", "signal": 1, "quantity": 1.0, "notional": 100.0})
+    approvals.request_approval(
+        "req-1", {"symbol": "BTC/USDT", "signal": 1, "quantity": 1.0, "notional": 100.0}
+    )
     approvals.approve("req-1")
     result = executor.process_approved_request("req-1")
     assert result["status"] == "submitted"

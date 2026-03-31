@@ -5,7 +5,11 @@ from .hybrid import VotingHybridStrategy
 from .regime_filtered import RegimeFilteredStrategy
 from .regime_asymmetric import RegimeAsymmetricStrategy
 from .baselines import BuyAndHoldLongStrategy, EMATrendStrategy
-from .btc_bias import LongOnlyRegimeStrategy, ShortLiteRegimeStrategy, ExtremeDowntrendShortStrategy
+from .btc_bias import (
+    LongOnlyRegimeStrategy,
+    ShortLiteRegimeStrategy,
+    ExtremeDowntrendShortStrategy,
+)
 from .regime_switcher import RegimeSwitcherStrategy
 from .short_overlay_switcher import ShortOverlaySwitcherStrategy
 from .strong_bull_long import StrongBullLongStrategy
@@ -21,7 +25,9 @@ def build_strategy(name: str, config: Optional[dict] = None):
     if name == "macd":
         return MACDCrossStrategy(**config)
     if name == "hybrid":
-        return VotingHybridStrategy([build_strategy("rsi"), build_strategy("macd")], required_votes=1)
+        return VotingHybridStrategy(
+            [build_strategy("rsi"), build_strategy("macd")], required_votes=1
+        )
     if name == "regime_filtered":
         return RegimeFilteredStrategy(**config)
     if name == "regime_asymmetric":

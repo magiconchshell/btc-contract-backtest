@@ -7,7 +7,10 @@ from btc_contract_backtest.runtime.calibration_engine import (
     sample_from_execution,
     validate_samples,
 )
-from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, CalibrationSample
+from btc_contract_backtest.runtime.calibration_models import (
+    CalibrationConfig,
+    CalibrationSample,
+)
 
 
 def test_sample_from_execution_computes_quality_and_slippage():
@@ -86,6 +89,10 @@ def test_validation_harness_returns_metrics():
 
 
 def test_market_quality_score_penalizes_stale_or_missing_inputs():
-    good = market_quality_score(spread_bps=2.0, depth_notional=10000.0, funding_rate=0.0001, stale=False)
-    bad = market_quality_score(spread_bps=None, depth_notional=0.0, funding_rate=None, stale=True)
+    good = market_quality_score(
+        spread_bps=2.0, depth_notional=10000.0, funding_rate=0.0001, stale=False
+    )
+    bad = market_quality_score(
+        spread_bps=None, depth_notional=0.0, funding_rate=None, stale=True
+    )
     assert good > bad

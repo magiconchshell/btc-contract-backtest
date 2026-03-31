@@ -13,7 +13,9 @@ class CalibrationSampleStore:
 
     def append(self, sample: CalibrationSample) -> None:
         with self.path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(sample.to_dict(), ensure_ascii=False, default=str) + "\n")
+            f.write(
+                json.dumps(sample.to_dict(), ensure_ascii=False, default=str) + "\n"
+            )
 
     def load(self) -> list[dict]:
         if not self.path.exists():

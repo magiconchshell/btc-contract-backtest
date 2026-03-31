@@ -55,8 +55,12 @@ class OrderLifecycleMonitor:
                 status=mapped,
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 payload=remote,
-                filled_quantity=None if filled_quantity is None else float(filled_quantity),
-                avg_fill_price=None if avg_fill_price is None else float(avg_fill_price),
+                filled_quantity=(
+                    None if filled_quantity is None else float(filled_quantity)
+                ),
+                avg_fill_price=(
+                    None if avg_fill_price is None else float(avg_fill_price)
+                ),
                 exchange_order_id=exchange_order_id,
             )
         self.audit.log(

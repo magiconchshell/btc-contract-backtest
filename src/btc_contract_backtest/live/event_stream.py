@@ -38,7 +38,11 @@ def _max_external_sequence(rows: list[dict[str, Any]]) -> Optional[str]:
     ]
     if numeric_values:
         return str(max(numeric_values))
-    values = [str(row.get("external_sequence")) for row in rows if row.get("external_sequence") not in (None, "")]
+    values = [
+        str(row.get("external_sequence"))
+        for row in rows
+        if row.get("external_sequence") not in (None, "")
+    ]
     return max(values) if values else None
 
 
@@ -49,17 +53,13 @@ class RawExecutionEventSource(Protocol):
     but the normalized plane is intentionally exchange-agnostic.
     """
 
-    def source_name(self) -> str:
-        ...
+    def source_name(self) -> str: ...
 
-    def source_kind(self) -> str:
-        ...
+    def source_kind(self) -> str: ...
 
-    def is_live(self) -> bool:
-        ...
+    def is_live(self) -> bool: ...
 
-    def describe(self) -> dict[str, Any]:
-        ...
+    def describe(self) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -209,7 +209,9 @@ class EventDrivenExecutionSource:
                 for value in [_coerce_int(row.get("sequence"))]
                 if value is not None
             ]
-            self.last_sequence = max(numeric_sequences) if numeric_sequences else last.get("sequence")
+            self.last_sequence = (
+                max(numeric_sequences) if numeric_sequences else last.get("sequence")
+            )
             self.last_event_timestamp = last.get("timestamp")
             self.last_received_at = last.get("received_at")
             self.last_external_sequence = _max_external_sequence(rows)

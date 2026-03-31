@@ -40,8 +40,12 @@ def default_position(symbol: str = "UNKNOWN", leverage: float = 1.0) -> dict[str
     return asdict(PositionState(symbol=symbol, leverage=leverage))
 
 
-def normalize_legacy_state(raw: dict[str, Any], *, mode: str, symbol: str, leverage: float) -> dict[str, Any]:
-    state = EngineState(mode=mode, position=default_position(symbol, leverage)).to_dict()
+def normalize_legacy_state(
+    raw: dict[str, Any], *, mode: str, symbol: str, leverage: float
+) -> dict[str, Any]:
+    state = EngineState(
+        mode=mode, position=default_position(symbol, leverage)
+    ).to_dict()
 
     if not raw:
         return state
@@ -56,7 +60,9 @@ def normalize_legacy_state(raw: dict[str, Any], *, mode: str, symbol: str, lever
     state["risk_events"] = raw.get("risk_events", [])
     state["governance_state"] = raw.get("governance_state", {})
     state["operator_actions"] = raw.get("operator_actions", [])
-    state["last_runtime_snapshot"] = raw.get("last_runtime_snapshot") or raw.get("last_payload") or {}
+    state["last_runtime_snapshot"] = (
+        raw.get("last_runtime_snapshot") or raw.get("last_payload") or {}
+    )
     state["watchdog"] = raw.get("watchdog") or {
         "last_heartbeat_at": raw.get("last_heartbeat_at"),
         "consecutive_failures": raw.get("consecutive_failures", 0),

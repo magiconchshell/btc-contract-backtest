@@ -292,11 +292,16 @@ def build_detailed_reconcile_report(
                     classification=(
                         "order_status_only"
                         if mismatch_types == ["status"]
-                        else "order_partial_fill_divergence"
-                        if "filled_quantity" in mismatch_types or "avg_fill_price" in mismatch_types
-                        else "order_critical_divergence"
-                        if severity == "critical"
-                        else "order_warning_divergence"
+                        else (
+                            "order_partial_fill_divergence"
+                            if "filled_quantity" in mismatch_types
+                            or "avg_fill_price" in mismatch_types
+                            else (
+                                "order_critical_divergence"
+                                if severity == "critical"
+                                else "order_warning_divergence"
+                            )
+                        )
                     ),
                 ).to_dict()
             )
@@ -305,14 +310,21 @@ def build_detailed_reconcile_report(
         if key not in local_index and _is_open_status(remote["status"]):
             orphan_remote_orders.append(remote)
 
-    ok = not position_mismatch and not order_mismatches and not orphan_local_orders and not orphan_remote_orders
+    ok = (
+        not position_mismatch
+        and not order_mismatches
+        and not orphan_local_orders
+        and not orphan_remote_orders
+    )
     summary = {
         "position_mismatch": bool(position_mismatch),
         "order_mismatch_count": len(order_mismatches),
         "orphan_local_order_count": len(orphan_local_orders),
         "orphan_remote_order_count": len(orphan_remote_orders),
         "position_mismatch_types": position_mismatch_types,
-        "order_mismatch_classifications": [item["classification"] for item in order_mismatches],
+        "order_mismatch_classifications": [
+            item["classification"] for item in order_mismatches
+        ],
     }
 
     return DetailedReconcileReport(

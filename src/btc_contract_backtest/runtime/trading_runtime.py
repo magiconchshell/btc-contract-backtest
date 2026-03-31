@@ -175,7 +175,11 @@ class TradingRuntime:
         safe, reason = self.evaluate_risk(snapshot)
 
         if not safe:
-            payload = {"event": "blocked", "reason": reason or "risk_check_failed", "timestamp": self.now_iso()}
+            payload = {
+                "event": "blocked",
+                "reason": reason or "risk_check_failed",
+                "timestamp": self.now_iso(),
+            }
             self.persist_payload(payload, {"stage": "risk"})
             return self.on_blocked_snapshot(payload)
 

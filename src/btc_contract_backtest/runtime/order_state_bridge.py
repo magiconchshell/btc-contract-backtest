@@ -21,7 +21,9 @@ STATUS_MAP = {
 }
 
 
-def canonical_record_from_order(order: Order, submission_mode: str) -> CanonicalOrderRecord:
+def canonical_record_from_order(
+    order: Order, submission_mode: str
+) -> CanonicalOrderRecord:
     return OrderStateMachine.create_record(
         order_id=order.order_id,
         client_order_id=order.client_order_id,
@@ -111,7 +113,9 @@ def _mark_replace_race_risk(
     timestamp: Optional[str],
     event_payload: dict,
 ) -> None:
-    replacement_order_id = record.tags.get("pending_replacement_order_id") or record.tags.get("replaced_by_order_id")
+    replacement_order_id = record.tags.get(
+        "pending_replacement_order_id"
+    ) or record.tags.get("replaced_by_order_id")
     if replacement_order_id is None:
         return
 
@@ -195,7 +199,9 @@ def apply_remote_status(
         raise
 
 
-def propagate_replace_chain(parent: CanonicalOrderRecord, child: CanonicalOrderRecord) -> CanonicalOrderRecord:
+def propagate_replace_chain(
+    parent: CanonicalOrderRecord, child: CanonicalOrderRecord
+) -> CanonicalOrderRecord:
     root_id = parent.tags.get("replace_chain_root_order_id") or parent.order_id
     lineage = list(parent.tags.get("replace_lineage", []))
     if parent.order_id not in lineage:

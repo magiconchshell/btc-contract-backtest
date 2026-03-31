@@ -1,4 +1,8 @@
-from btc_contract_backtest.live.submit_ledger import SubmitAttempt, SubmitIntent, SubmitLedger
+from btc_contract_backtest.live.submit_ledger import (
+    SubmitAttempt,
+    SubmitIntent,
+    SubmitLedger,
+)
 
 
 def test_submit_ledger_tracks_lifecycle(tmp_path):
@@ -16,8 +20,18 @@ def test_submit_ledger_tracks_lifecycle(tmp_path):
             updated_at="2026-01-01T00:00:00+00:00",
         )
     )
-    ledger.append_attempt("r1", SubmitAttempt(timestamp="2026-01-01T00:00:01+00:00", action="submit", status="started"))
-    ledger.mark_state("r1", state="submitted", timestamp="2026-01-01T00:00:02+00:00", exchange_order_id="ex1")
+    ledger.append_attempt(
+        "r1",
+        SubmitAttempt(
+            timestamp="2026-01-01T00:00:01+00:00", action="submit", status="started"
+        ),
+    )
+    ledger.mark_state(
+        "r1",
+        state="submitted",
+        timestamp="2026-01-01T00:00:02+00:00",
+        exchange_order_id="ex1",
+    )
 
     payload = ledger.get("r1")
     assert payload is not None

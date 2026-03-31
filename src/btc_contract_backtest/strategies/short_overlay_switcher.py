@@ -63,7 +63,7 @@ class ShortOverlaySwitcherStrategy(BaseStrategy):
             & (df["drawdown_from_recent_high"] <= -self.crash_threshold_pct)
             & (df["adx"] >= self.crash_adx_threshold)
         )
-        bull_regime = (df["ema_fast"] > df["ema_slow"])
+        bull_regime = df["ema_fast"] > df["ema_slow"]
 
         short_df = self.short_module.generate_signals(df.copy())
 

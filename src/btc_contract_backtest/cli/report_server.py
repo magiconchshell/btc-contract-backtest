@@ -23,9 +23,24 @@ def _run_backtests():
     df = engine.fetch_historical_data("2025-01-01", datetime.now().strftime("%Y-%m-%d"))
 
     candidates = [
-        ("RSI Reversal", build_strategy("rsi", {"rsi_period": 14, "threshold_low": 30, "threshold_high": 70})),
-        ("MACD Cross", build_strategy("macd", {"fast_ema": 12, "slow_ema": 26, "signal_smooth": 9})),
-        ("Hybrid RSI + MACD", VotingHybridStrategy([build_strategy("rsi"), build_strategy("macd")], required_votes=1)),
+        (
+            "RSI Reversal",
+            build_strategy(
+                "rsi", {"rsi_period": 14, "threshold_low": 30, "threshold_high": 70}
+            ),
+        ),
+        (
+            "MACD Cross",
+            build_strategy(
+                "macd", {"fast_ema": 12, "slow_ema": 26, "signal_smooth": 9}
+            ),
+        ),
+        (
+            "Hybrid RSI + MACD",
+            VotingHybridStrategy(
+                [build_strategy("rsi"), build_strategy("macd")], required_votes=1
+            ),
+        ),
     ]
 
     strategies = []

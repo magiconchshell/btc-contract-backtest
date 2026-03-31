@@ -38,7 +38,9 @@ def test_detailed_reconcile_detects_order_and_position_mismatches():
     assert report["position_mismatch"]["classification"] == "position_mismatch"
     assert report["summary"]["order_mismatch_count"] == 1
     assert report["summary"]["position_mismatch_types"] == ["quantity", "entry_price"]
-    assert report["summary"]["order_mismatch_classifications"] == ["order_partial_fill_divergence"]
+    assert report["summary"]["order_mismatch_classifications"] == [
+        "order_partial_fill_divergence"
+    ]
     mismatch = report["order_mismatches"][0]
     assert "side" in mismatch["mismatch_types"]
     assert "quantity" in mismatch["mismatch_types"]
@@ -51,8 +53,28 @@ def test_detailed_reconcile_detects_orphan_orders():
     report = build_detailed_reconcile_report(
         local_position={"side": 0, "quantity": 0.0, "entry_price": None},
         remote_positions=[],
-        local_orders=[{"order_id": "o1", "client_order_id": "c1", "side": "buy", "order_type": "limit", "quantity": 1.0, "filled_quantity": 0.0, "status": "new"}],
-        remote_orders=[{"id": "ex2", "clientOrderId": "c2", "side": "buy", "type": "limit", "amount": 1.0, "filled": 0.0, "status": "open"}],
+        local_orders=[
+            {
+                "order_id": "o1",
+                "client_order_id": "c1",
+                "side": "buy",
+                "order_type": "limit",
+                "quantity": 1.0,
+                "filled_quantity": 0.0,
+                "status": "new",
+            }
+        ],
+        remote_orders=[
+            {
+                "id": "ex2",
+                "clientOrderId": "c2",
+                "side": "buy",
+                "type": "limit",
+                "amount": 1.0,
+                "filled": 0.0,
+                "status": "open",
+            }
+        ],
     ).to_dict()
 
     assert report["ok"] is False

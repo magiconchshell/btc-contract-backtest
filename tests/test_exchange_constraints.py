@@ -1,5 +1,8 @@
 from btc_contract_backtest.config.models import ContractSpec, LeverageBracket
-from btc_contract_backtest.live.binance_futures import BinanceSymbolRules, with_binance_symbol_rules
+from btc_contract_backtest.live.binance_futures import (
+    BinanceSymbolRules,
+    with_binance_symbol_rules,
+)
 from btc_contract_backtest.live.exchange_constraints import ExchangeConstraintChecker
 
 
@@ -48,8 +51,16 @@ def test_exchange_constraints_enforce_leverage_brackets_and_reduce_only_directio
             lot_size=0.001,
             margin_mode="cross",
             leverage_brackets=[
-                LeverageBracket(notional_cap=1000.0, initial_leverage=20, maintenance_margin_ratio=0.005),
-                LeverageBracket(notional_cap=10000.0, initial_leverage=10, maintenance_margin_ratio=0.01),
+                LeverageBracket(
+                    notional_cap=1000.0,
+                    initial_leverage=20,
+                    maintenance_margin_ratio=0.005,
+                ),
+                LeverageBracket(
+                    notional_cap=10000.0,
+                    initial_leverage=10,
+                    maintenance_margin_ratio=0.01,
+                ),
             ],
         ),
         min_notional=5.0,
@@ -99,11 +110,21 @@ def test_exchange_constraints_accept_binance_metadata_brackets():
             metadata_source="binance_futures_testnet",
             metadata_as_of="2026-03-31T00:00:00+00:00",
             leverage_brackets=[
-                LeverageBracket(notional_cap=1000.0, initial_leverage=20, maintenance_margin_ratio=0.005),
-                LeverageBracket(notional_cap=10000.0, initial_leverage=10, maintenance_margin_ratio=0.01),
+                LeverageBracket(
+                    notional_cap=1000.0,
+                    initial_leverage=20,
+                    maintenance_margin_ratio=0.005,
+                ),
+                LeverageBracket(
+                    notional_cap=10000.0,
+                    initial_leverage=10,
+                    maintenance_margin_ratio=0.01,
+                ),
             ],
         ),
     )
     checker = ExchangeConstraintChecker(contract)
-    result = checker.validate_order(quantity=0.5, price=100.0, side="buy", notional=50.0, leverage=15)
+    result = checker.validate_order(
+        quantity=0.5, price=100.0, side="buy", notional=50.0, leverage=15
+    )
     assert result.ok is True

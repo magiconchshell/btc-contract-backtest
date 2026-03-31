@@ -54,7 +54,9 @@ def summarize(rows: list[dict]):
 def write_reports(audit_path: Path, summary: dict):
     out_md = audit_path.with_suffix(".summary.md")
     out_json = audit_path.with_suffix(".summary.json")
-    out_json.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_json.write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     lines = [
         "# Shadow Audit Summary",
@@ -84,7 +86,13 @@ def main():
     rows = load_jsonl(audit_path)
     summary = summarize(rows)
     md, js = write_reports(audit_path, summary)
-    print(json.dumps({"summary": summary, "markdown": str(md), "json": str(js)}, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"summary": summary, "markdown": str(md), "json": str(js)},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

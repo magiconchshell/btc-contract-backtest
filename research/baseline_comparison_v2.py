@@ -36,7 +36,9 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     candidates = [
         ("buy_and_hold_long", {}),
@@ -55,15 +57,19 @@ def main():
         signal_df = strategy.generate_signals(df.copy())
         results = engine.simulate(signal_df)
         metrics = engine.calculate_metrics(results)
-        rows.append({
-            "strategy": name,
-            "signal_count": int((signal_df["signal"] != 0).sum()),
-            **metrics,
-        })
+        rows.append(
+            {
+                "strategy": name,
+                "signal_count": int((signal_df["signal"] != 0).sum()),
+                **metrics,
+            }
+        )
 
     rows.sort(key=lambda x: x["final_capital"], reverse=True)
     payload = {"generated_at": datetime.now(UTC).isoformat(), "rows": rows}
-    (OUT_DIR / "baseline_comparison_v2.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "baseline_comparison_v2.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Baseline Comparison v2",
@@ -75,7 +81,9 @@ def main():
         lines.append(
             f"| {row['strategy']} | {row['total_return']:.2f}% | {row['max_drawdown']:.2f}% | {row['win_rate']:.2f}% | {row['total_trades']} | {row['final_capital']:.2f} | {row['signal_count']} |"
         )
-    (OUT_DIR / "baseline_comparison_v2.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "baseline_comparison_v2.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines))
 
 

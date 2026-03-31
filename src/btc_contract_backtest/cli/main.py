@@ -9,7 +9,9 @@ from btc_contract_backtest.config.models import (
     RiskConfig,
 )
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
-from btc_contract_backtest.live.binance_futures import build_binance_futures_runtime_paths
+from btc_contract_backtest.live.binance_futures import (
+    build_binance_futures_runtime_paths,
+)
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
 from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 from btc_contract_backtest.reporting.metrics import summarize_results
@@ -34,12 +36,27 @@ def parse_args():
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--leverage", type=int, default=5)
     p.add_argument("--capital", type=float, default=1000.0)
-    p.add_argument("--strategy", default="rsi", choices=[
-        "rsi", "sma_cross", "macd", "hybrid", "regime_filtered", "regime_asymmetric",
-        "buy_and_hold_long", "ema_trend", "long_only_regime", "short_lite_regime",
-        "extreme_downtrend_short", "regime_switcher", "short_overlay_switcher",
-        "strong_bull_long", "sparse_meta_portfolio",
-    ])
+    p.add_argument(
+        "--strategy",
+        default="rsi",
+        choices=[
+            "rsi",
+            "sma_cross",
+            "macd",
+            "hybrid",
+            "regime_filtered",
+            "regime_asymmetric",
+            "buy_and_hold_long",
+            "ema_trend",
+            "long_only_regime",
+            "short_lite_regime",
+            "extreme_downtrend_short",
+            "regime_switcher",
+            "short_overlay_switcher",
+            "strong_bull_long",
+            "sparse_meta_portfolio",
+        ],
+    )
     p.add_argument("--paper-summary", action="store_true")
     p.add_argument("--paper-loop", action="store_true")
     p.add_argument("--shadow-loop", action="store_true")
@@ -122,7 +139,11 @@ def main():
         print({"review": review, "markdown": str(md), "json": str(js)})
         return
 
-    contract = ContractSpec(symbol=args.symbol, leverage=args.leverage, exchange_profile=args.exchange_profile)
+    contract = ContractSpec(
+        symbol=args.symbol,
+        leverage=args.leverage,
+        exchange_profile=args.exchange_profile,
+    )
     account = AccountConfig(initial_capital=args.capital)
     risk = RiskConfig(
         stop_loss_pct=args.stop_loss_pct,

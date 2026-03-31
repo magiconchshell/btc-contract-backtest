@@ -280,7 +280,11 @@ class GuardedLiveExecutor:
         )
         result = self.adapter.submit_order(order)
         if result.ok:
-            exchange_order_id = (result.payload or {}).get("id") if isinstance(result.payload, dict) else None
+            exchange_order_id = (
+                (result.payload or {}).get("id")
+                if isinstance(result.payload, dict)
+                else None
+            )
             self.submit_ledger.append_attempt(
                 request_id,
                 SubmitAttempt(
@@ -334,8 +338,12 @@ class GuardedLiveExecutor:
                 payload={"error": result.error},
             ),
         )
-        remote_lookup = self.adapter.fetch_open_orders_by_client_order_id(client_order_id)
-        recovered_orders = remote_lookup.payload if isinstance(remote_lookup.payload, list) else []
+        remote_lookup = self.adapter.fetch_open_orders_by_client_order_id(
+            client_order_id
+        )
+        recovered_orders = (
+            remote_lookup.payload if isinstance(remote_lookup.payload, list) else []
+        )
         if remote_lookup.ok and recovered_orders:
             remote_order = recovered_orders[0]
             exchange_order_id = remote_order.get("id")
@@ -463,7 +471,9 @@ class GuardedLiveExecutor:
                     "duplicate_exposure_risk": duplicate_risk,
                     "state": record.state,
                 }
-                self.event_source.emit("cancel_replace_blocked", timestamp, block_details)
+                self.event_source.emit(
+                    "cancel_replace_blocked", timestamp, block_details
+                )
                 self.alerts.emit(
                     "governed_cancel_replace_blocked",
                     {
@@ -490,18 +500,52 @@ class GuardedLiveExecutor:
                 notional=notional,
                 reduce_only=bool(getattr(record, "reduce_only", False)),
                 position_side=getattr(record, "side", 0) if record is not None else 0,
-                account_mode=getattr(self.governance.contract, "position_mode", "one_way") if self.governance.contract is not None else "one_way",
+                account_mode=(
+                    getattr(self.governance.contract, "position_mode", "one_way")
+                    if self.governance.contract is not None
+                    else "one_way"
+                ),
                 current_position_notional=notional,
-                current_position_side=getattr(record, "side", 0) if record is not None else 0,
+                current_position_side=(
+                    getattr(record, "side", 0) if record is not None else 0
+                ),
                 max_open_positions=self.governance.live_risk.max_open_positions,
                 current_open_positions=1 if record is not None else 0,
             )
             if not constraint_result.ok:
                 first = constraint_result.violations[0]
-                self.event_source.emit("cancel_replace_blocked", timestamp, {"cancel_order_id": cancel_order_id, "reason": first["code"], "violations": constraint_result.violations})
-                self.alerts.emit("governed_cancel_replace_blocked", {"timestamp": timestamp, "cancel_order_id": cancel_order_id, "reason": first["code"]}, severity="critical")
-                self.audit.log("governed_cancel_replace_blocked", {"cancel_order_id": cancel_order_id, "reason": first["code"], "violations": constraint_result.violations})
-                return {"status": "blocked", "reason": first["code"], "violations": constraint_result.violations, "record": record}
+                self.event_source.emit(
+                    "cancel_replace_blocked",
+                    timestamp,
+                    {
+                        "cancel_order_id": cancel_order_id,
+                        "reason": first["code"],
+                        "violations": constraint_result.violations,
+                    },
+                )
+                self.alerts.emit(
+                    "governed_cancel_replace_blocked",
+                    {
+                        "timestamp": timestamp,
+                        "cancel_order_id": cancel_order_id,
+                        "reason": first["code"],
+                    },
+                    severity="critical",
+                )
+                self.audit.log(
+                    "governed_cancel_replace_blocked",
+                    {
+                        "cancel_order_id": cancel_order_id,
+                        "reason": first["code"],
+                        "violations": constraint_result.violations,
+                    },
+                )
+                return {
+                    "status": "blocked",
+                    "reason": first["code"],
+                    "violations": constraint_result.violations,
+                    "record": record,
+                }
         new_order = Order(
             order_id=str(uuid.uuid4()),
             symbol=symbol,
@@ -515,12 +559,18 @@ class GuardedLiveExecutor:
                 cancel_pending = apply_local_cancel(
                     record,
                     timestamp=timestamp,
-                    payload={"cancel_order_id": cancel_order_id, "residual_quantity": residual_quantity},
+                    payload={
+                        "cancel_order_id": cancel_order_id,
+                        "residual_quantity": residual_quantity,
+                    },
                 )
                 record = apply_local_replace(
                     cancel_pending,
                     timestamp=timestamp,
-                    payload={"new_order_id": new_order.order_id, "residual_quantity": residual_quantity},
+                    payload={
+                        "new_order_id": new_order.order_id,
+                        "residual_quantity": residual_quantity,
+                    },
                 )
             except Exception:  # noqa: BLE001
                 record.state = CanonicalOrderState.REPLACE_PENDING.value

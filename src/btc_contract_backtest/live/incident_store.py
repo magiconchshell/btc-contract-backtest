@@ -26,13 +26,17 @@ class IncidentStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text(json.dumps({"incidents": []}, indent=2, ensure_ascii=False))
+            self.path.write_text(
+                json.dumps({"incidents": []}, indent=2, ensure_ascii=False)
+            )
 
     def load(self) -> dict:
         return json.loads(self.path.read_text())
 
     def save(self, payload: dict):
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+        self.path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+        )
 
     def append(self, incident: IncidentRecord):
         payload = self.load()

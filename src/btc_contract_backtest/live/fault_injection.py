@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-from btc_contract_backtest.live.event_stream import EventDrivenExecutionSource, EventRecorder
+from btc_contract_backtest.live.event_stream import (
+    EventDrivenExecutionSource,
+    EventRecorder,
+)
 
 
 @dataclass
@@ -51,7 +54,9 @@ class EventSequenceMonitor:
                 status="non_numeric",
                 source=source,
                 symbol=symbol,
-                external_sequence=None if external_sequence is None else str(external_sequence),
+                external_sequence=(
+                    None if external_sequence is None else str(external_sequence)
+                ),
             )
             self.observations.append(observation.to_dict())
             return observation
@@ -138,7 +143,14 @@ class CancelReplaceRiskReport:
 class ResidualRiskInspector:
     TERMINAL_ORDER_STATES = {"canceled", "cancelled", "rejected", "expired"}
     FILLED_ORDER_STATES = {"filled", "closed"}
-    OPEN_ORDER_STATES = {"new", "open", "partially_filled", "partially-filled", "partial", "submitted"}
+    OPEN_ORDER_STATES = {
+        "new",
+        "open",
+        "partially_filled",
+        "partially-filled",
+        "partial",
+        "submitted",
+    }
 
     @classmethod
     def inspect_cancel_replace(
@@ -180,7 +192,11 @@ class ResidualRiskInspector:
             ok = False
             status = "double_open_risk"
             notes.append("both_old_and_new_orders_open")
-        elif residual_fills and new_order is not None and _status(new_order) in cls.OPEN_ORDER_STATES:
+        elif (
+            residual_fills
+            and new_order is not None
+            and _status(new_order) in cls.OPEN_ORDER_STATES
+        ):
             ok = False
             status = "residual_exposure_risk"
             notes.append("filled_old_order_and_live_replacement")

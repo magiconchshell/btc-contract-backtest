@@ -40,8 +40,20 @@ def main():
     strategy_configs = [
         ("hybrid", {}),
         ("regime_filtered", {}),
-        ("regime_filtered", {"adx_threshold": 20.0, "min_atr_pct": 0.004, "max_atr_pct": 0.03}),
-        ("regime_filtered", {"fast_trend_window": 30, "slow_trend_window": 120, "adx_threshold": 22.0, "rsi_long_threshold": 40.0, "rsi_short_threshold": 60.0}),
+        (
+            "regime_filtered",
+            {"adx_threshold": 20.0, "min_atr_pct": 0.004, "max_atr_pct": 0.03},
+        ),
+        (
+            "regime_filtered",
+            {
+                "fast_trend_window": 30,
+                "slow_trend_window": 120,
+                "adx_threshold": 22.0,
+                "rsi_long_threshold": 40.0,
+                "rsi_short_threshold": 60.0,
+            },
+        ),
     ]
 
     exit_grid = list(
@@ -61,7 +73,15 @@ def main():
         strategy = build_strategy(strategy_name, strategy_config)
         signal_df = strategy.generate_signals(df)
         signal_count = int((signal_df["signal"] != 0).sum())
-        for stop_loss, take_profit, max_holding, atr_mult, break_even, partial_tp, stepped_trail in exit_grid:
+        for (
+            stop_loss,
+            take_profit,
+            max_holding,
+            atr_mult,
+            break_even,
+            partial_tp,
+            stepped_trail,
+        ) in exit_grid:
             risk = RiskConfig(
                 max_position_notional_pct=0.45,
                 stop_loss_pct=stop_loss,
@@ -96,7 +116,13 @@ def main():
     rows.sort(key=lambda x: x["score"], reverse=True)
     top_rows = rows[:20]
 
-    (OUT_DIR / "systematic_exit_search.json").write_text(json.dumps({"generated_at": datetime.utcnow().isoformat(), "top": top_rows}, indent=2, ensure_ascii=False))
+    (OUT_DIR / "systematic_exit_search.json").write_text(
+        json.dumps(
+            {"generated_at": datetime.utcnow().isoformat(), "top": top_rows},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
     lines = [
         "# Systematic Exit Search Results",
@@ -109,7 +135,9 @@ def main():
             f"| {i} | {row['strategy']} | {row['total_return']:.2f}% | {row['max_drawdown']:.2f}% | {row['win_rate']:.2f}% | {row['total_trades']} | {row['final_capital']:.2f} | {row['score']:.2f} | {row['stop_loss_pct']} | {row['take_profit_pct']} | {row['max_holding_bars']} | {row['atr_stop_mult']} | {row['break_even_trigger_pct']} | {row['partial_take_profit_pct']} | {row['stepped_trailing_stop_pct']} |"
         )
 
-    (OUT_DIR / "systematic_exit_search.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "systematic_exit_search.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines[:15]))
 
 

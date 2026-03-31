@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[2] / 'research' / 'strategy_lab'
+ROOT = Path(__file__).resolve().parents[2] / "research" / "strategy_lab"
 REPO_ROOT = ROOT.parents[1]
-SRC = REPO_ROOT / 'src'
+SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -24,44 +24,49 @@ def load_strategy(path: Path):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     for name in dir(mod):
-        if name.startswith('V'):
+        if name.startswith("V"):
             return getattr(mod, name)()
-    raise RuntimeError('No strategy class found')
+    raise RuntimeError("No strategy class found")
 
 
 def main():
-    version = 'v4'
-    strategy = load_strategy(ROOT / 'strategies' / 'v4_breakout_pullback.py')
+    version = "v4"
+    strategy = load_strategy(ROOT / "strategies" / "v4_breakout_pullback.py")
 
-    contract = ContractSpec(symbol='BTC/USDT', leverage=2)
+    contract = ContractSpec(symbol="BTC/USDT", leverage=2)
     account = AccountConfig(initial_capital=100.0)
     risk = RiskConfig(max_position_notional_pct=0.50, maintenance_margin_ratio=0.005)
-    engine = FuturesBacktestEngine(contract, account, risk, timeframe='1h')
-    df = engine.fetch_historical_data('2025-01-01', datetime.now().strftime('%Y-%m-%d'))
+    engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
+    df = engine.fetch_historical_data("2025-01-01", datetime.now().strftime("%Y-%m-%d"))
     signal_df = strategy.generate_signals(df)
     results = engine.simulate(signal_df)
     metrics = engine.calculate_metrics(results)
 
-    success = (abs(metrics['max_drawdown']) <= 50 and metrics['total_return'] > 17.332897885674697)
+    success = (
+        abs(metrics["max_drawdown"]) <= 50
+        and metrics["total_return"] > 17.332897885674697
+    )
 
     payload = {
-        'version': version,
-        'strategy': strategy.name,
-        'goal': {
-            'beat_v3_return': 17.332897885674697,
-            'max_drawdown_lte': 50,
-            'capital': 100,
-            'leverage': 2,
-            'start_date': '2025-01-01',
-            'timeframe': '1h',
+        "version": version,
+        "strategy": strategy.name,
+        "goal": {
+            "beat_v3_return": 17.332897885674697,
+            "max_drawdown_lte": 50,
+            "capital": 100,
+            "leverage": 2,
+            "start_date": "2025-01-01",
+            "timeframe": "1h",
         },
-        'metrics': metrics,
-        'passed': success,
-        'signal_count': int((signal_df['signal'] != 0).sum()),
+        "metrics": metrics,
+        "passed": success,
+        "signal_count": int((signal_df["signal"] != 0).sum()),
     }
 
-    (ROOT / 'reports' / 'v4_result.json').write_text(json.dumps(payload, indent=2, ensure_ascii=False))
-    (ROOT / 'reports' / 'v4_summary.md').write_text(
+    (ROOT / "reports" / "v4_result.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
+    (ROOT / "reports" / "v4_summary.md").write_text(
         f"# v4 summary\n\n"
         f"- strategy: {strategy.name}\n"
         f"- timeframe: 1h\n"
@@ -76,5 +81,5 @@ def main():
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

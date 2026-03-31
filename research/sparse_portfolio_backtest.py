@@ -36,11 +36,24 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     candidates = [
         ("flat_baseline", None),
-        ("short_overlay_switcher", build_strategy("short_overlay_switcher", {"crash_lookback": 16, "crash_threshold_pct": 0.05, "crash_adx_threshold": 24.0, "allow_bull_long": False})),
+        (
+            "short_overlay_switcher",
+            build_strategy(
+                "short_overlay_switcher",
+                {
+                    "crash_lookback": 16,
+                    "crash_threshold_pct": 0.05,
+                    "crash_adx_threshold": 24.0,
+                    "allow_bull_long": False,
+                },
+            ),
+        ),
         ("strong_bull_long", build_strategy("strong_bull_long", {})),
         ("sparse_meta_portfolio", build_strategy("sparse_meta_portfolio", {})),
     ]
@@ -54,14 +67,18 @@ def main():
             signal_df = strategy.generate_signals(df.copy())
         results = engine.simulate(signal_df)
         metrics = engine.calculate_metrics(results)
-        rows.append({
-            "strategy": name,
-            "signal_count": int((signal_df["signal"] != 0).sum()),
-            **metrics,
-        })
+        rows.append(
+            {
+                "strategy": name,
+                "signal_count": int((signal_df["signal"] != 0).sum()),
+                **metrics,
+            }
+        )
 
     payload = {"generated_at": datetime.now(UTC).isoformat(), "rows": rows}
-    (OUT_DIR / "sparse_portfolio_backtest.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "sparse_portfolio_backtest.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Sparse Portfolio Backtest",
@@ -73,7 +90,9 @@ def main():
         lines.append(
             f"| {row['strategy']} | {row['total_return']:.2f}% | {row['max_drawdown']:.2f}% | {row['win_rate']:.2f}% | {row['total_trades']} | {row['final_capital']:.2f} | {row['signal_count']} |"
         )
-    (OUT_DIR / "sparse_portfolio_backtest.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "sparse_portfolio_backtest.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines))
 
 

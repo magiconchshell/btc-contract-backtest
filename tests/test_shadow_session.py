@@ -3,7 +3,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -21,7 +27,10 @@ class StaticStrategy(BaseStrategy):
 
 class FakeExchange:
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=300):
-        return [[1735689600000, 100, 101, 99, 100, 10], [1735693200000, 100, 102, 99, 101, 12]]
+        return [
+            [1735689600000, 100, 101, 99, 100, 10],
+            [1735693200000, 100, 102, 99, 101, 12],
+        ]
 
     def fetch_ticker(self, symbol):
         return {"last": 101.0, "bid": 100.95, "ask": 101.05}

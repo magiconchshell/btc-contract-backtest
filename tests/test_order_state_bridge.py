@@ -1,5 +1,14 @@
-from btc_contract_backtest.engine.execution_models import Order, OrderSide, OrderStatus, OrderType
-from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
+from btc_contract_backtest.engine.execution_models import (
+    Order,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
+from btc_contract_backtest.runtime.order_state_bridge import (
+    apply_local_submit,
+    apply_remote_status,
+    canonical_record_from_order,
+)
 from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
 
 
@@ -14,7 +23,9 @@ def test_order_state_bridge_maps_local_and_remote_events():
         created_at="2026-01-01T00:00:00+00:00",
     )
     record = canonical_record_from_order(order, submission_mode="paper")
-    record = apply_local_submit(record, timestamp=order.created_at, payload={"signal": 1})
+    record = apply_local_submit(
+        record, timestamp=order.created_at, payload={"signal": 1}
+    )
     record = apply_remote_status(
         record,
         status=OrderStatus.PARTIALLY_FILLED.value,

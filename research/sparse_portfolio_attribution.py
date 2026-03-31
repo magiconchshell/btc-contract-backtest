@@ -36,17 +36,31 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     strategy = build_strategy("sparse_meta_portfolio")
     signal_df = strategy.generate_signals(df.copy())
     results = engine.simulate(signal_df)
     metrics = engine.calculate_metrics(results)
 
-    occupancy = signal_df["module_source"].value_counts(dropna=False).to_dict() if "module_source" in signal_df.columns else {}
-    regime_counts = signal_df["regime_state"].value_counts(dropna=False).to_dict() if "regime_state" in signal_df.columns else {}
+    occupancy = (
+        signal_df["module_source"].value_counts(dropna=False).to_dict()
+        if "module_source" in signal_df.columns
+        else {}
+    )
+    regime_counts = (
+        signal_df["regime_state"].value_counts(dropna=False).to_dict()
+        if "regime_state" in signal_df.columns
+        else {}
+    )
 
-    module_source_map = signal_df["module_source"].to_dict() if "module_source" in signal_df.columns else {}
+    module_source_map = (
+        signal_df["module_source"].to_dict()
+        if "module_source" in signal_df.columns
+        else {}
+    )
     trade_buckets = {}
     for _, trade in results["trades"].iterrows():
         src = module_source_map.get(trade["entry_time"], "flat")
@@ -61,7 +75,9 @@ def main():
         "regime_counts": regime_counts,
         "trade_buckets": trade_buckets,
     }
-    (OUT_DIR / "sparse_portfolio_attribution.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "sparse_portfolio_attribution.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Sparse Portfolio Attribution",
@@ -82,9 +98,13 @@ def main():
     lines.append("")
     lines.append("## Trade buckets")
     for k, v in trade_buckets.items():
-        lines.append(f"- {k}: trades={v['count']}, pnl_after_costs={v['pnl_after_costs']:.2f}")
+        lines.append(
+            f"- {k}: trades={v['count']}, pnl_after_costs={v['pnl_after_costs']:.2f}"
+        )
 
-    (OUT_DIR / "sparse_portfolio_attribution.md").write_text("\n".join(lines), encoding="utf-8")
+    (OUT_DIR / "sparse_portfolio_attribution.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
     print("\n".join(lines))
 
 

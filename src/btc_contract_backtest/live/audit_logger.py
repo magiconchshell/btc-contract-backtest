@@ -6,7 +6,9 @@ from typing import Any
 
 
 class AuditLogger:
-    def __init__(self, path: str = "shadow_audit.jsonl", rotate_max_bytes: int = 2_000_000):
+    def __init__(
+        self, path: str = "shadow_audit.jsonl", rotate_max_bytes: int = 2_000_000
+    ):
         self.path = Path(path)
         self.rotate_max_bytes = rotate_max_bytes
         self.path.parent.mkdir(parents=True, exist_ok=True)

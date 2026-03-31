@@ -61,7 +61,9 @@ class PilotRiskEnvelopeStore:
         return PilotRiskEnvelope(**json.loads(self.path.read_text()))
 
     def save(self, envelope: PilotRiskEnvelope):
-        self.path.write_text(json.dumps(envelope.to_dict(), indent=2, ensure_ascii=False))
+        self.path.write_text(
+            json.dumps(envelope.to_dict(), indent=2, ensure_ascii=False)
+        )
 
 
 def build_pilot_readiness(
@@ -147,8 +149,7 @@ def build_operator_preflight(
             [
                 o
                 for o in state.get("orders", [])
-                if o.get("state")
-                not in {"filled", "canceled", "rejected", "expired"}
+                if o.get("state") not in {"filled", "canceled", "rejected", "expired"}
             ]
         ),
         "governance_mode": governance.get("mode"),
@@ -163,10 +164,7 @@ def build_operator_preflight(
         hard_blocks.append("too_many_open_positions")
     if governance.get("mode") != "approval_required":
         soft_blocks.append("governance_mode_not_approval_required")
-    if (
-        envelope.require_approval
-        and governance.get("mode") == "guarded_live"
-    ):
+    if envelope.require_approval and governance.get("mode") == "guarded_live":
         soft_blocks.append("approval_bypass_mode_active")
 
     proceed = len(hard_blocks) == 0

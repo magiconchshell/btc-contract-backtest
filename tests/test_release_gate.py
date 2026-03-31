@@ -16,7 +16,12 @@ def test_release_gate_report_lists_expected_hard_steps():
         text=True,
     )
     payload = json.loads(proc.stdout)
-    assert [step["name"] for step in payload["required_steps"]] == ["pytest", "flake8", "mypy", "build"]
+    assert [step["name"] for step in payload["required_steps"]] == [
+        "pytest",
+        "flake8",
+        "mypy",
+        "build",
+    ]
     assert payload["required_steps"][0]["command"][-2:] == ["pytest", "-q"]
     assert payload["required_steps"][1]["command"][-2:] == ["flake8", "src"]
     assert payload["required_steps"][2]["command"][-2:] == ["mypy", "src"]

@@ -1,6 +1,11 @@
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -54,7 +59,9 @@ def test_backtest_applies_funding_cost():
         contract=ContractSpec(symbol="BTC/USDT", leverage=3),
         account=AccountConfig(initial_capital=1000.0),
         risk=RiskConfig(),
-        execution=ExecutionConfig(use_realistic_funding=True, allow_partial_fills=False),
+        execution=ExecutionConfig(
+            use_realistic_funding=True, allow_partial_fills=False
+        ),
         timeframe="1h",
     )
     results = engine.simulate(strategy.generate_signals(df))
@@ -71,7 +78,9 @@ def test_paper_blocks_mark_inconsistency(tmp_path, monkeypatch):
         account=AccountConfig(initial_capital=1000.0),
         risk=RiskConfig(),
         strategy=strategy,
-        execution=ExecutionConfig(enforce_mark_bid_ask_consistency=True, stale_mark_deviation_bps=5.0),
+        execution=ExecutionConfig(
+            enforce_mark_bid_ask_consistency=True, stale_mark_deviation_bps=5.0
+        ),
         timeframe="1h",
         state_file=str(tmp_path / "paper_state.json"),
         exchange=FakeExchange(),

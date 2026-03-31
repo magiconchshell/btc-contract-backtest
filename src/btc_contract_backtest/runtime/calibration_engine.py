@@ -30,7 +30,9 @@ def market_quality_score(
     return max(0.0, min(1.0, score))
 
 
-def calibrate_slippage_bps(sample: CalibrationSample, config: CalibrationConfig) -> float:
+def calibrate_slippage_bps(
+    sample: CalibrationSample, config: CalibrationConfig
+) -> float:
     if config.mode == "baseline":
         return sample.spread_bps or 0.0
     spread_component = (sample.spread_bps or 0.0) * config.slippage_spread_weight
@@ -39,7 +41,9 @@ def calibrate_slippage_bps(sample: CalibrationSample, config: CalibrationConfig)
     else:
         depth_ratio = 1.0
     depth_component = depth_ratio * 100 * config.slippage_depth_weight
-    vol_component = (0.0 if sample.volatility_bucket != "high" else 5.0) * config.slippage_volatility_weight
+    vol_component = (
+        0.0 if sample.volatility_bucket != "high" else 5.0
+    ) * config.slippage_volatility_weight
     return max(0.0, spread_component + depth_component + vol_component)
 
 
@@ -53,7 +57,9 @@ def calibrate_fill_ratio(sample: CalibrationSample, config: CalibrationConfig) -
     return max(config.fill_ratio_floor, min(config.fill_ratio_ceiling, ratio))
 
 
-def calibrate_queue_probability(sample: CalibrationSample, config: CalibrationConfig) -> float:
+def calibrate_queue_probability(
+    sample: CalibrationSample, config: CalibrationConfig
+) -> float:
     base = 0.5
     if sample.queue_model == "conservative":
         base = 0.25
@@ -61,7 +67,9 @@ def calibrate_queue_probability(sample: CalibrationSample, config: CalibrationCo
         base = 0.5
     if sample.market_quality_score is not None:
         base *= max(sample.market_quality_score, config.market_quality_min_score)
-    return max(config.queue_probability_floor, min(config.queue_probability_ceiling, base))
+    return max(
+        config.queue_probability_floor, min(config.queue_probability_ceiling, base)
+    )
 
 
 def funding_cost_from_sample(
@@ -110,7 +118,9 @@ def validate_samples(
         if sample.fill_ratio is not None:
             fill_ratio_errors.append(abs(predicted_fill_ratio - sample.fill_ratio))
 
-        predicted_funding = funding_cost_from_sample(sample, config, funding_store=funding_store)
+        predicted_funding = funding_cost_from_sample(
+            sample, config, funding_store=funding_store
+        )
         if sample.funding_cost is not None:
             funding_errors.append(abs(predicted_funding - sample.funding_cost))
 
@@ -154,7 +164,9 @@ def sample_from_execution(
     slippage_bps = None
     if executed_price is not None and reference_price > 0:
         slippage_bps = abs(executed_price - reference_price) / reference_price * 10000
-    fill_ratio = None if fill_quantity is None or quantity <= 0 else fill_quantity / quantity
+    fill_ratio = (
+        None if fill_quantity is None or quantity <= 0 else fill_quantity / quantity
+    )
     quality = market_quality_score(
         spread_bps=spread_bps,
         depth_notional=depth_notional,

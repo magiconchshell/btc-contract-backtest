@@ -133,7 +133,9 @@ class BinanceSymbolRules:
                 normalized.append(LeverageBracket(**bracket))
         self.leverage_brackets = normalized
 
-    def to_contract_spec(self, leverage: int = 5, profile: str = BINANCE_FUTURES_TESTNET.key) -> ContractSpec:
+    def to_contract_spec(
+        self, leverage: int = 5, profile: str = BINANCE_FUTURES_TESTNET.key
+    ) -> ContractSpec:
         return ContractSpec(
             symbol=self.symbol,
             market_type="perpetual",
@@ -163,7 +165,9 @@ def _parse_leverage_brackets(payload: Any) -> list[LeverageBracket]:
     for row in payload:
         if not isinstance(row, dict):
             continue
-        notional_cap = row.get("notionalCap") or row.get("notional_cap") or row.get("qtyCap")
+        notional_cap = (
+            row.get("notionalCap") or row.get("notional_cap") or row.get("qtyCap")
+        )
         initial_leverage = row.get("initialLeverage") or row.get("initial_leverage")
         if notional_cap is None or initial_leverage is None:
             continue
@@ -172,7 +176,8 @@ def _parse_leverage_brackets(payload: Any) -> list[LeverageBracket]:
                 notional_cap=_decimal_to_float(notional_cap, 0.0),
                 initial_leverage=int(initial_leverage),
                 maintenance_margin_ratio=_decimal_to_float(
-                    row.get("maintenanceMarginRatio") or row.get("maintenance_margin_ratio"),
+                    row.get("maintenanceMarginRatio")
+                    or row.get("maintenance_margin_ratio"),
                     0.0,
                 ),
             )
@@ -195,7 +200,11 @@ class BinanceExchangeMetadataSnapshot:
         if isinstance(payload.get("leverage_brackets"), list):
             payload = dict(payload)
             payload["leverage_brackets"] = [
-                bracket if isinstance(bracket, LeverageBracket) else LeverageBracket(**bracket)
+                (
+                    bracket
+                    if isinstance(bracket, LeverageBracket)
+                    else LeverageBracket(**bracket)
+                )
                 for bracket in payload["leverage_brackets"]
             ]
         return BinanceSymbolRules(**payload)
@@ -228,14 +237,18 @@ def load_binance_futures_credentials(
     env = environ or os.environ
     selected = get_binance_futures_profile(profile)
     direct_key = api_key or env.get(selected.api_key_env) or env.get("BINANCE_API_KEY")
-    direct_secret = secret or env.get(selected.secret_env) or env.get("BINANCE_API_SECRET")
+    direct_secret = (
+        secret or env.get(selected.secret_env) or env.get("BINANCE_API_SECRET")
+    )
     if api_key or secret:
         source = "arguments"
     elif direct_key or direct_secret:
         source = "environment"
     else:
         source = "none"
-    return BinanceFuturesCredentials(api_key=direct_key, secret=direct_secret, source=source)
+    return BinanceFuturesCredentials(
+        api_key=direct_key, secret=direct_secret, source=source
+    )
 
 
 def is_binance_mainnet_enabled(
@@ -260,7 +273,9 @@ def require_binance_profile_enabled(
     allow_mainnet: bool = False,
     environ: Optional[Mapping[str, str]] = None,
 ) -> None:
-    if is_binance_mainnet_enabled(profile, allow_mainnet=allow_mainnet, environ=environ):
+    if is_binance_mainnet_enabled(
+        profile, allow_mainnet=allow_mainnet, environ=environ
+    ):
         return
     selected = get_binance_futures_profile(profile)
     raise PermissionError(
@@ -307,8 +322,12 @@ def create_binance_futures_exchange(
     environ: Optional[Mapping[str, str]] = None,
 ) -> Any:
     selected = get_binance_futures_profile(profile)
-    require_binance_profile_enabled(profile, allow_mainnet=allow_mainnet, environ=environ)
-    credentials = load_binance_futures_credentials(profile, api_key=api_key, secret=secret, environ=environ)
+    require_binance_profile_enabled(
+        profile, allow_mainnet=allow_mainnet, environ=environ
+    )
+    credentials = load_binance_futures_credentials(
+        profile, api_key=api_key, secret=secret, environ=environ
+    )
     import ccxt
 
     exchange = ccxt.binance(
@@ -349,8 +368,14 @@ class BinanceFuturesMetadataSync:
         with urlopen(self._exchange_info_url(), timeout=15) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    def _parse_symbol(self, row: dict[str, Any], fetched_at: str) -> Optional[BinanceSymbolRules]:
-        if str(row.get("contractType", "")).upper() not in {"PERPETUAL", "CURRENT_QUARTER", "NEXT_QUARTER"}:
+    def _parse_symbol(
+        self, row: dict[str, Any], fetched_at: str
+    ) -> Optional[BinanceSymbolRules]:
+        if str(row.get("contractType", "")).upper() not in {
+            "PERPETUAL",
+            "CURRENT_QUARTER",
+            "NEXT_QUARTER",
+        }:
             return None
         filters = {item.get("filterType"): item for item in row.get("filters", [])}
         price_filter = filters.get("PRICE_FILTER", {})
@@ -360,11 +385,15 @@ class BinanceFuturesMetadataSync:
 
         base = row.get("baseAsset") or ""
         quote = row.get("quoteAsset") or ""
-        normalized_symbol = f"{base}/{quote}" if base and quote else str(row.get("symbol") or "")
+        normalized_symbol = (
+            f"{base}/{quote}" if base and quote else str(row.get("symbol") or "")
+        )
 
         return BinanceSymbolRules(
             symbol=normalized_symbol,
-            exchange_symbol=str(row.get("symbol") or normalized_symbol.replace("/", "")),
+            exchange_symbol=str(
+                row.get("symbol") or normalized_symbol.replace("/", "")
+            ),
             status=str(row.get("status") or "UNKNOWN"),
             contract_type=str(row.get("contractType") or "PERPETUAL"),
             tick_size=_decimal_to_float(price_filter.get("tickSize"), 0.0),
@@ -387,11 +416,15 @@ class BinanceFuturesMetadataSync:
             metadata_source=self.profile.key,
             metadata_as_of=fetched_at,
             leverage_brackets=_parse_leverage_brackets(
-                row.get("leverageBrackets") or row.get("brackets") or row.get("leverage_bracket")
+                row.get("leverageBrackets")
+                or row.get("brackets")
+                or row.get("leverage_bracket")
             ),
         )
 
-    def build_snapshot(self, exchange_info: dict[str, Any]) -> BinanceExchangeMetadataSnapshot:
+    def build_snapshot(
+        self, exchange_info: dict[str, Any]
+    ) -> BinanceExchangeMetadataSnapshot:
         fetched_at = datetime.now(timezone.utc).isoformat()
         symbols = {}
         for row in exchange_info.get("symbols", []):
@@ -410,7 +443,9 @@ class BinanceFuturesMetadataSync:
         )
 
     def save_snapshot(self, snapshot: BinanceExchangeMetadataSnapshot) -> Path:
-        self.cache_path.write_text(json.dumps(snapshot.to_dict(), indent=2, ensure_ascii=False))
+        self.cache_path.write_text(
+            json.dumps(snapshot.to_dict(), indent=2, ensure_ascii=False)
+        )
         return self.cache_path
 
     def load_snapshot(self) -> Optional[BinanceExchangeMetadataSnapshot]:
@@ -419,7 +454,9 @@ class BinanceFuturesMetadataSync:
         payload = json.loads(self.cache_path.read_text())
         return BinanceExchangeMetadataSnapshot(**payload)
 
-    def snapshot_is_stale(self, snapshot: Optional[BinanceExchangeMetadataSnapshot]) -> bool:
+    def snapshot_is_stale(
+        self, snapshot: Optional[BinanceExchangeMetadataSnapshot]
+    ) -> bool:
         if snapshot is None:
             return True
         try:
@@ -445,7 +482,9 @@ class BinanceFuturesMetadataSync:
             if refresh_on_miss:
                 snapshot = self.sync()
             else:
-                raise KeyError(f"No Binance metadata snapshot available for profile: {self.profile.key}")
+                raise KeyError(
+                    f"No Binance metadata snapshot available for profile: {self.profile.key}"
+                )
         elif allow_stale and self.snapshot_is_stale(snapshot):
             snapshot = self.sync()
         if symbol in snapshot.symbols:
@@ -453,7 +492,10 @@ class BinanceFuturesMetadataSync:
         target = normalize_binance_symbol(symbol)
         for candidate, payload in snapshot.symbols.items():
             candidate_exchange_symbol = str(payload.get("exchange_symbol") or "")
-            if normalize_binance_symbol(candidate) == target or candidate_exchange_symbol == target:
+            if (
+                normalize_binance_symbol(candidate) == target
+                or candidate_exchange_symbol == target
+            ):
                 return BinanceSymbolRules(**payload)
         if allow_stale and refresh_on_miss:
             snapshot = self.sync()
@@ -461,12 +503,17 @@ class BinanceFuturesMetadataSync:
                 return snapshot.get_symbol_rules(symbol)
             for candidate, payload in snapshot.symbols.items():
                 candidate_exchange_symbol = str(payload.get("exchange_symbol") or "")
-                if normalize_binance_symbol(candidate) == target or candidate_exchange_symbol == target:
+                if (
+                    normalize_binance_symbol(candidate) == target
+                    or candidate_exchange_symbol == target
+                ):
                     return BinanceSymbolRules(**payload)
         raise KeyError(f"Symbol not found in Binance metadata snapshot: {symbol}")
 
 
-def with_binance_symbol_rules(contract: ContractSpec, rules: BinanceSymbolRules) -> ContractSpec:
+def with_binance_symbol_rules(
+    contract: ContractSpec, rules: BinanceSymbolRules
+) -> ContractSpec:
     return ContractSpec(
         symbol=rules.symbol,
         market_type=contract.market_type,
@@ -485,5 +532,6 @@ def with_binance_symbol_rules(contract: ContractSpec, rules: BinanceSymbolRules)
         position_mode=contract.position_mode,
         metadata_source=rules.metadata_source,
         metadata_as_of=rules.metadata_as_of,
-        leverage_brackets=list(rules.leverage_brackets) or list(contract.leverage_brackets),
+        leverage_brackets=list(rules.leverage_brackets)
+        or list(contract.leverage_brackets),
     )

@@ -56,7 +56,9 @@ def test_drawdown_scale_reduces_future_position_size():
         execution=ExecutionConfig(allow_partial_fills=False),
         timeframe="1h",
     )
-    df = make_df([100, 100, 97, 97, 97, 100], [1, 1, 1, 1, -1, -1], atr_values=[1.0] * 6)
+    df = make_df(
+        [100, 100, 97, 97, 97, 100], [1, 1, 1, 1, -1, -1], atr_values=[1.0] * 6
+    )
     results = engine.simulate(df)
     assert len(results["trades"]) >= 2
     first_full = results["trades"].iloc[0]["notional_closed"]

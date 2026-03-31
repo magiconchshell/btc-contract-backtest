@@ -69,8 +69,12 @@ class RegimeAsymmetricStrategy(BaseStrategy):
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df["ema_fast_trend"] = df["close"].ewm(span=self.fast_trend_window, adjust=False).mean()
-        df["ema_slow_trend"] = df["close"].ewm(span=self.slow_trend_window, adjust=False).mean()
+        df["ema_fast_trend"] = (
+            df["close"].ewm(span=self.fast_trend_window, adjust=False).mean()
+        )
+        df["ema_slow_trend"] = (
+            df["close"].ewm(span=self.slow_trend_window, adjust=False).mean()
+        )
         df["trend_up"] = df["ema_fast_trend"] > df["ema_slow_trend"]
         df["trend_down"] = df["ema_fast_trend"] < df["ema_slow_trend"]
 

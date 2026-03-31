@@ -66,6 +66,9 @@ class SparseMetaPortfolioStrategy(BaseStrategy):
         df.loc[bull_mask, "module_source"] = "strong_bull_long"
 
         if self.neutral_mode != "flat":
-            df.loc[(df["module_source"] == "flat") & (self.neutral_mode == "bull_bias"), "signal"] = 0
+            df.loc[
+                (df["module_source"] == "flat") & (self.neutral_mode == "bull_bias"),
+                "signal",
+            ] = 0
 
         return df

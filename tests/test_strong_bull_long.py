@@ -9,7 +9,9 @@ def sample_df():
     lows = [c - 1.0 for c in closes]
     opens = [c - 0.1 for c in closes]
     vols = [12 + (i % 5) for i in range(420)]
-    return pd.DataFrame({"open": opens, "high": highs, "low": lows, "close": closes, "volume": vols})
+    return pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": vols}
+    )
 
 
 def test_strong_bull_long_has_signal_column():

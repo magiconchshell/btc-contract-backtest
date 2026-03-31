@@ -2,7 +2,9 @@ from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateSt
 
 
 def test_engine_state_store_canonical_api_roundtrip(tmp_path):
-    store = JsonRuntimeStateStore(str(tmp_path / "state.json"), mode="paper", symbol="BTC/USDT", leverage=3)
+    store = JsonRuntimeStateStore(
+        str(tmp_path / "state.json"), mode="paper", symbol="BTC/USDT", leverage=3
+    )
 
     store.set_mode("paper")
     store.set_capital(1000.0)

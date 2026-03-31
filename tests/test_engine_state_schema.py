@@ -27,9 +27,15 @@ def test_normalize_legacy_state_maps_old_fields_into_schema():
 
 def test_runtime_state_store_normalizes_existing_legacy_file(tmp_path):
     path = tmp_path / "legacy_state.json"
-    path.write_text(json.dumps({"capital": 900.0, "last_payload": {"event": "hold"}, "halted": False}))
+    path.write_text(
+        json.dumps(
+            {"capital": 900.0, "last_payload": {"event": "hold"}, "halted": False}
+        )
+    )
 
-    store = JsonRuntimeStateStore(str(path), mode="paper", symbol="BTC/USDT", leverage=5)
+    store = JsonRuntimeStateStore(
+        str(path), mode="paper", symbol="BTC/USDT", leverage=5
+    )
     state = store.load_normalized_state()
 
     assert state["mode"] == "paper"

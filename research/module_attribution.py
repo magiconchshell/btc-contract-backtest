@@ -26,7 +26,11 @@ def summarize_trades(signal_df, trades_df):
             "flat": {"count": 0, "pnl_after_costs": 0.0},
         }
 
-    source_map = signal_df["module_source"].to_dict() if "module_source" in signal_df.columns else {}
+    source_map = (
+        signal_df["module_source"].to_dict()
+        if "module_source" in signal_df.columns
+        else {}
+    )
     rows = {"all_trades": [], "long_module": [], "short_module": [], "flat": []}
     for _, trade in trades_df.iterrows():
         entry_time = trade["entry_time"]
@@ -60,14 +64,20 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     strategy = build_strategy("regime_switcher")
     signal_df = strategy.generate_signals(df.copy())
     results = engine.simulate(signal_df)
     metrics = engine.calculate_metrics(results)
     attribution = summarize_trades(signal_df, results["trades"])
-    regime_counts = signal_df["regime_state"].value_counts(dropna=False).to_dict() if "regime_state" in signal_df.columns else {}
+    regime_counts = (
+        signal_df["regime_state"].value_counts(dropna=False).to_dict()
+        if "regime_state" in signal_df.columns
+        else {}
+    )
 
     payload = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -75,7 +85,9 @@ def main():
         "regime_counts": regime_counts,
         "attribution": attribution,
     }
-    (OUT_DIR / "module_attribution.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "module_attribution.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
 
     lines = [
         "# Module Attribution",
@@ -92,7 +104,9 @@ def main():
     lines.append("")
     lines.append("## Module contribution")
     for key, val in attribution.items():
-        lines.append(f"- {key}: trades={val['count']}, pnl_after_costs={val['pnl_after_costs']:.2f}")
+        lines.append(
+            f"- {key}: trades={val['count']}, pnl_after_costs={val['pnl_after_costs']:.2f}"
+        )
 
     (OUT_DIR / "module_attribution.md").write_text("\n".join(lines), encoding="utf-8")
     print("\n".join(lines))

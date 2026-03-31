@@ -27,11 +27,17 @@ def build_review(rows: list[dict[str, Any]], summary: dict[str, Any]) -> dict[st
     }
 
     if summary["reconcile_mismatches"] > 0:
-        review["operator_flags"].append("Investigate reconcile mismatches before enabling tighter automation")
+        review["operator_flags"].append(
+            "Investigate reconcile mismatches before enabling tighter automation"
+        )
     if summary["unsafe_market_blocks"] > 0:
-        review["operator_flags"].append("Review unsafe market blocks and stale/mark consistency thresholds")
+        review["operator_flags"].append(
+            "Review unsafe market blocks and stale/mark consistency thresholds"
+        )
     if summary["decision_count"] == 0:
-        review["operator_flags"].append("No shadow decisions recorded; verify strategy activity and data freshness")
+        review["operator_flags"].append(
+            "No shadow decisions recorded; verify strategy activity and data freshness"
+        )
 
     return review
 
@@ -42,7 +48,9 @@ def write_review(
 ) -> tuple[Path, Path]:
     out_json = audit_path.with_suffix(".review.json")
     out_md = audit_path.with_suffix(".review.md")
-    out_json.write_text(json.dumps(review, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_json.write_text(
+        json.dumps(review, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     lines = [
         "# Shadow Review Report",
@@ -72,7 +80,13 @@ def main():
     summary = summarize(rows)
     review = build_review(rows, summary)
     md, js = write_review(audit_path, review)
-    print(json.dumps({"review_markdown": str(md), "review_json": str(js)}, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"review_markdown": str(md), "review_json": str(js)},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -8,7 +8,15 @@ def sample_df():
     highs = [c + 0.8 for c in closes]
     lows = [c - 0.8 for c in closes]
     opens = [c - 0.2 for c in closes]
-    return pd.DataFrame({"open": opens, "high": highs, "low": lows, "close": closes, "volume": [10] * len(closes)})
+    return pd.DataFrame(
+        {
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": [10] * len(closes),
+        }
+    )
 
 
 def test_regime_filtered_has_signal_column():

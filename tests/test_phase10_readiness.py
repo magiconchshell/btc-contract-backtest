@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
 from btc_contract_backtest.live.submit_policy import PostSubmitPolicy
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_post_submit_policy_decisions():
@@ -13,14 +13,24 @@ def test_post_submit_policy_decisions():
 
 
 def test_live_readiness_check(tmp_path):
-    import subprocess, sys
+    import subprocess
+    import sys
 
     gov = Path(tmp_path) / "gov.json"
-    gov.write_text(json.dumps({"mode": "guarded_live", "emergency_stop": False, "maintenance": False}))
+    gov.write_text(
+        json.dumps(
+            {"mode": "guarded_live", "emergency_stop": False, "maintenance": False}
+        )
+    )
     audit = Path(tmp_path) / "audit.jsonl"
-    audit.write_text(json.dumps({"event_type": "shadow_decision", "reconcile": {"differences": []}}) + "\n")
+    audit.write_text(
+        json.dumps({"event_type": "shadow_decision", "reconcile": {"differences": []}})
+        + "\n"
+    )
     approvals = Path(tmp_path) / "approvals.json"
-    approvals.write_text(json.dumps({"requests": [], "approved_ids": [], "rejected_ids": []}))
+    approvals.write_text(
+        json.dumps({"requests": [], "approved_ids": [], "rejected_ids": []})
+    )
 
     proc = subprocess.run(
         [

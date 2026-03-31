@@ -1,6 +1,8 @@
 import pandas as pd
 
-from btc_contract_backtest.strategies.sparse_portfolio import SparseMetaPortfolioStrategy
+from btc_contract_backtest.strategies.sparse_portfolio import (
+    SparseMetaPortfolioStrategy,
+)
 
 
 def sample_df():
@@ -9,7 +11,9 @@ def sample_df():
     lows = [c - 1.0 for c in closes]
     opens = [c - 0.1 for c in closes]
     vols = [10 + (i % 7) for i in range(420)]
-    return pd.DataFrame({"open": opens, "high": highs, "low": lows, "close": closes, "volume": vols})
+    return pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes, "volume": vols}
+    )
 
 
 def test_sparse_portfolio_has_signal_column():

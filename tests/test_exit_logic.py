@@ -43,7 +43,9 @@ def test_stop_loss_exit_reason():
 
 
 def test_take_profit_exit_reason():
-    engine = make_engine(RiskConfig(max_position_notional_pct=0.5, take_profit_pct=0.03))
+    engine = make_engine(
+        RiskConfig(max_position_notional_pct=0.5, take_profit_pct=0.03)
+    )
     df = make_df([100, 100, 104], [1, 1, 1])
     results = engine.simulate(df)
     assert not results["trades"].empty
@@ -51,7 +53,9 @@ def test_take_profit_exit_reason():
 
 
 def test_trailing_stop_exit_reason():
-    engine = make_engine(RiskConfig(max_position_notional_pct=0.5, trailing_stop_pct=0.02))
+    engine = make_engine(
+        RiskConfig(max_position_notional_pct=0.5, trailing_stop_pct=0.02)
+    )
     df = make_df([100, 103, 100.5], [1, 1, 1])
     results = engine.simulate(df)
     assert not results["trades"].empty
@@ -75,7 +79,14 @@ def test_atr_stop_exit_reason():
 
 
 def test_partial_take_profit_event_present():
-    engine = make_engine(RiskConfig(max_position_notional_pct=0.5, partial_take_profit_pct=0.02, partial_close_ratio=0.5, take_profit_pct=0.04))
+    engine = make_engine(
+        RiskConfig(
+            max_position_notional_pct=0.5,
+            partial_take_profit_pct=0.02,
+            partial_close_ratio=0.5,
+            take_profit_pct=0.04,
+        )
+    )
     df = make_df([100, 102, 104], [1, 1, 1], atr_values=[1.0, 1.0, 1.0])
     results = engine.simulate(df)
     assert len(results["trades"]) >= 1
@@ -83,7 +94,9 @@ def test_partial_take_profit_event_present():
 
 
 def test_break_even_stop_exit_reason():
-    engine = make_engine(RiskConfig(max_position_notional_pct=0.5, break_even_trigger_pct=0.02))
+    engine = make_engine(
+        RiskConfig(max_position_notional_pct=0.5, break_even_trigger_pct=0.02)
+    )
     df = make_df([100, 103, 100], [1, 1, 1], atr_values=[1.0, 1.0, 1.0])
     results = engine.simulate(df)
     assert not results["trades"].empty
@@ -91,7 +104,9 @@ def test_break_even_stop_exit_reason():
 
 
 def test_stepped_trailing_stop_exit_reason():
-    engine = make_engine(RiskConfig(max_position_notional_pct=0.5, stepped_trailing_stop_pct=0.02))
+    engine = make_engine(
+        RiskConfig(max_position_notional_pct=0.5, stepped_trailing_stop_pct=0.02)
+    )
     df = make_df([100, 104, 101.5], [1, 1, 1], atr_values=[1.0, 1.0, 1.0])
     results = engine.simulate(df)
     assert not results["trades"].empty

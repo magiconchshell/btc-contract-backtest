@@ -21,9 +21,19 @@ class GateStep:
 
 
 HARD_GATE_STEPS: tuple[GateStep, ...] = (
-    GateStep(name="pytest", command=(sys.executable, "-m", "pytest", "-q"), scope="repo"),
-    GateStep(name="flake8", command=(sys.executable, "-m", "flake8", "src"), scope="production-code"),
-    GateStep(name="mypy", command=(sys.executable, "-m", "mypy", "src"), scope="production-code"),
+    GateStep(
+        name="pytest", command=(sys.executable, "-m", "pytest", "-q"), scope="repo"
+    ),
+    GateStep(
+        name="flake8",
+        command=(sys.executable, "-m", "flake8", "src"),
+        scope="production-code",
+    ),
+    GateStep(
+        name="mypy",
+        command=(sys.executable, "-m", "mypy", "src"),
+        scope="production-code",
+    ),
     GateStep(name="build", command=(sys.executable, "-m", "build"), scope="packaging"),
 )
 
@@ -69,10 +79,18 @@ def run_step(step: GateStep) -> None:
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run or inspect the repo hard release gate.")
-    parser.add_argument("--report", action="store_true", help="Print the gate definition without running commands.")
+    parser = argparse.ArgumentParser(
+        description="Run or inspect the repo hard release gate."
+    )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Print the gate definition without running commands.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON for --report.")
-    parser.add_argument("--run", action="store_true", help="Run the hard gate commands.")
+    parser.add_argument(
+        "--run", action="store_true", help="Run the hard gate commands."
+    )
     parser.add_argument(
         "--check-clean",
         action="store_true",
@@ -101,13 +119,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"python: {report['python']}")
             print(f"working tree clean: {report['working_tree_clean']}")
             for step in report["required_steps"]:
-                print(f"- {step['name']}: {' '.join(step['command'])} [{step['scope']}]")
+                print(
+                    f"- {step['name']}: {' '.join(step['command'])} [{step['scope']}]"
+                )
 
     if not args.run:
         return 0 if report["ready"] else 1
 
     if args.check_clean and not report["working_tree_clean"] and not args.allow_dirty:
-        print("[release-gate] working tree is dirty; commit/stash changes or pass --allow-dirty", file=sys.stderr)
+        print(
+            "[release-gate] working tree is dirty; commit/stash changes or pass --allow-dirty",
+            file=sys.stderr,
+        )
         return 1
 
     for step in HARD_GATE_STEPS:

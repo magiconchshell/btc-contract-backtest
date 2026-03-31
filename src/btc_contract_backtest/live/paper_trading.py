@@ -16,7 +16,10 @@ from btc_contract_backtest.config.models import (
     RiskConfig,
 )
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
-from btc_contract_backtest.live.binance_futures import create_binance_futures_exchange, require_binance_profile_enabled
+from btc_contract_backtest.live.binance_futures import (
+    create_binance_futures_exchange,
+    require_binance_profile_enabled,
+)
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
@@ -45,7 +48,9 @@ class PaperTradingSession(TradingRuntime):
         allow_mainnet: bool = False,
         exchange: Optional[Any] = None,
     ):
-        require_binance_profile_enabled(contract.exchange_profile, allow_mainnet=allow_mainnet)
+        require_binance_profile_enabled(
+            contract.exchange_profile, allow_mainnet=allow_mainnet
+        )
         super().__init__(
             contract,
             account,
@@ -96,7 +101,9 @@ class PaperTradingSession(TradingRuntime):
         }
 
     def _restore_core_from_state(self):
-        self.core.capital = self.state.get("capital", self.context.account.initial_capital)
+        self.core.capital = self.state.get(
+            "capital", self.context.account.initial_capital
+        )
         if self.core.capital is None:
             self.core.capital = self.context.account.initial_capital
         pos = self.state.get("position")
@@ -158,33 +165,41 @@ class PaperTradingSession(TradingRuntime):
         if hasattr(store, "set_mode"):
             store.set_mode("paper")
             store.set_capital(self.core.capital)
-            store.set_position({
-                "symbol": self.core.position.symbol,
-                "side": self.core.position.side,
-                "quantity": self.core.position.quantity,
-                "entry_price": self.core.position.entry_price,
-                "entry_time": self.core.position.entry_time,
-                "notional": self.core.position.notional,
-                "leverage": self.core.position.leverage,
-                "margin_used": self.core.position.margin_used,
-                "bars_held": self.core.position.bars_held,
-                "peak_price": self.core.position.peak_price,
-                "trough_price": self.core.position.trough_price,
-                "atr_at_entry": self.core.position.atr_at_entry,
-                "break_even_armed": self.core.position.break_even_armed,
-                "partial_taken": self.core.position.partial_taken,
-                "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
-            } if self.core.position.side != 0 else None)
+            store.set_position(
+                {
+                    "symbol": self.core.position.symbol,
+                    "side": self.core.position.side,
+                    "quantity": self.core.position.quantity,
+                    "entry_price": self.core.position.entry_price,
+                    "entry_time": self.core.position.entry_time,
+                    "notional": self.core.position.notional,
+                    "leverage": self.core.position.leverage,
+                    "margin_used": self.core.position.margin_used,
+                    "bars_held": self.core.position.bars_held,
+                    "peak_price": self.core.position.peak_price,
+                    "trough_price": self.core.position.trough_price,
+                    "atr_at_entry": self.core.position.atr_at_entry,
+                    "break_even_armed": self.core.position.break_even_armed,
+                    "partial_taken": self.core.position.partial_taken,
+                    "stepped_stop_anchor": self.core.position.stepped_stop_anchor,
+                }
+                if self.core.position.side != 0
+                else None
+            )
             store.set_orders([vars(o) for o in self.core.orders.values()])
             store.set_trades(self.core.trades)
             store.set_governance_state({})
-            store.set_last_runtime_snapshot(store.get_state().get("last_runtime_snapshot", {}))
-            store.set_watchdog({
-                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-                "consecutive_failures": self.watchdog.state.consecutive_failures,
-                "halted": self.watchdog.state.halted,
-                "halt_reason": self.watchdog.state.halt_reason,
-            })
+            store.set_last_runtime_snapshot(
+                store.get_state().get("last_runtime_snapshot", {})
+            )
+            store.set_watchdog(
+                {
+                    "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                    "consecutive_failures": self.watchdog.state.consecutive_failures,
+                    "halted": self.watchdog.state.halted,
+                    "halt_reason": self.watchdog.state.halt_reason,
+                }
+            )
             store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
             store.flush()
             return
@@ -196,7 +211,9 @@ class PaperTradingSession(TradingRuntime):
             timeframe=self.context.timeframe,
             limit=limit,
         )
-        df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
         return df
@@ -209,7 +226,9 @@ class PaperTradingSession(TradingRuntime):
         snapshot = super().enrich_snapshot(signal_df, latest)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         bar_ms = int(signal_df.index[-1].timestamp() * 1000)
-        snapshot.stale = (now_ms - bar_ms) > (self.context.risk.stale_data_threshold_seconds * 1000)
+        snapshot.stale = (now_ms - bar_ms) > (
+            self.context.risk.stale_data_threshold_seconds * 1000
+        )
         return snapshot
 
     def on_blocked_snapshot(self, payload: dict):
@@ -317,10 +336,7 @@ class PaperTradingSession(TradingRuntime):
     def summary(self):
         current = self.mark_price()
         unrealized = 0.0
-        if (
-            self.core.position.side != 0
-            and self.core.position.entry_price is not None
-        ):
+        if self.core.position.side != 0 and self.core.position.entry_price is not None:
             unrealized = (
                 (
                     (current - self.core.position.entry_price)

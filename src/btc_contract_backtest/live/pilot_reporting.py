@@ -47,19 +47,32 @@ def run_post_submit_closed_loop(
     actions = []
 
     if alerts_path.exists():
-        alert_rows = [json.loads(line) for line in alerts_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        alert_rows = [
+            json.loads(line)
+            for line in alerts_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
     else:
         alert_rows = []
 
     for order in open_orders:
         if order.get("state") == "new":
-            actions.append({"order_id": order.get("order_id"), "action": "monitor_ack_timeout"})
+            actions.append(
+                {"order_id": order.get("order_id"), "action": "monitor_ack_timeout"}
+            )
         if order.get("state") == "partial":
-            actions.append({"order_id": order.get("order_id"), "action": "monitor_partial_fill_linger"})
+            actions.append(
+                {
+                    "order_id": order.get("order_id"),
+                    "action": "monitor_partial_fill_linger",
+                }
+            )
 
     for alert in alert_rows:
         if alert.get("severity") == "critical":
-            actions.append({"action": "operator_escalation", "reason": alert.get("alert_type")})
+            actions.append(
+                {"action": "operator_escalation", "reason": alert.get("alert_type")}
+            )
 
     if any(a.get("action") == "operator_escalation" for a in actions):
         incident_store.append(
@@ -78,7 +91,9 @@ def run_post_submit_closed_loop(
         )
 
     state["post_submit_actions"] = actions
-    JsonRuntimeStateStore(state_file, mode="governed_live").set_state_fields(post_submit_actions=actions)
+    JsonRuntimeStateStore(state_file, mode="governed_live").set_state_fields(
+        post_submit_actions=actions
+    )
     JsonRuntimeStateStore(state_file, mode="governed_live").flush()
     return {"open_order_count": len(open_orders), "actions": actions}
 
@@ -102,7 +117,11 @@ def build_pilot_dossier(
     alerts = []
     alerts_path = Path(alerts_file)
     if alerts_path.exists():
-        alerts = [json.loads(line) for line in alerts_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        alerts = [
+            json.loads(line)
+            for line in alerts_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
     incidents = IncidentStore(incidents_file).load().get("incidents", [])
     calibration_samples = CalibrationSampleStore(calibration_samples_path).load()
     funding_rows = FundingSnapshotStore(funding_snapshots_path).load()
@@ -119,7 +138,9 @@ def build_pilot_dossier(
         "funding_snapshot_count": len(funding_rows),
     }
     audit_path = out_dir / "audit.json"
-    audit_path.write_text(json.dumps(audit, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    audit_path.write_text(
+        json.dumps(audit, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
 
     md = [
         "# Pilot Dossier",

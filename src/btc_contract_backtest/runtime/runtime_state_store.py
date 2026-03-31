@@ -7,7 +7,10 @@ from typing import Optional, Any
 
 from btc_contract_backtest.runtime.engine_state_api import EngineStateStoreAPI
 from btc_contract_backtest.runtime.engine_state_schema import normalize_legacy_state
-from btc_contract_backtest.runtime.runtime_persistence import RuntimePersistence, RuntimeStepRecord
+from btc_contract_backtest.runtime.runtime_persistence import (
+    RuntimePersistence,
+    RuntimeStepRecord,
+)
 
 
 class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
@@ -24,7 +27,9 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
         self.mode = mode
         self.symbol = symbol
         self.leverage = leverage
-        self.state = normalize_legacy_state(self._load(), mode=mode, symbol=symbol, leverage=leverage)
+        self.state = normalize_legacy_state(
+            self._load(), mode=mode, symbol=symbol, leverage=leverage
+        )
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
@@ -41,7 +46,9 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
         return value
 
     def save(self):
-        self.path.write_text(json.dumps(self.state, indent=2, ensure_ascii=False, default=str))
+        self.path.write_text(
+            json.dumps(self.state, indent=2, ensure_ascii=False, default=str)
+        )
 
     def set_state_fields(self, **fields: Any) -> None:
         for key, value in fields.items():

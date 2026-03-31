@@ -36,12 +36,31 @@ def main():
     engine = FuturesBacktestEngine(contract, account, risk, timeframe="1h")
     end_dt = datetime.now(UTC).replace(tzinfo=None)
     start_dt = end_dt - timedelta(days=365)
-    df = engine.fetch_historical_data(start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d"))
+    df = engine.fetch_historical_data(
+        start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+    )
 
     candidates = [
         ("flat_baseline", None),
-        ("extreme_downtrend_short", build_strategy("extreme_downtrend_short", {"breakdown_lookback": 12, "adx_threshold": 20.0})),
-        ("short_overlay_switcher", build_strategy("short_overlay_switcher", {"crash_lookback": 16, "crash_threshold_pct": 0.05, "crash_adx_threshold": 24.0, "allow_bull_long": False})),
+        (
+            "extreme_downtrend_short",
+            build_strategy(
+                "extreme_downtrend_short",
+                {"breakdown_lookback": 12, "adx_threshold": 20.0},
+            ),
+        ),
+        (
+            "short_overlay_switcher",
+            build_strategy(
+                "short_overlay_switcher",
+                {
+                    "crash_lookback": 16,
+                    "crash_threshold_pct": 0.05,
+                    "crash_adx_threshold": 24.0,
+                    "allow_bull_long": False,
+                },
+            ),
+        ),
     ]
 
     rows = []
@@ -54,14 +73,18 @@ def main():
             signal_df = strategy.generate_signals(df.copy())
             results = engine.simulate(signal_df)
         metrics = engine.calculate_metrics(results)
-        rows.append({
-            "strategy": name,
-            "signal_count": int((signal_df["signal"] != 0).sum()),
-            **metrics,
-        })
+        rows.append(
+            {
+                "strategy": name,
+                "signal_count": int((signal_df["signal"] != 0).sum()),
+                **metrics,
+            }
+        )
 
     payload = {"generated_at": datetime.now(UTC).isoformat(), "rows": rows}
-    (OUT_DIR / "overlay_vs_flat.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT_DIR / "overlay_vs_flat.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False)
+    )
     lines = [
         "# Overlay vs Flat Baseline",
         "",

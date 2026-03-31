@@ -18,15 +18,34 @@ def test_pilot_readiness_reports_warnings_and_score(tmp_path):
     sample_file = tmp_path / "samples.jsonl"
     funding_file = tmp_path / "funding.jsonl"
 
-    JsonRuntimeStateStore(str(state_file), mode="governed_live", symbol="BTC/USDT", leverage=3).flush()
+    JsonRuntimeStateStore(
+        str(state_file), mode="governed_live", symbol="BTC/USDT", leverage=3
+    ).flush()
     GovernanceState(str(gov_file)).set_mode(TradingMode.APPROVAL_REQUIRED)
-    CalibrationSampleStore(str(sample_file)).append(sample_from_execution(
-        timestamp="2026-01-01T00:00:00+00:00", symbol="BTC/USDT", mode="governed_live", side="buy", order_type="market",
-        quantity=1.0, notional=100.0, reference_price=100.0, executed_price=100.2, fill_quantity=1.0,
-        spread_bps=2.0, depth_notional=10000.0, queue_model="probabilistic", funding_rate=0.0001,
-        funding_cost=0.01, volatility_bucket="normal", latency_ms=100,
-    ))
-    FundingSnapshotStore(str(funding_file)).append({"timestamp": "2026-01-01T00:00:00+00:00", "funding_rate": 0.0001})
+    CalibrationSampleStore(str(sample_file)).append(
+        sample_from_execution(
+            timestamp="2026-01-01T00:00:00+00:00",
+            symbol="BTC/USDT",
+            mode="governed_live",
+            side="buy",
+            order_type="market",
+            quantity=1.0,
+            notional=100.0,
+            reference_price=100.0,
+            executed_price=100.2,
+            fill_quantity=1.0,
+            spread_bps=2.0,
+            depth_notional=10000.0,
+            queue_model="probabilistic",
+            funding_rate=0.0001,
+            funding_cost=0.01,
+            volatility_bucket="normal",
+            latency_ms=100,
+        )
+    )
+    FundingSnapshotStore(str(funding_file)).append(
+        {"timestamp": "2026-01-01T00:00:00+00:00", "funding_rate": 0.0001}
+    )
 
     report = build_pilot_readiness(
         state_file=str(state_file),
@@ -44,9 +63,13 @@ def test_operator_preflight_blocks_when_readiness_below_threshold(tmp_path):
     gov_file = tmp_path / "gov.json"
     envelope_file = tmp_path / "envelope.json"
 
-    JsonRuntimeStateStore(str(state_file), mode="governed_live", symbol="BTC/USDT", leverage=3).flush()
+    JsonRuntimeStateStore(
+        str(state_file), mode="governed_live", symbol="BTC/USDT", leverage=3
+    ).flush()
     GovernanceState(str(gov_file)).set_mode(TradingMode.APPROVAL_REQUIRED)
-    PilotRiskEnvelopeStore(str(envelope_file)).save(PilotRiskEnvelope(min_readiness_score=0.95))
+    PilotRiskEnvelopeStore(str(envelope_file)).save(
+        PilotRiskEnvelope(min_readiness_score=0.95)
+    )
 
     readiness = build_pilot_readiness(
         state_file=str(state_file),

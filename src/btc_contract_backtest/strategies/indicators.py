@@ -37,8 +37,12 @@ class SMACrossStrategy(BaseStrategy):
         df["sma_short"] = df["close"].rolling(self.short_window).mean()
         df["sma_long"] = df["close"].rolling(self.long_window).mean()
         df["signal"] = 0
-        bullish = (df["sma_short"] > df["sma_long"]) & (df["sma_short"].shift(1) <= df["sma_long"].shift(1))
-        bearish = (df["sma_short"] < df["sma_long"]) & (df["sma_short"].shift(1) >= df["sma_long"].shift(1))
+        bullish = (df["sma_short"] > df["sma_long"]) & (
+            df["sma_short"].shift(1) <= df["sma_long"].shift(1)
+        )
+        bearish = (df["sma_short"] < df["sma_long"]) & (
+            df["sma_short"].shift(1) >= df["sma_long"].shift(1)
+        )
         df.loc[bullish, "signal"] = 1
         df.loc[bearish, "signal"] = -1
         return df
@@ -60,8 +64,12 @@ class MACDCrossStrategy(BaseStrategy):
         df["macd"] = ema_fast - ema_slow
         df["signal_line"] = df["macd"].ewm(span=self.signal_smooth, adjust=False).mean()
         df["signal"] = 0
-        bullish = (df["macd"] > df["signal_line"]) & (df["macd"].shift(1) <= df["signal_line"].shift(1))
-        bearish = (df["macd"] < df["signal_line"]) & (df["macd"].shift(1) >= df["signal_line"].shift(1))
+        bullish = (df["macd"] > df["signal_line"]) & (
+            df["macd"].shift(1) <= df["signal_line"].shift(1)
+        )
+        bearish = (df["macd"] < df["signal_line"]) & (
+            df["macd"].shift(1) >= df["signal_line"].shift(1)
+        )
         df.loc[bullish, "signal"] = 1
         df.loc[bearish, "signal"] = -1
         return df

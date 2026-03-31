@@ -7,7 +7,13 @@ from typing import Optional, Any
 import os
 
 
-PENDING_STATES = {"created", "pending_approval", "submit_pending", "submitted", "unknown"}
+PENDING_STATES = {
+    "created",
+    "pending_approval",
+    "submit_pending",
+    "submitted",
+    "unknown",
+}
 TERMINAL_STATES = {"blocked", "rejected", "filled", "canceled", "expired", "failed"}
 
 
@@ -54,7 +60,9 @@ class SubmitLedger:
 
     def save(self, payload: dict[str, Any]) -> None:
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+        tmp_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+        )
         os.replace(tmp_path, self.path)
 
     def list_intents(self) -> list[dict[str, Any]]:
@@ -89,7 +97,9 @@ class SubmitLedger:
         self.save(data)
         return payload
 
-    def get_by_request_or_client_order_id(self, request_id: str, client_order_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+    def get_by_request_or_client_order_id(
+        self, request_id: str, client_order_id: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
         existing = self.get(request_id)
         if existing is not None:
             return existing
@@ -106,7 +116,9 @@ class SubmitLedger:
     def append_attempt(self, request_id: str, attempt: Any) -> Optional[dict[str, Any]]:
         data = self.load()
         intents = data.setdefault("intents", [])
-        payload = attempt.to_dict() if isinstance(attempt, SubmitAttempt) else dict(attempt)
+        payload = (
+            attempt.to_dict() if isinstance(attempt, SubmitAttempt) else dict(attempt)
+        )
         for item in intents:
             if item.get("request_id") == request_id:
                 item.setdefault("attempts", []).append(payload)
@@ -144,8 +156,4 @@ class SubmitLedger:
         return None
 
     def pending_intents(self) -> list[dict[str, Any]]:
-        return [
-            item
-            for item in self.list_intents()
-            if self.is_pending(item)
-        ]
+        return [item for item in self.list_intents() if self.is_pending(item)]

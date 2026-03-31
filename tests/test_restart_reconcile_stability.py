@@ -6,13 +6,19 @@ from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateSt
 def test_restart_stability_keeps_operator_actions_and_fills(tmp_path):
     path = tmp_path / "state.json"
 
-    store = JsonRuntimeStateStore(str(path), mode="governed_live", symbol="BTC/USDT", leverage=3)
+    store = JsonRuntimeStateStore(
+        str(path), mode="governed_live", symbol="BTC/USDT", leverage=3
+    )
     store.append_fill({"order_id": "o1", "fill_quantity": 0.1})
-    store.append_operator_action({"action": "submit_intended_order", "result": "submitted"})
+    store.append_operator_action(
+        {"action": "submit_intended_order", "result": "submitted"}
+    )
     store.set_watchdog({"halted": False, "consecutive_failures": 1})
     store.flush()
 
-    reloaded = JsonRuntimeStateStore(str(path), mode="governed_live", symbol="BTC/USDT", leverage=3)
+    reloaded = JsonRuntimeStateStore(
+        str(path), mode="governed_live", symbol="BTC/USDT", leverage=3
+    )
     state = reloaded.load_normalized_state()
 
     assert state["fills"][0]["order_id"] == "o1"
@@ -20,9 +26,13 @@ def test_restart_stability_keeps_operator_actions_and_fills(tmp_path):
     assert state["watchdog"]["consecutive_failures"] == 1
 
 
-def test_reconcile_stability_state_can_accumulate_runtime_and_governance_context(tmp_path):
+def test_reconcile_stability_state_can_accumulate_runtime_and_governance_context(
+    tmp_path,
+):
     path = tmp_path / "state.json"
-    store = JsonRuntimeStateStore(str(path), mode="governed_live", symbol="BTC/USDT", leverage=3)
+    store = JsonRuntimeStateStore(
+        str(path), mode="governed_live", symbol="BTC/USDT", leverage=3
+    )
 
     store.set_governance_state({"mode": "approval_required", "emergency_stop": False})
     store.set_last_runtime_snapshot({"event": "decision", "signal": 1})

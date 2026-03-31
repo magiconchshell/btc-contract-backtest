@@ -7,7 +7,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_fault_injection_matrix.json"
 SOAK_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_soak_requirements.json"
 DRILL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_restart_recovery_drills.json"
-PILOT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+PILOT_FIXTURE = (
+    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+)
 
 
 def test_gate_c_readiness_bundle_includes_required_evidence(tmp_path):
@@ -44,7 +46,15 @@ def test_gate_c_readiness_bundle_references_operator_artifacts(tmp_path):
     )
 
     payload = result["payload"]
-    assert payload["inputs"]["fault_injection"].endswith("gate_c_fault_injection_matrix.json")
-    assert payload["inputs"]["soak_requirements"].endswith("gate_c_soak_requirements.json")
-    assert payload["inputs"]["restart_drills"].endswith("gate_c_restart_recovery_drills.json")
-    assert payload["inputs"]["pilot_fixture"].endswith("gate_c_supervised_testnet_pilot.json")
+    assert payload["inputs"]["fault_injection"].endswith(
+        "gate_c_fault_injection_matrix.json"
+    )
+    assert payload["inputs"]["soak_requirements"].endswith(
+        "gate_c_soak_requirements.json"
+    )
+    assert payload["inputs"]["restart_drills"].endswith(
+        "gate_c_restart_recovery_drills.json"
+    )
+    assert payload["inputs"]["pilot_fixture"].endswith(
+        "gate_c_supervised_testnet_pilot.json"
+    )

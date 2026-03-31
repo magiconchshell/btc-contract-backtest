@@ -1,6 +1,11 @@
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -75,7 +80,9 @@ def test_backtest_and_paper_can_share_core_logic(tmp_path, monkeypatch):
 
     for i in range(len(df)):
         snap = base.iloc[: i + 1].copy()
-        monkeypatch.setattr(paper, "fetch_recent_data", lambda limit=300, snap=snap: snap)
+        monkeypatch.setattr(
+            paper, "fetch_recent_data", lambda limit=300, snap=snap: snap
+        )
         paper.step()
 
     assert paper.core.position.side in {0, 1}

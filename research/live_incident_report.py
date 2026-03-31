@@ -22,7 +22,16 @@ def load_jsonl(path: Path):
 def summarize(rows: list[dict]):
     counts = Counter(r.get("event_type", "unknown") for r in rows)
     alerts = [r for r in rows if r.get("alert_type")]
-    incidents = [r for r in rows if r.get("event_type") in {"governance_submit_failed", "order_reconcile_failed", "governed_cancel_replace_failed"}]
+    incidents = [
+        r
+        for r in rows
+        if r.get("event_type")
+        in {
+            "governance_submit_failed",
+            "order_reconcile_failed",
+            "governed_cancel_replace_failed",
+        }
+    ]
     return {
         "total_rows": len(rows),
         "event_counts": dict(counts),
@@ -39,7 +48,11 @@ def main():
     summary = summarize(rows)
     out = path.with_suffix(".incidents.json")
     out.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({"summary": summary, "output": str(out)}, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"summary": summary, "output": str(out)}, indent=2, ensure_ascii=False
+        )
+    )
 
 
 if __name__ == "__main__":

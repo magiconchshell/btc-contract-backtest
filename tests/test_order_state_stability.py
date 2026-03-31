@@ -1,28 +1,68 @@
 import pytest
 
-from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order, propagate_replace_chain
+from btc_contract_backtest.engine.execution_models import (
+    Order,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
+from btc_contract_backtest.runtime.order_state_bridge import (
+    apply_local_submit,
+    apply_remote_status,
+    canonical_record_from_order,
+    propagate_replace_chain,
+)
 from btc_contract_backtest.runtime.order_state_machine import AmbiguousOrderState
 from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
-from btc_contract_backtest.engine.execution_models import Order, OrderSide, OrderStatus, OrderType
 
 
 def test_duplicate_remote_update_is_idempotent():
-    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    order = Order(
+        order_id="o1",
+        symbol="BTC/USDT",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+    )
     record = canonical_record_from_order(order, submission_mode="paper")
     record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
 
-    record = apply_remote_status(record, status=OrderStatus.NEW.value, timestamp="2026-01-01T00:00:01+00:00", payload={"id": "ex1"}, exchange_order_id="ex1")
-    record = apply_remote_status(record, status=OrderStatus.NEW.value, timestamp="2026-01-01T00:00:01+00:00", payload={"id": "ex1"}, exchange_order_id="ex1")
+    record = apply_remote_status(
+        record,
+        status=OrderStatus.NEW.value,
+        timestamp="2026-01-01T00:00:01+00:00",
+        payload={"id": "ex1"},
+        exchange_order_id="ex1",
+    )
+    record = apply_remote_status(
+        record,
+        status=OrderStatus.NEW.value,
+        timestamp="2026-01-01T00:00:01+00:00",
+        payload={"id": "ex1"},
+        exchange_order_id="ex1",
+    )
 
     assert record.state == CanonicalOrderState.NEW.value
     assert len(record.remote_events) == 1
 
 
 def test_restart_after_ack_can_continue_to_fill():
-    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    order = Order(
+        order_id="o1",
+        symbol="BTC/USDT",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+    )
     record = canonical_record_from_order(order, submission_mode="governed_live")
     record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
-    record = apply_remote_status(record, status=OrderStatus.NEW.value, timestamp="2026-01-01T00:00:01+00:00", payload={"id": "ex1"}, exchange_order_id="ex1")
+    record = apply_remote_status(
+        record,
+        status=OrderStatus.NEW.value,
+        timestamp="2026-01-01T00:00:01+00:00",
+        payload={"id": "ex1"},
+        exchange_order_id="ex1",
+    )
 
     # simulate restart by serializing and reusing the record fields
     restored = canonical_record_from_order(order, submission_mode="governed_live")
@@ -32,27 +72,62 @@ def test_restart_after_ack_can_continue_to_fill():
     restored.remote_events = list(record.remote_events)
     restored.acked_at = record.acked_at
 
-    restored = apply_remote_status(restored, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:02+00:00", filled_quantity=1.0, avg_fill_price=101.0)
+    restored = apply_remote_status(
+        restored,
+        status=OrderStatus.FILLED.value,
+        timestamp="2026-01-01T00:00:02+00:00",
+        filled_quantity=1.0,
+        avg_fill_price=101.0,
+    )
     assert restored.state == CanonicalOrderState.FILLED.value
     assert restored.final_at == "2026-01-01T00:00:02+00:00"
 
 
 def test_terminal_remote_state_is_stable_across_late_partial_updates():
-    order = Order(order_id="o-term", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    order = Order(
+        order_id="o-term",
+        symbol="BTC/USDT",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+    )
     record = canonical_record_from_order(order, submission_mode="governed_live")
     record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
-    record = apply_remote_status(record, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:01+00:00", filled_quantity=1.0, avg_fill_price=100.0)
+    record = apply_remote_status(
+        record,
+        status=OrderStatus.FILLED.value,
+        timestamp="2026-01-01T00:00:01+00:00",
+        filled_quantity=1.0,
+        avg_fill_price=100.0,
+    )
 
-    same = apply_remote_status(record, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:02+00:00", filled_quantity=1.0, avg_fill_price=100.0)
+    same = apply_remote_status(
+        record,
+        status=OrderStatus.FILLED.value,
+        timestamp="2026-01-01T00:00:02+00:00",
+        filled_quantity=1.0,
+        avg_fill_price=100.0,
+    )
     assert same.state == CanonicalOrderState.FILLED.value
     assert same.final_at == "2026-01-01T00:00:01+00:00"
 
 
 def test_apply_remote_status_quarantines_unsafe_ambiguity():
-    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    order = Order(
+        order_id="o1",
+        symbol="BTC/USDT",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+    )
     record = canonical_record_from_order(order, submission_mode="governed_live")
     record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
-    record = apply_remote_status(record, status=OrderStatus.CANCELED.value, timestamp="2026-01-01T00:00:03+00:00", payload={"external_sequence": "30"})
+    record = apply_remote_status(
+        record,
+        status=OrderStatus.CANCELED.value,
+        timestamp="2026-01-01T00:00:03+00:00",
+        payload={"external_sequence": "30"},
+    )
 
     with pytest.raises(AmbiguousOrderState):
         apply_remote_status(
@@ -64,17 +139,31 @@ def test_apply_remote_status_quarantines_unsafe_ambiguity():
         )
 
     assert record.tags["quarantine"]["blocked"] is True
-    assert record.tags["quarantine"]["incoming_status"] == CanonicalOrderState.FILLED.value
+    assert (
+        record.tags["quarantine"]["incoming_status"] == CanonicalOrderState.FILLED.value
+    )
 
 
 def test_apply_remote_fill_after_replace_marks_duplicate_exposure_risk():
     parent = canonical_record_from_order(
-        Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0),
+        Order(
+            order_id="o1",
+            symbol="BTC/USDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=1.0,
+        ),
         submission_mode="governed_live",
     )
     parent = apply_local_submit(parent, timestamp="2026-01-01T00:00:00+00:00")
     child = canonical_record_from_order(
-        Order(order_id="o2", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=0.6),
+        Order(
+            order_id="o2",
+            symbol="BTC/USDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.6,
+        ),
         submission_mode="governed_live",
     )
     propagate_replace_chain(parent, child)
@@ -95,11 +184,23 @@ def test_apply_remote_fill_after_replace_marks_duplicate_exposure_risk():
 
 def test_propagate_replace_chain_preserves_root_and_lineage():
     parent = canonical_record_from_order(
-        Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0),
+        Order(
+            order_id="o1",
+            symbol="BTC/USDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=1.0,
+        ),
         submission_mode="governed_live",
     )
     child = canonical_record_from_order(
-        Order(order_id="o2", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=0.6),
+        Order(
+            order_id="o2",
+            symbol="BTC/USDT",
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=0.6,
+        ),
         submission_mode="governed_live",
     )
 

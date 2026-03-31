@@ -64,8 +64,12 @@ class RegimeFilteredStrategy(BaseStrategy):
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
-        df["ema_fast_trend"] = df["close"].ewm(span=self.fast_trend_window, adjust=False).mean()
-        df["ema_slow_trend"] = df["close"].ewm(span=self.slow_trend_window, adjust=False).mean()
+        df["ema_fast_trend"] = (
+            df["close"].ewm(span=self.fast_trend_window, adjust=False).mean()
+        )
+        df["ema_slow_trend"] = (
+            df["close"].ewm(span=self.slow_trend_window, adjust=False).mean()
+        )
         df["trend_up"] = df["ema_fast_trend"] > df["ema_slow_trend"]
         df["trend_down"] = df["ema_fast_trend"] < df["ema_slow_trend"]
 
@@ -90,7 +94,9 @@ class RegimeFilteredStrategy(BaseStrategy):
 
         df["signal"] = 0
 
-        volatility_ok = (df["atr_pct"] >= self.min_atr_pct) & (df["atr_pct"] <= self.max_atr_pct)
+        volatility_ok = (df["atr_pct"] >= self.min_atr_pct) & (
+            df["atr_pct"] <= self.max_atr_pct
+        )
         regime_ok = df["adx"] >= self.adx_threshold
         long_setup = (
             df["trend_up"]

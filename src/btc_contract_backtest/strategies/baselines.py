@@ -30,8 +30,12 @@ class EMATrendStrategy(BaseStrategy):
         df["ema_fast"] = df["close"].ewm(span=self.fast_window, adjust=False).mean()
         df["ema_slow"] = df["close"].ewm(span=self.slow_window, adjust=False).mean()
         df["signal"] = 0
-        bullish = (df["ema_fast"] > df["ema_slow"]) & (df["ema_fast"].shift(1) <= df["ema_slow"].shift(1))
-        bearish = (df["ema_fast"] < df["ema_slow"]) & (df["ema_fast"].shift(1) >= df["ema_slow"].shift(1))
+        bullish = (df["ema_fast"] > df["ema_slow"]) & (
+            df["ema_fast"].shift(1) <= df["ema_slow"].shift(1)
+        )
+        bearish = (df["ema_fast"] < df["ema_slow"]) & (
+            df["ema_fast"].shift(1) >= df["ema_slow"].shift(1)
+        )
         df.loc[bullish, "signal"] = 1
         df.loc[bearish, "signal"] = -1
         return df

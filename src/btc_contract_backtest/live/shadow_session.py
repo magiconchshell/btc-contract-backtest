@@ -16,7 +16,10 @@ from btc_contract_backtest.config.models import (
 )
 from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.live.audit_logger import AuditLogger
-from btc_contract_backtest.live.binance_futures import create_binance_futures_exchange, require_binance_profile_enabled
+from btc_contract_backtest.live.binance_futures import (
+    create_binance_futures_exchange,
+    require_binance_profile_enabled,
+)
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.shadow_recovery import ShadowRecovery
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
@@ -39,7 +42,9 @@ class ShadowTradingSession(TradingRuntime):
         allow_mainnet: bool = False,
         exchange: Optional[Any] = None,
     ):
-        require_binance_profile_enabled(contract.exchange_profile, allow_mainnet=allow_mainnet)
+        require_binance_profile_enabled(
+            contract.exchange_profile, allow_mainnet=allow_mainnet
+        )
         super().__init__(
             contract,
             account,
@@ -85,12 +90,14 @@ class ShadowTradingSession(TradingRuntime):
             store.set_governance_state({})
             store.set_last_runtime_snapshot(last_payload or {})
             store.set_state_fields(last_payload=last_payload or {})
-            store.set_watchdog({
-                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-                "consecutive_failures": self.watchdog.state.consecutive_failures,
-                "halted": self.watchdog.state.halted,
-                "halt_reason": self.watchdog.state.halt_reason,
-            })
+            store.set_watchdog(
+                {
+                    "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                    "consecutive_failures": self.watchdog.state.consecutive_failures,
+                    "halted": self.watchdog.state.halted,
+                    "halt_reason": self.watchdog.state.halt_reason,
+                }
+            )
             store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
             store.flush()
             return
@@ -102,7 +109,9 @@ class ShadowTradingSession(TradingRuntime):
             timeframe=self.context.timeframe,
             limit=limit,
         )
-        df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
         return df
@@ -117,9 +126,9 @@ class ShadowTradingSession(TradingRuntime):
             snapshot.ask = float(ticker["ask"])
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         bar_ms = int(signal_df.index[-1].timestamp() * 1000)
-        snapshot.stale = (
-            now_ms - bar_ms
-        ) > (self.context.risk.stale_data_threshold_seconds * 1000)
+        snapshot.stale = (now_ms - bar_ms) > (
+            self.context.risk.stale_data_threshold_seconds * 1000
+        )
         return snapshot
 
     def reconcile(self):
@@ -128,11 +137,7 @@ class ShadowTradingSession(TradingRuntime):
             "reconcile",
             {
                 "timestamp": self.now_iso(),
-                "result": (
-                    result.payload
-                    if result.ok
-                    else {"error": result.error}
-                ),
+                "result": (result.payload if result.ok else {"error": result.error}),
             },
         )
         return result
@@ -155,7 +160,11 @@ class ShadowTradingSession(TradingRuntime):
             "quantity": self.core.position.quantity,
             "entry_price": self.core.position.entry_price,
         }
-        payload["reconcile"] = reconcile_result.payload if reconcile_result.ok else {"error": reconcile_result.error}
+        payload["reconcile"] = (
+            reconcile_result.payload
+            if reconcile_result.ok
+            else {"error": reconcile_result.error}
+        )
         self.audit.log("shadow_decision", payload)
         self.save_state(payload)
         return payload
@@ -164,7 +173,11 @@ class ShadowTradingSession(TradingRuntime):
         count = 0
         while True:
             if self.watchdog.check_timeout():
-                payload = {"timestamp": self.now_iso(), "event": "halted", "reason": "heartbeat_timeout"}
+                payload = {
+                    "timestamp": self.now_iso(),
+                    "event": "halted",
+                    "reason": "heartbeat_timeout",
+                }
                 self.audit.log("shadow_halt", payload)
                 self.save_state(payload)
                 print(json.dumps(payload, indent=2, default=str))

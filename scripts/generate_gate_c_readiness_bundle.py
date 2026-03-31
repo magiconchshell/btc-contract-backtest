@@ -73,7 +73,9 @@ def build_bundle(
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "gate_c_readiness_bundle.json"
     md_path = out_dir / "gate_c_readiness_bundle.md"
-    json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     _write_markdown(md_path, payload)
     return {"json": str(json_path), "markdown": str(md_path), "payload": payload}
 
@@ -91,7 +93,13 @@ def main(argv: list[str] | None = None) -> int:
         pilot_fixture=Path(args[3]),
         out_dir=Path(args[4]),
     )
-    print(json.dumps({k: v for k, v in result.items() if k != "payload"}, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {k: v for k, v in result.items() if k != "payload"},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

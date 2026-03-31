@@ -4,7 +4,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
-from btc_contract_backtest.live.governance import GovernanceState, OperatorApprovalQueue, TradingMode
+from btc_contract_backtest.live.governance import (
+    GovernanceState,
+    OperatorApprovalQueue,
+    TradingMode,
+)
 
 
 def test_governance_cli_mode_and_emergency_stop(tmp_path):

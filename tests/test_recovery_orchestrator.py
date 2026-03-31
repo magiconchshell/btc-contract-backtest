@@ -7,17 +7,26 @@ from btc_contract_backtest.live.submit_ledger import SubmitIntent, SubmitLedger
 
 class RecoveryAdapter:
     def fetch_open_orders(self):
-        return AdapterResult(ok=True, payload=[
-            {"id": "ex-1", "clientOrderId": "c1", "status": "open"},
-            {"id": "ex-2", "clientOrderId": "c-remote-only", "status": "open"},
-        ])
+        return AdapterResult(
+            ok=True,
+            payload=[
+                {"id": "ex-1", "clientOrderId": "c1", "status": "open"},
+                {"id": "ex-2", "clientOrderId": "c-remote-only", "status": "open"},
+            ],
+        )
 
     def fetch_positions(self):
-        return AdapterResult(ok=True, payload=[{"symbol": "BTC/USDT", "positionAmt": "1", "entryPrice": "45000"}])
+        return AdapterResult(
+            ok=True,
+            payload=[{"symbol": "BTC/USDT", "positionAmt": "1", "entryPrice": "45000"}],
+        )
 
     def fetch_open_orders_by_client_order_id(self, client_order_id):
         if client_order_id == "c1":
-            return AdapterResult(ok=True, payload=[{"id": "ex-1", "clientOrderId": "c1", "status": "open"}])
+            return AdapterResult(
+                ok=True,
+                payload=[{"id": "ex-1", "clientOrderId": "c1", "status": "open"}],
+            )
         return AdapterResult(ok=True, payload=[])
 
 
@@ -26,7 +35,12 @@ class ReplayTerminalAdapter:
         return AdapterResult(ok=True, payload=[])
 
     def fetch_positions(self):
-        return AdapterResult(ok=True, payload=[{"symbol": "BTC/USDT", "positionAmt": "0.25", "entryPrice": "45000"}])
+        return AdapterResult(
+            ok=True,
+            payload=[
+                {"symbol": "BTC/USDT", "positionAmt": "0.25", "entryPrice": "45000"}
+            ],
+        )
 
     def fetch_open_orders_by_client_order_id(self, client_order_id):
         return AdapterResult(ok=True, payload=[])
@@ -34,17 +48,48 @@ class ReplayTerminalAdapter:
 
 def test_recovery_orchestrator_recovers_pending_intent_and_flags_orphans(tmp_path):
     ledger = SubmitLedger(str(Path(tmp_path) / "submit_ledger.json"))
-    ledger.upsert(SubmitIntent(request_id="r1", client_order_id="c1", symbol="BTC/USDT", signal=1, quantity=1.0, notional=100.0, state="unknown"))
+    ledger.upsert(
+        SubmitIntent(
+            request_id="r1",
+            client_order_id="c1",
+            symbol="BTC/USDT",
+            signal=1,
+            quantity=1.0,
+            notional=100.0,
+            state="unknown",
+        )
+    )
     orchestrator = RecoveryOrchestrator(RecoveryAdapter(), ledger)
 
     report = orchestrator.recover(
-        local_orders=[{"order_id": "o-local", "client_order_id": "c-local-only", "state": "new"}],
+        local_orders=[
+            {"order_id": "o-local", "client_order_id": "c-local-only", "state": "new"}
+        ],
         local_position={"side": 1, "quantity": 1.0, "entry_price": 45000.0},
         events=[
-            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "c1"}},
-            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "c1", "execution_type": "trade", "last_fill_quantity": "1", "last_fill_price": "45000"}},
+            {
+                "sequence": 1,
+                "event_type": "order_new",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "payload": {"client_order_id": "c1"},
+            },
+            {
+                "sequence": 2,
+                "event_type": "order_trade_update",
+                "timestamp": "2026-01-01T00:00:01+00:00",
+                "payload": {
+                    "client_order_id": "c1",
+                    "execution_type": "trade",
+                    "last_fill_quantity": "1",
+                    "last_fill_price": "45000",
+                },
+            },
         ],
-        event_boundary={"last_sequence": 2, "poll_fallback_required": True, "upstream": {"connected": False, "listen_key_present": False}},
+        event_boundary={
+            "last_sequence": 2,
+            "poll_fallback_required": True,
+            "upstream": {"connected": False, "listen_key_present": False},
+        },
         environment="testnet",
     ).to_dict()
     assert report["ok"] is False
@@ -57,19 +102,63 @@ def test_recovery_orchestrator_recovers_pending_intent_and_flags_orphans(tmp_pat
     assert "startup_convergence_blocked" in report["notes"]
 
 
-def test_recovery_orchestrator_recovers_terminal_fill_from_replay_without_orphans(tmp_path):
+def test_recovery_orchestrator_recovers_terminal_fill_from_replay_without_orphans(
+    tmp_path,
+):
     ledger = SubmitLedger(str(Path(tmp_path) / "submit_ledger.json"))
-    ledger.upsert(SubmitIntent(request_id="r-filled", client_order_id="c-filled", symbol="BTC/USDT", signal=1, quantity=0.25, notional=25.0, state="unknown"))
+    ledger.upsert(
+        SubmitIntent(
+            request_id="r-filled",
+            client_order_id="c-filled",
+            symbol="BTC/USDT",
+            signal=1,
+            quantity=0.25,
+            notional=25.0,
+            state="unknown",
+        )
+    )
     orchestrator = RecoveryOrchestrator(ReplayTerminalAdapter(), ledger)
 
     report = orchestrator.recover(
-        local_orders=[{"order_id": "o-local-filled", "client_order_id": "c-filled", "state": "new"}],
+        local_orders=[
+            {
+                "order_id": "o-local-filled",
+                "client_order_id": "c-filled",
+                "state": "new",
+            }
+        ],
         local_position={"side": 1, "quantity": 0.25, "entry_price": 45000.0},
         events=[
-            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "c-filled", "order_id": "ex-filled", "status": "new"}},
-            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "c-filled", "order_id": "ex-filled", "execution_type": "trade", "status": "filled", "filled_quantity": "0.25", "last_fill_quantity": "0.25", "average_price": "45000.0"}},
+            {
+                "sequence": 1,
+                "event_type": "order_new",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "payload": {
+                    "client_order_id": "c-filled",
+                    "order_id": "ex-filled",
+                    "status": "new",
+                },
+            },
+            {
+                "sequence": 2,
+                "event_type": "order_trade_update",
+                "timestamp": "2026-01-01T00:00:01+00:00",
+                "payload": {
+                    "client_order_id": "c-filled",
+                    "order_id": "ex-filled",
+                    "execution_type": "trade",
+                    "status": "filled",
+                    "filled_quantity": "0.25",
+                    "last_fill_quantity": "0.25",
+                    "average_price": "45000.0",
+                },
+            },
         ],
-        event_boundary={"last_sequence": 2, "poll_fallback_required": False, "upstream": {"connected": True, "listen_key_present": True}},
+        event_boundary={
+            "last_sequence": 2,
+            "poll_fallback_required": False,
+            "upstream": {"connected": True, "listen_key_present": True},
+        },
         environment="testnet",
     ).to_dict()
 

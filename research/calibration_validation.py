@@ -16,8 +16,16 @@ def main():
     samples = store.load()
     result = validate_samples(samples, CalibrationConfig())
     out = Path(path).with_suffix(".validation.json")
-    out.write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({"sample_count": result.sample_count, "validation": str(out)}, indent=2, ensure_ascii=False))
+    out.write_text(
+        json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {"sample_count": result.sample_count, "validation": str(out)},
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

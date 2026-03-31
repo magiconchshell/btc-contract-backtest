@@ -167,7 +167,9 @@ class GovernancePolicy:
         self.live_risk = live_risk
         self.mode = mode
         self.contract = contract
-        self.constraint_checker = ExchangeConstraintChecker(contract) if contract is not None else None
+        self.constraint_checker = (
+            ExchangeConstraintChecker(contract) if contract is not None else None
+        )
 
     def evaluate(
         self,
@@ -272,10 +274,16 @@ class GovernancePolicy:
             )
         if self.mode == TradingMode.GUARDED_LIVE:
             return GovernanceDecision(True, "guarded_live_allowed", severity="info")
-        return GovernanceDecision(False, f"mode={self.mode.value}_non_live", severity="info")
+        return GovernanceDecision(
+            False, f"mode={self.mode.value}_non_live", severity="info"
+        )
 
     def snapshot(self) -> dict:
-        payload = {"mode": self.mode.value, "live_risk": asdict(self.live_risk), "risk": asdict(self.risk)}
+        payload = {
+            "mode": self.mode.value,
+            "live_risk": asdict(self.live_risk),
+            "risk": asdict(self.risk),
+        }
         if self.contract is not None:
             payload["contract"] = asdict(self.contract)
         return payload

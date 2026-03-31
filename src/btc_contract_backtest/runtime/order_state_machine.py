@@ -187,7 +187,9 @@ class OrderStateMachine:
             return False, False
         tags = record.tags
         last_event_id = tags.get("last_remote_event_id")
-        event_id = event.payload.get("event_id") or event.payload.get("external_sequence")
+        event_id = event.payload.get("event_id") or event.payload.get(
+            "external_sequence"
+        )
         if event_id and last_event_id == event_id:
             return True, False
 
@@ -216,7 +218,10 @@ class OrderStateMachine:
                 f"{next_state.value} after {current.value}"
             )
 
-        if current == CanonicalOrderState.REPLACE_PENDING and next_state == CanonicalOrderState.ACKED:
+        if (
+            current == CanonicalOrderState.REPLACE_PENDING
+            and next_state == CanonicalOrderState.ACKED
+        ):
             return True, False
 
         if current == CanonicalOrderState.PARTIAL and next_state in {
@@ -228,7 +233,8 @@ class OrderStateMachine:
         if (
             last_sequence is not None
             and incoming_sequence is not None
-            and _sequence_components(incoming_sequence) < _sequence_components(last_sequence)
+            and _sequence_components(incoming_sequence)
+            < _sequence_components(last_sequence)
         ):
             if incoming_rank <= current_rank:
                 return True, False
@@ -250,7 +256,9 @@ class OrderStateMachine:
         exchange_order_id: Optional[str],
     ) -> None:
         if event.source == "remote":
-            event_id = event.payload.get("event_id") or event.payload.get("external_sequence")
+            event_id = event.payload.get("event_id") or event.payload.get(
+                "external_sequence"
+            )
             if event_id is not None:
                 record.tags["last_remote_event_id"] = event_id
             external_sequence = event.payload.get("external_sequence")
@@ -273,7 +281,9 @@ class OrderStateMachine:
                 record.tags["exchange_order_ids"].append(exchange_order_id)
 
         if target in TERMINAL_STATES:
-            record.tags["residual_quantity"] = max(record.quantity - record.filled_quantity, 0.0)
+            record.tags["residual_quantity"] = max(
+                record.quantity - record.filled_quantity, 0.0
+            )
             record.tags["has_residual_open_quantity"] = False
 
     @classmethod
@@ -296,7 +306,9 @@ class OrderStateMachine:
             return record
 
         if target not in VALID_TRANSITIONS[current]:
-            raise InvalidOrderTransition(f"invalid transition {current.value} -> {target.value}")
+            raise InvalidOrderTransition(
+                f"invalid transition {current.value} -> {target.value}"
+            )
 
         event_list_name = cls._event_list_name(event.source)
         event_list = getattr(record, event_list_name)

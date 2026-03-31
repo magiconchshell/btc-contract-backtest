@@ -7,7 +7,9 @@ DOC = REPO_ROOT / "documentations" / "gate-c-supervised-testnet-pilot-plan.md"
 FAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_fault_injection_matrix.json"
 SOAK_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_soak_requirements.json"
 DRILL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_restart_recovery_drills.json"
-PILOT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+PILOT_FIXTURE = (
+    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+)
 
 
 def _load(path: Path):
@@ -31,7 +33,11 @@ def test_gate_c_fault_matrix_covers_races_and_partial_fill_continuity():
     assert "fill_while_cancel_replace_in_flight" in names
     assert "ambiguous_submit_resolves_remote_open_after_restart" in names
 
-    partial = next(row for row in scenarios if row["name"] == "partial_fill_then_restart_then_completion")
+    partial = next(
+        row
+        for row in scenarios
+        if row["name"] == "partial_fill_then_restart_then_completion"
+    )
     assert "cumulative_fill_quantity_preserved" in partial["pass_conditions"]
     assert "average_entry_basis_converges" in partial["pass_conditions"]
 
@@ -50,8 +56,14 @@ def test_gate_c_restart_drills_include_blocking_and_reviewed_resume_cases():
     drills = _load(DRILL_FIXTURE)
     expected = {row["name"]: row for row in drills if row.get("required")}
     assert expected["restart_after_critical_divergence"]["expected_resume"] == "blocked"
-    assert expected["restart_during_partial_fill"]["expected_resume"] == "allowed_after_review"
-    assert "operator_decision_record" in expected["restart_with_remote_only_open_order"]["required_artifacts"]
+    assert (
+        expected["restart_during_partial_fill"]["expected_resume"]
+        == "allowed_after_review"
+    )
+    assert (
+        "operator_decision_record"
+        in expected["restart_with_remote_only_open_order"]["required_artifacts"]
+    )
 
 
 def test_gate_c_pilot_fixture_requires_approval_mode_and_safe_exit_criteria():

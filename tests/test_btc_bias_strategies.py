@@ -5,7 +5,10 @@ from btc_contract_backtest.strategies.btc_bias import (
     LongOnlyRegimeStrategy,
     ShortLiteRegimeStrategy,
 )
-from btc_contract_backtest.strategies.baselines import BuyAndHoldLongStrategy, EMATrendStrategy
+from btc_contract_backtest.strategies.baselines import (
+    BuyAndHoldLongStrategy,
+    EMATrendStrategy,
+)
 
 
 def sample_df():
@@ -13,7 +16,15 @@ def sample_df():
     highs = [c + 0.8 for c in closes]
     lows = [c - 0.8 for c in closes]
     opens = [c - 0.1 for c in closes]
-    return pd.DataFrame({"open": opens, "high": highs, "low": lows, "close": closes, "volume": [10] * len(closes)})
+    return pd.DataFrame(
+        {
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": [10] * len(closes),
+        }
+    )
 
 
 def test_long_only_regime_has_signal_column():

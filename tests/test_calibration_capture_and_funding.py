@@ -1,6 +1,10 @@
 import json
 
-from btc_contract_backtest.runtime.calibration_engine import funding_cost_from_sample, sample_from_execution, validate_samples
+from btc_contract_backtest.runtime.calibration_engine import (
+    funding_cost_from_sample,
+    sample_from_execution,
+    validate_samples,
+)
 from btc_contract_backtest.runtime.calibration_models import CalibrationConfig
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
@@ -85,6 +89,8 @@ def test_validation_respects_runtime_mode_and_version(tmp_path):
         metadata={"calibration_version": "t4-v1"},
     )
     store.append(sample)
-    result = validate_samples(store.load(), CalibrationConfig(mode="validation", version="t4-v1"))
+    result = validate_samples(
+        store.load(), CalibrationConfig(mode="validation", version="t4-v1")
+    )
     assert result.sample_count == 1
     assert result.quality_weighted_score >= 0

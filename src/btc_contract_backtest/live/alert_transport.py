@@ -11,4 +11,11 @@ class FileAlertTransport:
 
     def send(self, alert_type: str, payload: dict):
         with self.path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({"alert_type": alert_type, **payload}, ensure_ascii=False, default=str) + "\n")
+            f.write(
+                json.dumps(
+                    {"alert_type": alert_type, **payload},
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\n"
+            )

@@ -61,7 +61,9 @@ class RegimeSwitcherStrategy(BaseStrategy):
         df["drawdown_from_recent_high"] = (df["close"] / df["rolling_max"]) - 1.0
         df["adx"] = self._compute_adx(df)
 
-        bull_regime = (df["ema_fast"] > df["ema_slow"]) & (df["adx"] >= self.bull_adx_threshold)
+        bull_regime = (df["ema_fast"] > df["ema_slow"]) & (
+            df["adx"] >= self.bull_adx_threshold
+        )
         crash_regime = (
             (df["ema_fast"] < df["ema_slow"])
             & (df["drawdown_from_recent_high"] <= -self.crash_threshold_pct)

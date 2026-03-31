@@ -81,11 +81,17 @@ class GovernedLiveSession(TradingRuntime):
         allow_mainnet: bool = False,
         exchange: Optional[Any] = None,
     ):
-        require_binance_profile_enabled(contract.exchange_profile, allow_mainnet=allow_mainnet)
-        runtime_paths = build_binance_futures_runtime_paths(contract.exchange_profile, contract.symbol)
+        require_binance_profile_enabled(
+            contract.exchange_profile, allow_mainnet=allow_mainnet
+        )
+        runtime_paths = build_binance_futures_runtime_paths(
+            contract.exchange_profile, contract.symbol
+        )
         metadata_cache_file = metadata_cache_file or runtime_paths.metadata_cache_file
         approval_file = approval_file or runtime_paths.approval_file
-        governance_state_file = governance_state_file or runtime_paths.governance_state_file
+        governance_state_file = (
+            governance_state_file or runtime_paths.governance_state_file
+        )
         alerts_file = alerts_file or runtime_paths.alerts_file
         state_file = state_file or runtime_paths.live_state_file
         audit_log = audit_log or runtime_paths.live_audit_log
@@ -94,7 +100,9 @@ class GovernedLiveSession(TradingRuntime):
             cache_path=metadata_cache_file,
         )
         try:
-            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol, allow_stale=True, refresh_on_miss=True)
+            symbol_rules = metadata_sync.get_symbol_rules(
+                contract.symbol, allow_stale=True, refresh_on_miss=True
+            )
             contract = with_binance_symbol_rules(contract, symbol_rules)
         except Exception:  # noqa: BLE001
             pass
@@ -124,7 +132,9 @@ class GovernedLiveSession(TradingRuntime):
             max_retries=self.context.live_risk.max_consecutive_failures,
         )
         self.adapter.configure_binance_futures_mode(
-            use_testnet=bool(getattr(contract, "exchange_profile", "").endswith("testnet"))
+            use_testnet=bool(
+                getattr(contract, "exchange_profile", "").endswith("testnet")
+            )
         )
         self.audit = AuditLogger(audit_log)
         self.alerts = AlertSink(alerts_file)
@@ -147,7 +157,9 @@ class GovernedLiveSession(TradingRuntime):
             self.adapter,
             BinanceFuturesStreamConfig(
                 symbol=contract.symbol,
-                use_testnet=bool(getattr(contract, "exchange_profile", "").endswith("testnet")),
+                use_testnet=bool(
+                    getattr(contract, "exchange_profile", "").endswith("testnet")
+                ),
             ),
         )
         self.event_source = EventDrivenExecutionSource(
@@ -170,8 +182,12 @@ class GovernedLiveSession(TradingRuntime):
             submit_ledger=self.submit_ledger,
             event_source=self.event_source,
         )
-        self.order_monitor = OrderLifecycleMonitor(self.adapter, self.alerts, self.audit)
-        self.recovery_orchestrator = RecoveryOrchestrator(self.adapter, self.submit_ledger)
+        self.order_monitor = OrderLifecycleMonitor(
+            self.adapter, self.alerts, self.audit
+        )
+        self.recovery_orchestrator = RecoveryOrchestrator(
+            self.adapter, self.submit_ledger
+        )
         self._recovery_report = self.recovery_orchestrator.recover(
             local_orders=recovered.get("orders", []),
             local_position=recovered.get("position", {}),
@@ -197,19 +213,23 @@ class GovernedLiveSession(TradingRuntime):
                 if hasattr(self._recovery_report, "to_dict")
                 else self._recovery_report
             )
-            recovery_report_payload = recovery_report if isinstance(recovery_report, dict) else {}
+            recovery_report_payload = (
+                recovery_report if isinstance(recovery_report, dict) else {}
+            )
             store.set_state_fields(
                 recovery_report=recovery_report,
                 startup_report=recovery_report_payload.get("startup_convergence") or {},
                 execution_events=self.event_source.replay(),
                 event_stream_boundary=self.event_source.boundary_state(),
             )
-            store.set_watchdog({
-                "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
-                "consecutive_failures": self.watchdog.state.consecutive_failures,
-                "halted": self.watchdog.state.halted,
-                "halt_reason": self.watchdog.state.halt_reason,
-            })
+            store.set_watchdog(
+                {
+                    "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
+                    "consecutive_failures": self.watchdog.state.consecutive_failures,
+                    "halted": self.watchdog.state.halted,
+                    "halt_reason": self.watchdog.state.halt_reason,
+                }
+            )
             store.set_state_fields(updated_at=datetime.now(timezone.utc).isoformat())
             store.flush()
             return
@@ -221,7 +241,9 @@ class GovernedLiveSession(TradingRuntime):
             timeframe=self.context.timeframe,
             limit=limit,
         )
-        df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
         return df
@@ -331,7 +353,9 @@ class GovernedLiveSession(TradingRuntime):
             local_position=local_position,
             local_orders=local_orders,
         )
-        reconcile_payload = reconcile.payload if isinstance(reconcile.payload, dict) else {}
+        reconcile_payload = (
+            reconcile.payload if isinstance(reconcile.payload, dict) else {}
+        )
         reconcile_ok = bool(reconcile.ok and reconcile_payload.get("ok", False))
         payload["reconcile_report"] = (
             reconcile.payload
@@ -347,9 +371,7 @@ class GovernedLiveSession(TradingRuntime):
             reconcile_ok=reconcile_ok,
             watchdog_halted=self.watchdog.state.halted,
             available_margin=(
-                None
-                if available_margin is None
-                else float(available_margin)
+                None if available_margin is None else float(available_margin)
             ),
             leverage=self.context.contract.leverage,
             position_side=self.core.position.side,
@@ -416,13 +438,17 @@ class GovernedLiveSession(TradingRuntime):
                     store.upsert_order(replace_result["record"].to_dict())
                 new_order = replace_result.get("new_order")
                 if new_order is not None:
-                    parent_record = replace_result.get("record") or monitor_result.get("record")
+                    parent_record = replace_result.get("record") or monitor_result.get(
+                        "record"
+                    )
                     replacement_record = canonical_record_from_order(
                         new_order,
                         submission_mode="governed_live",
                     )
                     if parent_record is not None:
-                        replacement_record = propagate_replace_chain(parent_record, replacement_record)
+                        replacement_record = propagate_replace_chain(
+                            parent_record, replacement_record
+                        )
                     replacement_record = apply_local_submit(
                         replacement_record,
                         timestamp=new_order.created_at,
@@ -441,14 +467,16 @@ class GovernedLiveSession(TradingRuntime):
                 executed_price=float(
                     payload["snapshot"]["ask"]
                     if order.side.value == "buy"
-                    else payload["snapshot"]["bid"]
-                    or payload["snapshot"]["close"]
+                    else payload["snapshot"]["bid"] or payload["snapshot"]["close"]
                 ),
                 fill_quantity=order.quantity,
                 spread_bps=(
                     abs(
                         (payload["snapshot"].get("ask") or payload["snapshot"]["close"])
-                        - (payload["snapshot"].get("bid") or payload["snapshot"]["close"])
+                        - (
+                            payload["snapshot"].get("bid")
+                            or payload["snapshot"]["close"]
+                        )
                     )
                     / payload["snapshot"]["close"]
                     * 10000
@@ -476,12 +504,20 @@ class GovernedLiveSession(TradingRuntime):
     def step(self):
         state = self.gov_state.load()
         if state.get("emergency_stop"):
-            payload = {"event": "halted", "reason": "emergency_stop", "timestamp": self.now_iso()}
+            payload = {
+                "event": "halted",
+                "reason": "emergency_stop",
+                "timestamp": self.now_iso(),
+            }
             self.audit.log("live_session_halt", payload)
             self.save_state(payload)
             return payload
         if state.get("maintenance"):
-            payload = {"event": "halted", "reason": "maintenance_mode", "timestamp": self.now_iso()}
+            payload = {
+                "event": "halted",
+                "reason": "maintenance_mode",
+                "timestamp": self.now_iso(),
+            }
             self.audit.log("live_session_halt", payload)
             self.save_state(payload)
             return payload
@@ -491,7 +527,11 @@ class GovernedLiveSession(TradingRuntime):
         count = 0
         while True:
             if self.watchdog.check_timeout():
-                payload = {"event": "halted", "reason": "heartbeat_timeout", "timestamp": self.now_iso()}
+                payload = {
+                    "event": "halted",
+                    "reason": "heartbeat_timeout",
+                    "timestamp": self.now_iso(),
+                }
                 self.audit.log("live_session_halt", payload)
                 self.save_state(payload)
                 print(json.dumps(payload, indent=2, default=str))

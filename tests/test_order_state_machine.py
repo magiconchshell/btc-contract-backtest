@@ -24,20 +24,35 @@ def test_order_state_machine_allows_valid_transition_chain():
     OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.ACKED.value,
-        event=OrderEvent(source="remote", event_type="ack", state="acked", timestamp="2026-01-01T00:00:01+00:00"),
+        event=OrderEvent(
+            source="remote",
+            event_type="ack",
+            state="acked",
+            timestamp="2026-01-01T00:00:01+00:00",
+        ),
         exchange_order_id="ex1",
     )
     OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.PARTIAL.value,
-        event=OrderEvent(source="remote", event_type="partial_fill", state="partial", timestamp="2026-01-01T00:00:02+00:00"),
+        event=OrderEvent(
+            source="remote",
+            event_type="partial_fill",
+            state="partial",
+            timestamp="2026-01-01T00:00:02+00:00",
+        ),
         filled_quantity=0.4,
         avg_fill_price=100.0,
     )
     OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.FILLED.value,
-        event=OrderEvent(source="remote", event_type="filled", state="filled", timestamp="2026-01-01T00:00:03+00:00"),
+        event=OrderEvent(
+            source="remote",
+            event_type="filled",
+            state="filled",
+            timestamp="2026-01-01T00:00:03+00:00",
+        ),
         filled_quantity=1.0,
         avg_fill_price=100.5,
     )
@@ -55,23 +70,42 @@ def test_order_state_machine_rejects_illegal_transition():
     OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.CANCELED.value,
-        event=OrderEvent(source="remote", event_type="canceled", state="canceled", timestamp="2026-01-01T00:00:01+00:00"),
+        event=OrderEvent(
+            source="remote",
+            event_type="canceled",
+            state="canceled",
+            timestamp="2026-01-01T00:00:01+00:00",
+        ),
     )
 
     with pytest.raises(InvalidOrderTransition):
         OrderStateMachine.apply_transition(
             record,
             next_state=CanonicalOrderState.ACKED.value,
-            event=OrderEvent(source="remote", event_type="ack", state="acked", timestamp="2026-01-01T00:00:02+00:00"),
+            event=OrderEvent(
+                source="remote",
+                event_type="ack",
+                state="acked",
+                timestamp="2026-01-01T00:00:02+00:00",
+            ),
         )
 
 
 def test_order_state_machine_is_idempotent_for_duplicate_event():
     record = OrderStateMachine.create_record(order_id="o1")
-    event = OrderEvent(source="remote", event_type="ack", state="acked", timestamp="2026-01-01T00:00:01+00:00")
+    event = OrderEvent(
+        source="remote",
+        event_type="ack",
+        state="acked",
+        timestamp="2026-01-01T00:00:01+00:00",
+    )
 
-    OrderStateMachine.apply_transition(record, next_state=CanonicalOrderState.ACKED.value, event=event)
-    OrderStateMachine.apply_transition(record, next_state=CanonicalOrderState.ACKED.value, event=event)
+    OrderStateMachine.apply_transition(
+        record, next_state=CanonicalOrderState.ACKED.value, event=event
+    )
+    OrderStateMachine.apply_transition(
+        record, next_state=CanonicalOrderState.ACKED.value, event=event
+    )
 
     assert record.state == CanonicalOrderState.ACKED.value
     assert len(record.remote_events) == 1
@@ -80,7 +114,9 @@ def test_order_state_machine_is_idempotent_for_duplicate_event():
 def test_order_state_store_upsert_replaces_existing_order(tmp_path):
     from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 
-    store = JsonRuntimeStateStore(str(tmp_path / "state.json"), mode="paper", symbol="BTC/USDT", leverage=3)
+    store = JsonRuntimeStateStore(
+        str(tmp_path / "state.json"), mode="paper", symbol="BTC/USDT", leverage=3
+    )
     store.upsert_order({"order_id": "o1", "state": "new", "client_order_id": "c1"})
     store.upsert_order({"order_id": "o1", "state": "acked", "client_order_id": "c1"})
 
