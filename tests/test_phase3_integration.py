@@ -19,6 +19,14 @@ class StaticStrategy(BaseStrategy):
         return out
 
 
+class FakeExchange:
+    def fetch_positions(self, symbols):
+        return []
+
+    def fetch_open_orders(self, symbol):
+        return []
+
+
 def make_df():
     closes = [100, 101, 102, 103]
     idx = pd.date_range("2026-01-01", periods=len(closes), freq="h")
@@ -65,6 +73,7 @@ def test_paper_blocks_mark_inconsistency(tmp_path, monkeypatch):
         execution=ExecutionConfig(enforce_mark_bid_ask_consistency=True, stale_mark_deviation_bps=5.0),
         timeframe="1h",
         state_file=str(tmp_path / "paper_state.json"),
+        exchange=FakeExchange(),
     )
     monkeypatch.setattr(paper, "fetch_recent_data", lambda limit=300: df)
     monkeypatch.setattr(paper, "mark_price", lambda: float(df.iloc[-1]["close"]))

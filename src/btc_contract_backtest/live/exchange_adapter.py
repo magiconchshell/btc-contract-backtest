@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import time
 
-import ccxt
-
 from btc_contract_backtest.engine.execution_models import Order, OrderStatus, ReconcileReport
 from btc_contract_backtest.live.reconcile import build_detailed_reconcile_report
 
@@ -21,7 +19,7 @@ class AdapterResult:
 class ExchangeExecutionAdapter:
     def __init__(
         self,
-        exchange: ccxt.Exchange,
+        exchange: Any,
         symbol: str,
         max_retries: int = 3,
         retry_delay_seconds: float = 1.0,

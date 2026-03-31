@@ -43,9 +43,9 @@ def test_shadow_session_writes_audit_log(tmp_path):
         execution=ExecutionConfig(enforce_mark_bid_ask_consistency=False),
         live_risk=LiveRiskConfig(reconcile_on_startup=False),
         audit_log=str(audit_path),
+        state_file=str(tmp_path / "shadow_state.json"),
+        exchange=FakeExchange(),
     )
-    sess.exchange = FakeExchange()
-    sess.adapter.exchange = sess.exchange
 
     payload = sess.step()
     assert audit_path.exists()

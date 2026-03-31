@@ -41,9 +41,8 @@ def test_shadow_session_still_runs_after_runtime_refactor(tmp_path):
         live_risk=LiveRiskConfig(reconcile_on_startup=False),
         audit_log=str(tmp_path / "shadow.jsonl"),
         state_file=str(tmp_path / "shadow_state.json"),
+        exchange=FakeExchange(),
     )
-    sess.exchange = FakeExchange()
-    sess.adapter.exchange = sess.exchange
     payload = sess.step()
     assert payload["event"] in {"decision", "blocked", "hold"}
 
@@ -61,9 +60,8 @@ def test_governed_live_session_still_runs_after_runtime_refactor(tmp_path):
         governance_state_file=str(tmp_path / "gov.json"),
         alerts_file=str(tmp_path / "alerts.jsonl"),
         state_file=str(tmp_path / "live_state.json"),
+        exchange=FakeExchange(),
     )
-    sess.exchange = FakeExchange()
-    sess.adapter.exchange = sess.exchange
     sess.gov_state.set_mode(__import__('btc_contract_backtest.live.governance', fromlist=['TradingMode']).TradingMode.APPROVAL_REQUIRED)
     payload = sess.step()
     assert payload["event"] in {"decision", "halted", "blocked", "hold"} or "result" in payload

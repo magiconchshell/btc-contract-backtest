@@ -19,6 +19,14 @@ class StaticStrategy(BaseStrategy):
         return out
 
 
+class FakeExchange:
+    def fetch_positions(self, symbols):
+        return []
+
+    def fetch_open_orders(self, symbol):
+        return []
+
+
 def make_df(closes):
     idx = pd.date_range("2026-01-01", periods=len(closes), freq="h")
     return pd.DataFrame(
@@ -57,6 +65,7 @@ def test_backtest_and_paper_can_share_core_logic(tmp_path, monkeypatch):
         execution=ExecutionConfig(allow_partial_fills=False),
         timeframe="1h",
         state_file=str(tmp_path / "paper_state.json"),
+        exchange=FakeExchange(),
     )
 
     seq = [strategy.generate_signals(df.iloc[: i + 1]) for i in range(len(df))]

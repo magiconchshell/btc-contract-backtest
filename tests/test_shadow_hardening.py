@@ -45,9 +45,8 @@ def test_shadow_state_persistence(tmp_path):
         live_risk=LiveRiskConfig(reconcile_on_startup=False),
         audit_log=str(audit_path),
         state_file=str(state_path),
+        exchange=FakeExchange(),
     )
-    sess.exchange = FakeExchange()
-    sess.adapter.exchange = sess.exchange
     payload = sess.step()
     assert state_path.exists()
     state = json.loads(state_path.read_text())

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from typing import Optional
-
-import ccxt
 import numpy as np
 import pandas as pd
 
@@ -33,6 +31,8 @@ class FuturesBacktestEngine:
         self.timeframe = timeframe
         self.execution = execution or ExecutionConfig()
         self.live_risk = live_risk or LiveRiskConfig()
+        import ccxt
+
         self.exchange = ccxt.binance(
             {
                 "enableRateLimit": True,
