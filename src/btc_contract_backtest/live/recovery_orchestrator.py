@@ -31,7 +31,7 @@ class RecoveryOrchestrator:
         if not open_result.ok:
             return RecoveryReport(ok=False, notes=[f"fetch_open_orders_failed:{open_result.error}"])
 
-        remote_orders = open_result.payload or []
+        remote_orders = open_result.payload if isinstance(open_result.payload, list) else []
         recovered_intents = []
         unresolved_intents = []
         remote_only_orders = []
@@ -64,8 +64,9 @@ class RecoveryOrchestrator:
                 unresolved_intents.append(intent)
                 continue
             lookup = self.adapter.fetch_open_orders_by_client_order_id(client_order_id)
-            if lookup.ok and lookup.payload:
-                remote = lookup.payload[0]
+            recovered_orders = lookup.payload if isinstance(lookup.payload, list) else []
+            if lookup.ok and recovered_orders:
+                remote = recovered_orders[0]
                 self.submit_ledger.mark_state(
                     intent["request_id"],
                     state="submitted",

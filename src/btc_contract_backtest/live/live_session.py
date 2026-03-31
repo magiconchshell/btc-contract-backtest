@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import ccxt
 import pandas as pd
@@ -20,6 +20,7 @@ from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
 from btc_contract_backtest.live.order_monitor import OrderLifecycleMonitor
 from btc_contract_backtest.live.recovery_orchestrator import RecoveryOrchestrator
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
+from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
@@ -108,7 +109,7 @@ class GovernedLiveSession(TradingRuntime):
         df.set_index("timestamp", inplace=True)
         return df
 
-    def enrich_snapshot(self, signal_df: pd.DataFrame, latest):
+    def enrich_snapshot(self, signal_df: pd.DataFrame, latest) -> MarketSnapshot:
         snapshot = super().enrich_snapshot(signal_df, latest)
         ticker = self.exchange.fetch_ticker(self.context.contract.symbol)
         snapshot.mark_price = float(ticker.get("last") or snapshot.close)
@@ -152,7 +153,8 @@ class GovernedLiveSession(TradingRuntime):
         balance = self.adapter.fetch_balance()
         available_margin = None
         if balance.ok and isinstance(balance.payload, dict):
-            usdt = balance.payload.get("USDT") or {}
+            usdt_raw = balance.payload.get("USDT")
+            usdt = usdt_raw if isinstance(usdt_raw, dict) else {}
             available_margin = usdt.get("free")
         local_position = {
             "side": self.core.position.side,
@@ -161,7 +163,8 @@ class GovernedLiveSession(TradingRuntime):
         }
         open_local_orders = len([o for o in local_orders if str(o.get("state") or o.get("status") or "").lower() not in {"filled", "canceled", "rejected", "expired"}])
         reconcile = self.adapter.reconcile_state(self.core.position.side, open_local_orders, local_position=local_position, local_orders=local_orders)
-        reconcile_ok = bool(reconcile.ok and reconcile.payload and reconcile.payload.get("ok", False))
+        reconcile_payload = reconcile.payload if isinstance(reconcile.payload, dict) else {}
+        reconcile_ok = bool(reconcile.ok and reconcile_payload.get("ok", False))
         payload["reconcile_report"] = reconcile.payload if reconcile.ok else {"ok": False, "error": reconcile.error}
         result = self.executor.submit_intended_order(
             symbol=self.context.contract.symbol,

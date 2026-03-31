@@ -12,6 +12,7 @@ from btc_contract_backtest.config.models import AccountConfig, ContractSpec, Exe
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.shadow_recovery import ShadowRecovery
+from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -81,7 +82,7 @@ class ShadowTradingSession(TradingRuntime):
         df.set_index("timestamp", inplace=True)
         return df
 
-    def enrich_snapshot(self, signal_df: pd.DataFrame, latest):
+    def enrich_snapshot(self, signal_df: pd.DataFrame, latest) -> MarketSnapshot:
         snapshot = super().enrich_snapshot(signal_df, latest)
         ticker = self.exchange.fetch_ticker(self.context.contract.symbol)
         snapshot.mark_price = float(ticker.get("last") or snapshot.close)

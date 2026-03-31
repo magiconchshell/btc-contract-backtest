@@ -6,10 +6,21 @@ from typing import Optional
 
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
+from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.engine.simulator_core import SimulatorCore
 from btc_contract_backtest.live.watchdog import HeartbeatWatchdog
-from btc_contract_backtest.runtime.runtime_persistence import InMemoryRuntimePersistence, RuntimePersistence, RuntimeStepRecord
+from btc_contract_backtest.runtime.runtime_persistence import (
+    InMemoryRuntimePersistence,
+    RuntimePersistence,
+    RuntimeStepRecord,
+)
 from btc_contract_backtest.strategies.base import BaseStrategy
 
 
@@ -44,8 +55,17 @@ class TradingRuntime:
             timeframe=timeframe,
         )
         self.strategy = strategy
-        self.core = SimulatorCore(contract, account, risk, self.context.execution, self.context.live_risk)
-        self.watchdog = HeartbeatWatchdog(self.context.live_risk.heartbeat_timeout_seconds, self.context.live_risk.max_consecutive_failures)
+        self.core = SimulatorCore(
+            contract,
+            account,
+            risk,
+            self.context.execution,
+            self.context.live_risk,
+        )
+        self.watchdog = HeartbeatWatchdog(
+            self.context.live_risk.heartbeat_timeout_seconds,
+            self.context.live_risk.max_consecutive_failures,
+        )
         self.persistence = persistence or InMemoryRuntimePersistence()
         self._last_risk_event_count = 0
 
@@ -55,7 +75,7 @@ class TradingRuntime:
     def fetch_recent_data(self, limit: int = 300) -> pd.DataFrame:
         raise NotImplementedError
 
-    def enrich_snapshot(self, signal_df: pd.DataFrame, latest) -> object:
+    def enrich_snapshot(self, signal_df: pd.DataFrame, latest) -> MarketSnapshot:
         snapshot = self.core.snapshot_from_bar(signal_df.index[-1], latest)
         return snapshot
 
@@ -142,7 +162,11 @@ class TradingRuntime:
 
     def step(self):
         if self.watchdog.state.halted:
-            payload = {"event": "halted", "reason": self.watchdog.state.halt_reason, "timestamp": self.now_iso()}
+            payload = {
+                "event": "halted",
+                "reason": self.watchdog.state.halt_reason,
+                "timestamp": self.now_iso(),
+            }
             self.persist_payload(payload, {"stage": "watchdog"})
             return payload
 
@@ -157,7 +181,15 @@ class TradingRuntime:
 
         signal = self.evaluate_signal(latest)
         if signal == 0:
-            payload = {"event": "hold", "reason": "no_signal", "timestamp": self.now_iso(), "snapshot": {"close": snapshot.close, "timestamp": snapshot.timestamp}}
+            payload = {
+                "event": "hold",
+                "reason": "no_signal",
+                "timestamp": self.now_iso(),
+                "snapshot": {
+                    "close": snapshot.close,
+                    "timestamp": snapshot.timestamp,
+                },
+            }
             self.persist_payload(payload, {"stage": "signal"})
             return self.on_hold(payload)
 

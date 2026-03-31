@@ -11,7 +11,14 @@ from btc_contract_backtest.runtime.runtime_persistence import RuntimePersistence
 
 
 class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
-    def __init__(self, path: str, *, mode: str = "unknown", symbol: str = "UNKNOWN", leverage: float = 1.0):
+    def __init__(
+        self,
+        path: str,
+        *,
+        mode: str = "unknown",
+        symbol: str = "UNKNOWN",
+        leverage: float = 1.0,
+    ):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.mode = mode
@@ -24,9 +31,9 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
             return {}
         return json.loads(self.path.read_text())
 
-    def _serialize(self, value: Any):
-        if is_dataclass(value):
-            return asdict(value)
+    def _serialize(self, value: Any) -> Any:
+        if is_dataclass(value) and not isinstance(value, type):
+            return {k: self._serialize(v) for k, v in asdict(value).items()}
         if isinstance(value, dict):
             return {k: self._serialize(v) for k, v in value.items()}
         if isinstance(value, list):
@@ -64,7 +71,9 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
         order_id = serialized.get("order_id")
         client_order_id = serialized.get("client_order_id")
         for idx, existing in enumerate(orders):
-            if existing.get("order_id") == order_id or (client_order_id and existing.get("client_order_id") == client_order_id):
+            if existing.get("order_id") == order_id or (
+                client_order_id and existing.get("client_order_id") == client_order_id
+            ):
                 orders[idx] = serialized
                 return
         orders.append(serialized)
@@ -97,7 +106,7 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
         self.save()
 
     def record_runtime_step(self, record: RuntimeStepRecord) -> None:
-        if is_dataclass(record):
+        if is_dataclass(record) and not isinstance(record, type):
             payload = asdict(record)
         elif hasattr(record, "__dict__") and vars(record):
             payload = {k: self._serialize(v) for k, v in vars(record).items()}

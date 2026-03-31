@@ -131,8 +131,9 @@ class GuardedLiveExecutor:
             return {"status": "submitted", "request_id": request_id, "client_order_id": client_order_id, "response": result.payload, "order": order}
         self.submit_ledger.append_attempt(request_id, SubmitAttempt(timestamp=datetime.now(timezone.utc).isoformat(), action="submit", status="error", payload={"error": result.error}))
         remote_lookup = self.adapter.fetch_open_orders_by_client_order_id(client_order_id)
-        if remote_lookup.ok and remote_lookup.payload:
-            remote_order = remote_lookup.payload[0]
+        recovered_orders = remote_lookup.payload if isinstance(remote_lookup.payload, list) else []
+        if remote_lookup.ok and recovered_orders:
+            remote_order = recovered_orders[0]
             exchange_order_id = remote_order.get("id")
             self.submit_ledger.mark_state(request_id, state="submitted", timestamp=datetime.now(timezone.utc).isoformat(), exchange_order_id=exchange_order_id, metadata={"recovered_from": "client_order_lookup"})
             self.event_source.emit("submit_intent_recovered", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "exchange_order_id": exchange_order_id, "response": remote_order, "original_error": result.error})

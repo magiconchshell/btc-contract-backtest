@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Any, Optional
 
 from datetime import datetime, timezone
 
@@ -24,8 +24,10 @@ class OrderLifecycleMonitor:
             self.audit.log("order_reconcile_failed", {"order_id": order.order_id, "error": result.error})
             return {"status": "error", "error": result.error, "record": record}
 
-        mapped = result.payload["mapped_status"]
-        remote = result.payload["remote"]
+        payload = result.payload if isinstance(result.payload, dict) else {}
+        mapped = str(payload.get("mapped_status") or "")
+        remote_raw = payload.get("remote")
+        remote: dict[str, Any] = remote_raw if isinstance(remote_raw, dict) else {}
         if record is not None:
             filled_quantity = remote.get("filled")
             avg_fill_price = remote.get("average")

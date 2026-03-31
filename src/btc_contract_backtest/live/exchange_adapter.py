@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,7 +14,7 @@ from btc_contract_backtest.live.reconcile import build_detailed_reconcile_report
 @dataclass
 class AdapterResult:
     ok: bool
-    payload: dict | Optional[list] = None
+    payload: dict[str, Any] | list[dict[str, Any]] | None = None
     error: Optional[str] = None
 
 
@@ -25,7 +25,7 @@ class ExchangeExecutionAdapter:
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
 
-    def _retry(self, fn):
+    def _retry(self, fn: Callable[[], dict[str, Any] | list[dict[str, Any]]]) -> AdapterResult:
         last_error = None
         for _ in range(self.max_retries):
             try:
@@ -82,9 +82,10 @@ class ExchangeExecutionAdapter:
         result = self.fetch_open_orders()
         if not result.ok:
             return result
-        matches = []
-        for row in result.payload or []:
-            info = row.get("info") if isinstance(row, dict) else {}
+        matches: list[dict[str, Any]] = []
+        open_orders = result.payload if isinstance(result.payload, list) else []
+        for row in open_orders:
+            info = row.get("info")
             if row.get("clientOrderId") == client_order_id or (isinstance(info, dict) and info.get("clientOrderId") == client_order_id):
                 matches.append(row)
         return AdapterResult(ok=True, payload=matches)
@@ -107,7 +108,8 @@ class ExchangeExecutionAdapter:
             return AdapterResult(ok=False, error=open_orders.error)
 
         remote_position_side = 0
-        remote_positions = positions.payload or []
+        remote_positions_payload = positions.payload
+        remote_positions = remote_positions_payload if isinstance(remote_positions_payload, list) else []
         for pos in remote_positions:
             contracts = float(pos.get("contracts") or pos.get("positionAmt") or 0.0)
             if contracts > 0:
@@ -117,7 +119,9 @@ class ExchangeExecutionAdapter:
                 remote_position_side = -1
                 break
 
-        remote_open_order_count = len(open_orders.payload or [])
+        remote_orders_payload = open_orders.payload
+        remote_orders = remote_orders_payload if isinstance(remote_orders_payload, list) else []
+        remote_open_order_count = len(remote_orders)
         differences = []
         if remote_position_side != local_position_side:
             differences.append(f"position side mismatch local={local_position_side} remote={remote_position_side}")
@@ -128,7 +132,7 @@ class ExchangeExecutionAdapter:
             local_position=local_position or {"side": local_position_side, "quantity": 0.0, "entry_price": None},
             remote_positions=remote_positions,
             local_orders=local_orders or [],
-            remote_orders=open_orders.payload or [],
+            remote_orders=remote_orders,
         ).to_dict()
         if not details.get("ok", True):
             differences.extend([

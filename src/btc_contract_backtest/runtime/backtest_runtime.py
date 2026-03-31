@@ -72,8 +72,10 @@ class BacktestRuntime(TradingRuntime):
         if self.core.position.side == 0:
             return
         self.core.position.bars_held += 1
-        self.core.position.peak_price = snapshot.close if self.core.position.peak_price is None else max(self.core.position.peak_price, snapshot.close)
-        self.core.position.trough_price = snapshot.close if self.core.position.trough_price is None else min(self.core.position.trough_price, snapshot.close)
+        peak_price = self.core.position.peak_price
+        trough_price = self.core.position.trough_price
+        self.core.position.peak_price = snapshot.close if peak_price is None else max(peak_price, snapshot.close)
+        self.core.position.trough_price = snapshot.close if trough_price is None else min(trough_price, snapshot.close)
         self.core.apply_periodic_funding(snapshot)
 
     def _check_liquidation(self, snapshot) -> bool:
@@ -134,12 +136,20 @@ class BacktestRuntime(TradingRuntime):
                 should_close = "break_even_stop"
         if self.context.risk.stepped_trailing_stop_pct is not None and should_close is None:
             if self.core.position.side == 1:
-                anchor = self.core.position.peak_price if self.core.position.stepped_stop_anchor is None else max(self.core.position.stepped_stop_anchor, self.core.position.peak_price)
+                peak_price = self.core.position.peak_price
+                if peak_price is None:
+                    anchor = self.core.position.stepped_stop_anchor or price
+                else:
+                    anchor = peak_price if self.core.position.stepped_stop_anchor is None else max(self.core.position.stepped_stop_anchor, peak_price)
                 self.core.position.stepped_stop_anchor = anchor
                 if price <= anchor * (1 - self.context.risk.stepped_trailing_stop_pct):
                     should_close = "stepped_trailing_stop"
             if self.core.position.side == -1:
-                anchor = self.core.position.trough_price if self.core.position.stepped_stop_anchor is None else min(self.core.position.stepped_stop_anchor, self.core.position.trough_price)
+                trough_price = self.core.position.trough_price
+                if trough_price is None:
+                    anchor = self.core.position.stepped_stop_anchor or price
+                else:
+                    anchor = trough_price if self.core.position.stepped_stop_anchor is None else min(self.core.position.stepped_stop_anchor, trough_price)
                 self.core.position.stepped_stop_anchor = anchor
                 if price >= anchor * (1 + self.context.risk.stepped_trailing_stop_pct):
                     should_close = "stepped_trailing_stop"

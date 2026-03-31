@@ -64,6 +64,10 @@ def _contracts(raw: dict[str, Any]) -> float:
     return float(raw.get("contracts") or raw.get("positionAmt") or raw.get("quantity") or raw.get("qty") or 0.0)
 
 
+def _optional_float(value: Any) -> Optional[float]:
+    return None if value in (None, "") else float(value)
+
+
 def _position_side(raw: dict[str, Any]) -> int:
     qty = _contracts(raw)
     if qty > 0:
@@ -77,7 +81,7 @@ def _position_entry(raw: dict[str, Any]) -> Optional[float]:
     val = raw.get("entry_price")
     if val is None:
         val = raw.get("entryPrice")
-    return None if val in (None, "") else float(val)
+    return _optional_float(val)
 
 
 def _order_key(raw: dict[str, Any]) -> Optional[str]:
@@ -94,7 +98,7 @@ def _normalize_local_order(raw: dict[str, Any]) -> dict[str, Any]:
         "type": raw.get("order_type") or raw.get("type"),
         "quantity": float(raw.get("quantity") or 0.0),
         "filled_quantity": float(raw.get("filled_quantity") or 0.0),
-        "avg_fill_price": None if raw.get("avg_fill_price") in (None, "") else float(raw.get("avg_fill_price")),
+        "avg_fill_price": _optional_float(raw.get("avg_fill_price")),
         "reduce_only": bool(raw.get("reduce_only", False)),
         "status": _normalize_status(raw.get("status") or raw.get("state")),
     }
@@ -122,7 +126,7 @@ def _normalize_remote_order(raw: dict[str, Any]) -> dict[str, Any]:
         "type": order_type,
         "quantity": float(amount or 0.0),
         "filled_quantity": float(filled or 0.0),
-        "avg_fill_price": None if avg in (None, "") else float(avg),
+        "avg_fill_price": _optional_float(avg),
         "reduce_only": reduce_only,
         "status": _normalize_status(raw.get("status")),
     }
@@ -143,24 +147,30 @@ def build_detailed_reconcile_report(
     remote_orders = remote_orders or []
 
     remote_position_raw = next((p for p in remote_positions if _position_side(p) != 0), remote_positions[0] if remote_positions else {})
+    local_side = int(local_position.get("side", 0) or 0)
+    local_quantity = float(local_position.get("quantity") or 0.0)
+    local_entry_price = _position_entry(local_position)
     normalized_local_position = {
-        "side": int(local_position.get("side", 0) or 0),
-        "quantity": float(local_position.get("quantity") or 0.0),
-        "entry_price": _position_entry(local_position),
+        "side": local_side,
+        "quantity": local_quantity,
+        "entry_price": local_entry_price,
     }
+    remote_side = _position_side(remote_position_raw)
+    remote_quantity = abs(_contracts(remote_position_raw))
+    remote_entry_price = _position_entry(remote_position_raw)
     normalized_remote_position = {
-        "side": _position_side(remote_position_raw),
-        "quantity": abs(_contracts(remote_position_raw)),
-        "entry_price": _position_entry(remote_position_raw),
+        "side": remote_side,
+        "quantity": remote_quantity,
+        "entry_price": remote_entry_price,
     }
 
     position_mismatch_types: list[str] = []
-    if normalized_local_position["side"] != normalized_remote_position["side"]:
+    if local_side != remote_side:
         position_mismatch_types.append("side")
-    if abs(normalized_local_position["quantity"] - normalized_remote_position["quantity"]) > quantity_tolerance:
+    if abs(local_quantity - remote_quantity) > quantity_tolerance:
         position_mismatch_types.append("quantity")
-    if normalized_local_position["entry_price"] is not None and normalized_remote_position["entry_price"] is not None:
-        if abs(normalized_local_position["entry_price"] - normalized_remote_position["entry_price"]) > price_tolerance:
+    if local_entry_price is not None and remote_entry_price is not None:
+        if abs(local_entry_price - remote_entry_price) > price_tolerance:
             position_mismatch_types.append("entry_price")
 
     position_mismatch = None
@@ -203,9 +213,9 @@ def build_detailed_reconcile_report(
             mismatch_types.append("quantity")
         if abs(float(local.get("filled_quantity") or 0.0) - float(remote.get("filled_quantity") or 0.0)) > quantity_tolerance:
             mismatch_types.append("filled_quantity")
-        local_avg = local.get("avg_fill_price")
-        remote_avg = remote.get("avg_fill_price")
-        if local_avg is not None and remote_avg is not None and abs(float(local_avg) - float(remote_avg)) > price_tolerance:
+        local_avg = _optional_float(local.get("avg_fill_price"))
+        remote_avg = _optional_float(remote.get("avg_fill_price"))
+        if local_avg is not None and remote_avg is not None and abs(local_avg - remote_avg) > price_tolerance:
             mismatch_types.append("avg_fill_price")
         if bool(local.get("reduce_only")) != bool(remote.get("reduce_only")):
             mismatch_types.append("reduce_only")

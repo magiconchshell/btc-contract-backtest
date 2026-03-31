@@ -63,17 +63,19 @@ class ExchangeConstraintChecker:
         current_open_positions: int = 0,
     ) -> ConstraintCheckResult:
         violations: list[dict[str, Any]] = []
+        normalized_quantity = self._round_to_lot(quantity)
+        normalized_price = self._round_to_tick(price)
         normalized = {
-            "quantity": self._round_to_lot(quantity),
-            "price": self._round_to_tick(price),
+            "quantity": normalized_quantity,
+            "price": normalized_price,
             "notional": notional,
         }
 
         if quantity <= 0:
             violations.append(ConstraintViolation("non_positive_quantity", "Quantity must be positive").to_dict())
-        if abs(normalized["quantity"] - quantity) > 1e-9:
+        if abs(normalized_quantity - quantity) > 1e-9:
             violations.append(ConstraintViolation("lot_size_violation", "Quantity does not conform to lot size", metadata={"quantity": quantity, "normalized_quantity": normalized["quantity"], "lot_size": self.contract.lot_size}).to_dict())
-        if price is not None and normalized["price"] is not None and abs(normalized["price"] - price) > 1e-9:
+        if price is not None and normalized_price is not None and abs(normalized_price - price) > 1e-9:
             violations.append(ConstraintViolation("tick_size_violation", "Price does not conform to tick size", metadata={"price": price, "normalized_price": normalized["price"], "tick_size": self.contract.tick_size}).to_dict())
         if notional < self.min_notional:
             violations.append(ConstraintViolation("min_notional_violation", "Notional below exchange minimum", metadata={"notional": notional, "min_notional": self.min_notional}).to_dict())
