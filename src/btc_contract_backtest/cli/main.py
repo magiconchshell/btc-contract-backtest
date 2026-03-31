@@ -21,6 +21,8 @@ def parse_args():
         description="Futures/perpetual contract backtest and paper trading toolkit"
     )
     p.add_argument("--symbol", default="BTC/USDT")
+    p.add_argument("--exchange-profile", default="binance_futures_testnet", choices=["binance_futures_testnet", "binance_futures_mainnet"])
+    p.add_argument("--metadata-cache-file", default="var/binance_futures_exchange_info.json")
     p.add_argument("--timeframe", default="1h")
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--leverage", type=int, default=5)
@@ -104,7 +106,7 @@ def main():
         print({"review": review, "markdown": str(md), "json": str(js)})
         return
 
-    contract = ContractSpec(symbol=args.symbol, leverage=args.leverage)
+    contract = ContractSpec(symbol=args.symbol, leverage=args.leverage, exchange_profile=args.exchange_profile)
     account = AccountConfig(initial_capital=args.capital)
     risk = RiskConfig(
         stop_loss_pct=args.stop_loss_pct,

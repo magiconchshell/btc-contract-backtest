@@ -18,6 +18,15 @@ from btc_contract_backtest.config.models import (
 )
 from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.live.audit_logger import AuditLogger
+from btc_contract_backtest.live.binance_futures import (
+    BinanceFuturesMetadataSync,
+    create_binance_futures_exchange,
+    with_binance_symbol_rules,
+)
+from btc_contract_backtest.live.binance_futures_stream import (
+    BinanceFuturesStreamConfig,
+    BinanceFuturesUserDataEventSource,
+)
 from btc_contract_backtest.live.event_stream import (
     EventDrivenExecutionSource,
     EventRecorder,
@@ -67,7 +76,17 @@ class GovernedLiveSession(TradingRuntime):
         governance_state_file: str = "governance_state.json",
         alerts_file: str = "live_alerts.jsonl",
         state_file: str = "live_session_state.json",
+        metadata_cache_file: str = "var/binance_futures_exchange_info.json",
     ):
+        metadata_sync = BinanceFuturesMetadataSync(
+            profile=contract.exchange_profile,
+            cache_path=metadata_cache_file,
+        )
+        try:
+            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol)
+            contract = with_binance_symbol_rules(contract, symbol_rules)
+        except Exception:  # noqa: BLE001
+            pass
         super().__init__(
             contract,
             account,
@@ -83,16 +102,15 @@ class GovernedLiveSession(TradingRuntime):
                 leverage=contract.leverage,
             ),
         )
-        self.exchange = ccxt.binance(
-            {
-                "enableRateLimit": True,
-                "options": {"defaultType": "future"},
-            }
-        )
+        self.exchange = create_binance_futures_exchange(contract.exchange_profile)
+        self.metadata_sync = metadata_sync
         self.adapter = ExchangeExecutionAdapter(
             self.exchange,
             contract.symbol,
             max_retries=self.context.live_risk.max_consecutive_failures,
+        )
+        self.adapter.configure_binance_futures_mode(
+            use_testnet=bool(getattr(contract, "exchange_profile", "").endswith("testnet"))
         )
         self.audit = AuditLogger(audit_log)
         self.alerts = AlertSink(alerts_file)
@@ -113,8 +131,16 @@ class GovernedLiveSession(TradingRuntime):
         self.submit_ledger = SubmitLedger(
             str(Path(state_file).with_name("submit_ledger.json"))
         )
+        self.exchange_events = BinanceFuturesUserDataEventSource(
+            self.adapter,
+            BinanceFuturesStreamConfig(
+                symbol=contract.symbol,
+                use_testnet=bool(getattr(contract, "exchange_profile", "").endswith("testnet")),
+            ),
+        )
         self.event_source = EventDrivenExecutionSource(
-            EventRecorder(str(Path(state_file).with_name("execution_events.jsonl")))
+            EventRecorder(str(Path(state_file).with_name("execution_events.jsonl"))),
+            upstream=self.exchange_events,
         )
         self.policy = GovernancePolicy(
             risk,
@@ -151,6 +177,7 @@ class GovernedLiveSession(TradingRuntime):
             store.set_state_fields(
                 recovery_report=recovery_report,
                 execution_events=self.event_source.replay(),
+                event_stream_boundary=self.event_source.boundary_state(),
             )
             store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,

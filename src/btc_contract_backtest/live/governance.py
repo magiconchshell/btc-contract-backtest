@@ -271,4 +271,7 @@ class GovernancePolicy:
         return GovernanceDecision(False, f"mode={self.mode.value}_non_live", severity="info")
 
     def snapshot(self) -> dict:
-        return {"mode": self.mode.value, "live_risk": asdict(self.live_risk), "risk": asdict(self.risk)}
+        payload = {"mode": self.mode.value, "live_risk": asdict(self.live_risk), "risk": asdict(self.risk)}
+        if self.contract is not None:
+            payload["contract"] = asdict(self.contract)
+        return payload

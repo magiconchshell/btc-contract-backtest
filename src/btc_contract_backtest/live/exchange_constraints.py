@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from math import floor
 from typing import Optional, Any
 
 from btc_contract_backtest.config.models import ContractSpec
@@ -28,15 +29,15 @@ class ConstraintCheckResult:
 
 
 class ExchangeConstraintChecker:
-    def __init__(self, contract: ContractSpec, min_notional: float = 5.0):
+    def __init__(self, contract: ContractSpec, min_notional: Optional[float] = None):
         self.contract = contract
-        self.min_notional = min_notional
+        self.min_notional = contract.min_notional if min_notional is None else min_notional
 
     def _round_to_lot(self, quantity: float) -> float:
         lot = self.contract.lot_size
         if lot <= 0:
             return quantity
-        units = round(quantity / lot)
+        units = floor(quantity / lot)
         return round(units * lot, 12)
 
     def _round_to_tick(self, price: Optional[float]) -> Optional[float]:
@@ -45,7 +46,7 @@ class ExchangeConstraintChecker:
         tick = self.contract.tick_size
         if tick <= 0:
             return price
-        units = round(price / tick)
+        units = floor(price / tick)
         return round(units * tick, 12)
 
     def check(
@@ -110,6 +111,28 @@ class ExchangeConstraintChecker:
                     metadata={
                         "notional": notional,
                         "min_notional": self.min_notional,
+                    },
+                ).to_dict()
+            )
+        if self.contract.min_quantity is not None and quantity + 1e-12 < self.contract.min_quantity:
+            violations.append(
+                ConstraintViolation(
+                    "min_quantity_violation",
+                    "Quantity below exchange minimum",
+                    metadata={
+                        "quantity": quantity,
+                        "min_quantity": self.contract.min_quantity,
+                    },
+                ).to_dict()
+            )
+        if self.contract.max_quantity is not None and quantity - 1e-12 > self.contract.max_quantity:
+            violations.append(
+                ConstraintViolation(
+                    "max_quantity_violation",
+                    "Quantity above exchange maximum",
+                    metadata={
+                        "quantity": quantity,
+                        "max_quantity": self.contract.max_quantity,
                     },
                 ).to_dict()
             )

@@ -31,6 +31,15 @@ class ExchangeExecutionAdapter:
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
 
+    def configure_binance_futures_mode(self, *, use_testnet: bool = True) -> None:
+        set_sandbox = getattr(self.exchange, "set_sandbox_mode", None)
+        if callable(set_sandbox):
+            set_sandbox(use_testnet)
+        options = getattr(self.exchange, "options", None)
+        if isinstance(options, dict):
+            options.setdefault("defaultType", "future")
+            options.setdefault("defaultSubType", "linear")
+
     def _retry(self, fn: Callable[[], dict[str, Any] | list[dict[str, Any]]]) -> AdapterResult:
         last_error = None
         for _ in range(self.max_retries):
@@ -103,6 +112,41 @@ class ExchangeExecutionAdapter:
             ):
                 matches.append(row)
         return AdapterResult(ok=True, payload=matches)
+
+    def _call_exchange_api(self, method_name: str, *, params: Optional[dict[str, Any]] = None) -> AdapterResult:
+        def op():
+            method = getattr(self.exchange, method_name)
+            if not callable(method):
+                raise AttributeError(f"exchange method unavailable: {method_name}")
+            return method(params or {})
+
+        return self._retry(op)
+
+    def create_user_data_stream_listen_key(self, *, use_testnet: bool = True) -> Optional[str]:
+        self.configure_binance_futures_mode(use_testnet=use_testnet)
+        for method_name in ("fapiPrivatePostListenKey", "fapiprivate_post_listenkey"):
+            result = self._call_exchange_api(method_name)
+            if result.ok and isinstance(result.payload, dict) and result.payload.get("listenKey"):
+                return str(result.payload["listenKey"])
+        return None
+
+    def keepalive_user_data_stream_listen_key(self, listen_key: str, *, use_testnet: bool = True) -> bool:
+        self.configure_binance_futures_mode(use_testnet=use_testnet)
+        params = {"listenKey": listen_key}
+        for method_name in ("fapiPrivatePutListenKey", "fapiprivate_put_listenkey"):
+            result = self._call_exchange_api(method_name, params=params)
+            if result.ok:
+                return True
+        return False
+
+    def close_user_data_stream_listen_key(self, listen_key: str, *, use_testnet: bool = True) -> bool:
+        self.configure_binance_futures_mode(use_testnet=use_testnet)
+        params = {"listenKey": listen_key}
+        for method_name in ("fapiPrivateDeleteListenKey", "fapiprivate_delete_listenkey"):
+            result = self._call_exchange_api(method_name, params=params)
+            if result.ok:
+                return True
+        return False
 
     def reconcile_order_status(self, order: Order) -> AdapterResult:
         def op():

@@ -7,9 +7,20 @@ class ContractSpec:
     symbol: str = "BTC/USDT"
     market_type: str = "perpetual"
     quote_currency: str = "USDT"
+    exchange_id: str = "binance"
+    exchange_profile: str = "binance_futures_testnet"
     leverage: int = 5
     tick_size: float = 0.1
     lot_size: float = 0.001
+    min_notional: float = 5.0
+    min_quantity: Optional[float] = None
+    max_quantity: Optional[float] = None
+    price_precision: Optional[int] = None
+    quantity_precision: Optional[int] = None
+    margin_mode: str = "isolated"
+    position_mode: str = "one_way"
+    metadata_source: str = "static"
+    metadata_as_of: Optional[str] = None
 
 
 @dataclass
