@@ -7,6 +7,7 @@ import time
 import ccxt
 
 from btc_contract_backtest.engine.execution_models import Order, OrderStatus, ReconcileReport
+from btc_contract_backtest.live.reconcile import build_detailed_reconcile_report
 
 
 @dataclass
@@ -70,6 +71,17 @@ class ExchangeExecutionAdapter:
     def fetch_order(self, order_id: str) -> AdapterResult:
         return self._retry(lambda: self.exchange.fetch_order(order_id, self.symbol))
 
+    def fetch_open_orders_by_client_order_id(self, client_order_id: str) -> AdapterResult:
+        result = self.fetch_open_orders()
+        if not result.ok:
+            return result
+        matches = []
+        for row in result.payload or []:
+            info = row.get("info") if isinstance(row, dict) else {}
+            if row.get("clientOrderId") == client_order_id or (isinstance(info, dict) and info.get("clientOrderId") == client_order_id):
+                matches.append(row)
+        return AdapterResult(ok=True, payload=matches)
+
     def reconcile_order_status(self, order: Order) -> AdapterResult:
         def op():
             remote = self.exchange.fetch_order(order.exchange_order_id or order.order_id, order.symbol)
@@ -79,7 +91,7 @@ class ExchangeExecutionAdapter:
 
         return self._retry(op)
 
-    def reconcile_state(self, local_position_side: int, local_open_orders: int) -> AdapterResult:
+    def reconcile_state(self, local_position_side: int, local_open_orders: int, local_position: dict | None = None, local_orders: list[dict] | None = None) -> AdapterResult:
         positions = self.fetch_positions()
         open_orders = self.fetch_open_orders()
         if not positions.ok:
@@ -105,13 +117,29 @@ class ExchangeExecutionAdapter:
         if remote_open_order_count != local_open_orders:
             differences.append(f"open order count mismatch local={local_open_orders} remote={remote_open_order_count}")
 
+        details = build_detailed_reconcile_report(
+            local_position=local_position or {"side": local_position_side, "quantity": 0.0, "entry_price": None},
+            remote_positions=remote_positions,
+            local_orders=local_orders or [],
+            remote_orders=open_orders.payload or [],
+        ).to_dict()
+        if not details.get("ok", True):
+            differences.extend([
+                f"order_mismatch_count={details.get('summary', {}).get('order_mismatch_count', 0)}",
+                f"orphan_local_order_count={details.get('summary', {}).get('orphan_local_order_count', 0)}",
+                f"orphan_remote_order_count={details.get('summary', {}).get('orphan_remote_order_count', 0)}",
+            ])
+            if details.get("position_mismatch"):
+                differences.append("detailed_position_mismatch")
+
         report = ReconcileReport(
-            ok=len(differences) == 0,
+            ok=len(differences) == 0 and bool(details.get("ok", False)),
             timestamp=datetime.now(timezone.utc).isoformat(),
             local_position_side=local_position_side,
             remote_position_side=remote_position_side,
             local_open_orders=local_open_orders,
             remote_open_orders=remote_open_order_count,
             differences=differences,
+            details=details,
         )
         return AdapterResult(ok=True, payload=report.__dict__)

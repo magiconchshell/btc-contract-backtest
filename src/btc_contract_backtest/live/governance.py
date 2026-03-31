@@ -5,7 +5,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
 
-from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import ContractSpec, LiveRiskConfig, RiskConfig
 
 
 class TradingMode(str, Enum):
@@ -118,10 +118,11 @@ class GovernanceState:
 
 
 class GovernancePolicy:
-    def __init__(self, risk: RiskConfig, live_risk: LiveRiskConfig, mode: TradingMode):
+    def __init__(self, risk: RiskConfig, live_risk: LiveRiskConfig, mode: TradingMode, contract: ContractSpec | None = None):
         self.risk = risk
         self.live_risk = live_risk
         self.mode = mode
+        self.contract = contract
 
     def evaluate(
         self,
@@ -132,6 +133,8 @@ class GovernancePolicy:
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
+        quantity: float | None = None,
+        reduce_only: bool = False,
         emergency_stop: bool = False,
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
@@ -146,8 +149,24 @@ class GovernancePolicy:
             return GovernanceDecision(False, "stale_market_data", severity="critical")
         if not reconcile_ok:
             return GovernanceDecision(False, "reconcile_mismatch", severity="critical")
+        if quantity is not None and quantity <= 0:
+            return GovernanceDecision(False, "non_positive_quantity", severity="critical", metadata={"quantity": quantity})
+        if self.contract is not None:
+            lot = getattr(self.contract, "lot_size", None)
+            tick = getattr(self.contract, "tick_size", None)
+            if lot and quantity is not None:
+                rounded_qty = round(quantity / lot) * lot
+                if abs(rounded_qty - quantity) > 1e-9:
+                    return GovernanceDecision(False, "lot_size_violation", severity="critical", metadata={"quantity": quantity, "lot_size": lot})
+            if tick and notional > 0 and self.risk.max_symbol_exposure_pct is None:
+                pass
         if self.risk.max_symbol_exposure_pct is not None and notional > self.risk.max_symbol_exposure_pct:
             return GovernanceDecision(False, "symbol_exposure_limit", severity="critical", metadata={"notional": notional})
+        min_notional = None
+        if self.contract is not None and getattr(self.contract, "lot_size", None) is not None:
+            min_notional = getattr(self.contract, "lot_size")
+        if min_notional is not None and notional < min_notional:
+            return GovernanceDecision(False, "min_notional_violation", severity="critical", metadata={"notional": notional, "min_notional": min_notional})
         if self.risk.max_daily_loss_pct is not None and current_daily_loss_pct >= self.risk.max_daily_loss_pct:
             return GovernanceDecision(False, "daily_loss_limit", severity="critical", metadata={"current_daily_loss_pct": current_daily_loss_pct})
         if self.mode == TradingMode.APPROVAL_REQUIRED:

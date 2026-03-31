@@ -87,6 +87,12 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
     def set_last_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
         self.state["last_runtime_snapshot"] = self._serialize(snapshot)
 
+    def set_reconcile_report(self, reconcile_report: dict[str, Any]) -> None:
+        self.state["reconcile_report"] = self._serialize(reconcile_report)
+
+    def set_submit_ledger(self, submit_ledger: dict[str, Any]) -> None:
+        self.state["submit_ledger"] = self._serialize(submit_ledger)
+
     def flush(self) -> None:
         self.save()
 

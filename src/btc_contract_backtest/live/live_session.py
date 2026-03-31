@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import ccxt
@@ -15,6 +16,8 @@ from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, G
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.incident_store import IncidentRecord, IncidentStore
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
+from btc_contract_backtest.live.order_monitor import OrderLifecycleMonitor
+from btc_contract_backtest.live.submit_ledger import SubmitLedger
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
@@ -68,8 +71,10 @@ class GovernedLiveSession(TradingRuntime):
         self.watchdog.state.halt_reason = wd.get("halt_reason")
         state = self.gov_state.load()
         current_mode = TradingMode(state.get("mode", mode.value))
-        self.policy = GovernancePolicy(risk, self.context.live_risk, current_mode)
-        self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit)
+        self.submit_ledger = SubmitLedger(str(Path(state_file).with_name("submit_ledger.json")))
+        self.policy = GovernancePolicy(risk, self.context.live_risk, current_mode, contract=contract)
+        self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit, submit_ledger=self.submit_ledger)
+        self.order_monitor = OrderLifecycleMonitor(self.adapter, self.alerts, self.audit)
 
     def save_state(self, payload: dict | None = None):
         store = self.state_store()
@@ -77,6 +82,8 @@ class GovernedLiveSession(TradingRuntime):
             store.set_mode("governed_live")
             store.set_governance_state(self.gov_state.load())
             store.set_last_runtime_snapshot(payload or {})
+            store.set_reconcile_report((payload or {}).get("reconcile_report") or {})
+            store.set_submit_ledger(self.submit_ledger.load())
             store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
@@ -131,8 +138,19 @@ class GovernedLiveSession(TradingRuntime):
             return halted
 
         intended = payload.get("intended_order") or {}
-        reconcile = self.adapter.reconcile_state(self.core.position.side, 0)
+        local_orders = []
+        store = self.state_store()
+        if hasattr(store, "get_state"):
+            local_orders = store.get_state().get("orders", [])
+        local_position = {
+            "side": self.core.position.side,
+            "quantity": abs(self.core.position.quantity),
+            "entry_price": self.core.position.entry_price,
+        }
+        open_local_orders = len([o for o in local_orders if str(o.get("state") or o.get("status") or "").lower() not in {"filled", "canceled", "rejected", "expired"}])
+        reconcile = self.adapter.reconcile_state(self.core.position.side, open_local_orders, local_position=local_position, local_orders=local_orders)
         reconcile_ok = bool(reconcile.ok and reconcile.payload and reconcile.payload.get("ok", False))
+        payload["reconcile_report"] = reconcile.payload if reconcile.ok else {"ok": False, "error": reconcile.error}
         result = self.executor.submit_intended_order(
             symbol=self.context.contract.symbol,
             signal=payload["signal"],
@@ -145,7 +163,6 @@ class GovernedLiveSession(TradingRuntime):
             maintenance=state.get("maintenance", False),
             current_daily_loss_pct=0.0,
         )
-        store = self.state_store()
         if hasattr(store, "append_operator_action"):
             store.append_operator_action({
                 "timestamp": self.now_iso(),
@@ -159,14 +176,21 @@ class GovernedLiveSession(TradingRuntime):
         if order is not None and hasattr(store, "upsert_order"):
             record = canonical_record_from_order(order, submission_mode="governed_live")
             record = apply_local_submit(record, timestamp=order.created_at, payload={"signal": payload["signal"], "quantity": float(intended.get("quantity", 0.0))})
+            remote_status = "new"
+            if result.get("status") in {"submitted_recovered", "submitted"}:
+                remote_status = "new"
             record = apply_remote_status(
                 record,
-                status="new",
+                status=remote_status,
                 timestamp=self.now_iso(),
                 payload=result.get("response") or {},
                 exchange_order_id=(result.get("response") or {}).get("id"),
             )
             store.upsert_order(record.to_dict())
+            monitor_result = self.order_monitor.inspect(order, record=record)
+            if monitor_result.get("record") is not None:
+                store.upsert_order(monitor_result["record"].to_dict())
+            payload["post_submit_monitor"] = {k: v for k, v in monitor_result.items() if k != "record"}
             sample = sample_from_execution(
                 timestamp=self.now_iso(),
                 symbol=self.context.contract.symbol,

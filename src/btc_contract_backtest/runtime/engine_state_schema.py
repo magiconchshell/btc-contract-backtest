@@ -6,7 +6,7 @@ from typing import Any
 from btc_contract_backtest.engine.execution_models import PositionState
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -24,6 +24,8 @@ class EngineState:
     last_runtime_snapshot: dict[str, Any] = field(default_factory=dict)
     watchdog: dict[str, Any] = field(default_factory=dict)
     runtime_steps: list[dict[str, Any]] = field(default_factory=list)
+    reconcile_report: dict[str, Any] = field(default_factory=dict)
+    submit_ledger: dict[str, Any] = field(default_factory=dict)
     updated_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -58,5 +60,7 @@ def normalize_legacy_state(raw: dict[str, Any], *, mode: str, symbol: str, lever
         "halt_reason": raw.get("halt_reason"),
     }
     state["runtime_steps"] = raw.get("runtime_steps", [])
+    state["reconcile_report"] = raw.get("reconcile_report", {})
+    state["submit_ledger"] = raw.get("submit_ledger", {})
     state["updated_at"] = raw.get("updated_at")
     return state

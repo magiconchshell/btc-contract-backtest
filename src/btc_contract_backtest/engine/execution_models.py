@@ -115,3 +115,4 @@ class ReconcileReport:
     local_open_orders: int = 0
     remote_open_orders: int = 0
     differences: list[str] = field(default_factory=list)
+    details: dict = field(default_factory=dict)

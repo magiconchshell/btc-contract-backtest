@@ -40,5 +40,11 @@ class EngineStateStoreAPI:
     def set_last_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
         raise NotImplementedError
 
+    def set_reconcile_report(self, reconcile_report: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def set_submit_ledger(self, submit_ledger: dict[str, Any]) -> None:
+        raise NotImplementedError
+
     def flush(self) -> None:
         raise NotImplementedError
