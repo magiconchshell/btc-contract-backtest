@@ -1,7 +1,7 @@
-import json
 from pathlib import Path
 
 from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
+from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.governance import (
     AlertSink,
     GovernancePolicy,
@@ -9,7 +9,6 @@ from btc_contract_backtest.live.governance import (
     TradingMode,
 )
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
-from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import AdapterResult
 
 

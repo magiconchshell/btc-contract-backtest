@@ -651,7 +651,10 @@ def classify_unresolved_intents(
                     state=state,
                     classification="replay_terminal_state",
                     severity="info",
-                    reason=f"Replay recorded terminal state={replay_state_name}; intent can converge without open remote order",
+                    reason=(
+                        f"Replay recorded terminal state={replay_state_name}; intent can converge "
+                        "without open remote order"
+                    ),
                     exchange_order_id=intent.get("exchange_order_id")
                     or (replay or {}).get("order_id"),
                 )

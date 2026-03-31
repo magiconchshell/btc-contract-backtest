@@ -1,18 +1,17 @@
 import json
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-from btc_contract_backtest.config.models import LiveRiskConfig, RiskConfig
 from btc_contract_backtest.live.governance import (
-    GovernanceState,
     OperatorApprovalQueue,
     TradingMode,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_governance_cli_mode_and_emergency_stop(tmp_path):
-    import subprocess, sys
+    import subprocess
+    import sys
 
     state_path = Path(tmp_path) / "gov.json"
     subprocess.run(
@@ -43,7 +42,8 @@ def test_governance_cli_mode_and_emergency_stop(tmp_path):
 
 
 def test_governance_cli_approve_request(tmp_path):
-    import subprocess, sys
+    import subprocess
+    import sys
 
     approval_path = Path(tmp_path) / "approvals.json"
     approvals = OperatorApprovalQueue(str(approval_path))

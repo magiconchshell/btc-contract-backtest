@@ -51,7 +51,7 @@ class RecoveryOrchestrator:
 
     @staticmethod
     def _replay_terminal_details(
-        replay_order: Optional[dict[str, Any]]
+        replay_order: Optional[dict[str, Any]],
     ) -> Optional[dict[str, Any]]:
         if not isinstance(replay_order, dict):
             return None

@@ -21,7 +21,7 @@ TRAIN_DAYS = 120
 TEST_DAYS = 30
 FOLDS = 8
 
-STRATEGY_CANDIDATES = [
+STRATEGY_CANDIDATES: list[tuple[str, dict[str, object]]] = [
     ("regime_filtered", {}),
     ("regime_asymmetric", {}),
     ("long_only_regime", {}),

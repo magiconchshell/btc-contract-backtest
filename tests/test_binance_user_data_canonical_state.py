@@ -11,10 +11,7 @@ from btc_contract_backtest.live.event_stream import (
     EventDrivenExecutionSource,
     EventRecorder,
 )
-from btc_contract_backtest.live.exchange_adapter import (
-    ExchangeExecutionAdapter,
-    AdapterResult,
-)
+from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 
 
 class FakeExchangeStateful:

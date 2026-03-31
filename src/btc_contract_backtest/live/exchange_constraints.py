@@ -103,7 +103,9 @@ class ExchangeConstraintChecker:
             current_side = (
                 -1
                 if current_side.lower() in {"sell", "short", "-1"}
-                else 1 if current_side.lower() in {"buy", "long", "1"} else 0
+                else 1
+                if current_side.lower() in {"buy", "long", "1"}
+                else 0
             )
         if reduce_only:
             closing_buy = side.lower() == "buy" and current_side < 0

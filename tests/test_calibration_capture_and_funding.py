@@ -1,5 +1,3 @@
-import json
-
 from btc_contract_backtest.runtime.calibration_engine import (
     funding_cost_from_sample,
     sample_from_execution,

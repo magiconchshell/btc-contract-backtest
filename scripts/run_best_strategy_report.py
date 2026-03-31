@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
-
-import pandas as pd
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
 from btc_contract_backtest.config.models import (
     AccountConfig,
@@ -20,6 +15,10 @@ from btc_contract_backtest.config.models import (
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
 from btc_contract_backtest.reporting.html_report import write_report
 from btc_contract_backtest.strategies import build_strategy
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 
 def main():
