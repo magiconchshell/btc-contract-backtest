@@ -37,6 +37,17 @@ def test_restart_after_ack_can_continue_to_fill():
     assert restored.final_at == "2026-01-01T00:00:02+00:00"
 
 
+def test_terminal_remote_state_is_stable_across_late_partial_updates():
+    order = Order(order_id="o-term", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
+    record = apply_remote_status(record, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:01+00:00", filled_quantity=1.0, avg_fill_price=100.0)
+
+    same = apply_remote_status(record, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:02+00:00", filled_quantity=1.0, avg_fill_price=100.0)
+    assert same.state == CanonicalOrderState.FILLED.value
+    assert same.final_at == "2026-01-01T00:00:01+00:00"
+
+
 def test_apply_remote_status_quarantines_unsafe_ambiguity():
     order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
     record = canonical_record_from_order(order, submission_mode="governed_live")

@@ -315,7 +315,7 @@ class OrderStateMachine:
         record.state = target.value
         if target == CanonicalOrderState.ACKED and record.acked_at is None:
             record.acked_at = event.timestamp
-        if target in TERMINAL_STATES:
+        if target in TERMINAL_STATES and record.final_at is None:
             record.final_at = event.timestamp
         cls._update_tags(
             record,

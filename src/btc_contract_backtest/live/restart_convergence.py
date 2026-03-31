@@ -403,17 +403,22 @@ def summarize_replay_state(events: Optional[list[dict[str, Any]]], *, symbol: Op
                     created_at=event.get("timestamp"),
                 )
                 order_records[key] = record
+            status = _status_from_event(event_type, payload)
+            incoming_filled = _safe_float(payload.get("filled_quantity"))
+            if incoming_filled is None and event_type == "order_trade_update":
+                delta = _safe_float(payload.get("last_fill_quantity")) or 0.0
+                incoming_filled = float(record.filled_quantity or 0.0) + delta
             try:
                 apply_remote_status(
                     record,
-                    status=_status_from_event(event_type, payload),
+                    status=status,
                     timestamp=event.get("timestamp"),
                     payload={
                         **payload,
                         "event_id": event.get("event_id"),
                         "external_sequence": event.get("external_sequence"),
                     },
-                    filled_quantity=_safe_float(payload.get("filled_quantity") or payload.get("last_fill_quantity")),
+                    filled_quantity=incoming_filled if incoming_filled is not None else _safe_float(payload.get("last_fill_quantity")),
                     avg_fill_price=_safe_float(payload.get("average_price") or payload.get("last_fill_price")),
                     exchange_order_id=(payload.get("exchange_order_id") or payload.get("order_id")),
                 )
