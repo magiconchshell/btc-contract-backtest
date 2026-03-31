@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Optional, Any
 
 
 class CanonicalOrderState(str, Enum):
@@ -43,29 +43,29 @@ class OrderEvent:
     source: str
     event_type: str
     state: str
-    timestamp: str | None = None
+    timestamp: Optional[str] = None
     payload: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class CanonicalOrderRecord:
     order_id: str
-    client_order_id: str | None = None
-    exchange_order_id: str | None = None
-    intent_id: str | None = None
-    symbol: str | None = None
-    side: str | None = None
-    order_type: str | None = None
+    client_order_id: Optional[str] = None
+    exchange_order_id: Optional[str] = None
+    intent_id: Optional[str] = None
+    symbol: Optional[str] = None
+    side: Optional[str] = None
+    order_type: Optional[str] = None
     quantity: float = 0.0
     filled_quantity: float = 0.0
-    avg_fill_price: float | None = None
+    avg_fill_price: Optional[float] = None
     reduce_only: bool = False
-    submission_mode: str | None = None
+    submission_mode: Optional[str] = None
     state: str = CanonicalOrderState.NEW.value
-    created_at: str | None = None
-    acked_at: str | None = None
-    final_at: str | None = None
-    last_error: str | None = None
+    created_at: Optional[str] = None
+    acked_at: Optional[str] = None
+    final_at: Optional[str] = None
+    last_error: Optional[str] = None
     local_events: list[dict[str, Any]] = field(default_factory=list)
     remote_events: list[dict[str, Any]] = field(default_factory=list)
     tags: dict[str, Any] = field(default_factory=dict)
@@ -99,10 +99,10 @@ class OrderStateMachine:
         *,
         next_state: str,
         event: OrderEvent,
-        filled_quantity: float | None = None,
-        avg_fill_price: float | None = None,
-        exchange_order_id: str | None = None,
-        last_error: str | None = None,
+        filled_quantity: Optional[float] = None,
+        avg_fill_price: Optional[float] = None,
+        exchange_order_id: Optional[str] = None,
+        last_error: Optional[str] = None,
     ) -> CanonicalOrderRecord:
         current = CanonicalOrderState(record.state)
         target = CanonicalOrderState(next_state)
@@ -136,17 +136,17 @@ class OrderStateMachine:
         cls,
         *,
         order_id: str,
-        client_order_id: str | None = None,
-        exchange_order_id: str | None = None,
-        intent_id: str | None = None,
-        symbol: str | None = None,
-        side: str | None = None,
-        order_type: str | None = None,
+        client_order_id: Optional[str] = None,
+        exchange_order_id: Optional[str] = None,
+        intent_id: Optional[str] = None,
+        symbol: Optional[str] = None,
+        side: Optional[str] = None,
+        order_type: Optional[str] = None,
         quantity: float = 0.0,
         reduce_only: bool = False,
-        submission_mode: str | None = None,
-        created_at: str | None = None,
-        tags: dict[str, Any] | None = None,
+        submission_mode: Optional[str] = None,
+        created_at: Optional[str] = None,
+        tags: Optional[dict[str, Any]] = None,
     ) -> CanonicalOrderRecord:
         return CanonicalOrderRecord(
             order_id=order_id,

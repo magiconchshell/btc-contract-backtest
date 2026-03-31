@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 import json
 from dataclasses import dataclass, asdict
@@ -24,7 +25,7 @@ class GovernanceDecision:
     reason: str
     severity: str = "info"
     requires_approval: bool = False
-    metadata: dict | None = None
+    metadata: Optional[dict] = None
 
 
 class OperatorApprovalQueue:
@@ -65,7 +66,7 @@ class OperatorApprovalQueue:
         data = self.load()
         return request_id in data.get("rejected_ids", [])
 
-    def consume_request(self, request_id: str) -> dict | None:
+    def consume_request(self, request_id: str) -> Optional[dict]:
         data = self.load()
         req = None
         remaining = []
@@ -119,7 +120,7 @@ class GovernanceState:
 
 
 class GovernancePolicy:
-    def __init__(self, risk: RiskConfig, live_risk: LiveRiskConfig, mode: TradingMode, contract: ContractSpec | None = None):
+    def __init__(self, risk: RiskConfig, live_risk: LiveRiskConfig, mode: TradingMode, contract: Optional[ContractSpec] = None):
         self.risk = risk
         self.live_risk = live_risk
         self.mode = mode
@@ -135,10 +136,10 @@ class GovernancePolicy:
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
-        quantity: float | None = None,
+        quantity: Optional[float] = None,
         reduce_only: bool = False,
-        available_margin: float | None = None,
-        leverage: int | None = None,
+        available_margin: Optional[float] = None,
+        leverage: Optional[int] = None,
         position_side: int = 0,
         account_mode: str = "one_way",
         current_open_positions: int = 0,

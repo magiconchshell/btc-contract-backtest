@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 import ccxt
 import numpy as np
@@ -15,8 +16,8 @@ class FuturesBacktestEngine:
         account: AccountConfig,
         risk: RiskConfig,
         timeframe: str = "1h",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
     ):
         self.contract = contract
         self.account = account

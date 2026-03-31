@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Optional, Any
 
 from btc_contract_backtest.runtime.engine_state_api import EngineStateStoreAPI
 from btc_contract_backtest.runtime.engine_state_schema import normalize_legacy_state
@@ -49,10 +49,10 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
     def set_mode(self, mode: str) -> None:
         self.state["mode"] = mode
 
-    def set_capital(self, capital: float | None) -> None:
+    def set_capital(self, capital: Optional[float]) -> None:
         self.state["capital"] = capital
 
-    def set_position(self, position: dict[str, Any] | None) -> None:
+    def set_position(self, position: Optional[dict[str, Any]]) -> None:
         self.state["position"] = self._serialize(position)
 
     def set_orders(self, orders: list[dict[str, Any]]) -> None:
@@ -97,7 +97,22 @@ class JsonRuntimeStateStore(RuntimePersistence, EngineStateStoreAPI):
         self.save()
 
     def record_runtime_step(self, record: RuntimeStepRecord) -> None:
-        self.state.setdefault("runtime_steps", []).append(self._serialize(record))
+        if is_dataclass(record):
+            payload = asdict(record)
+        elif hasattr(record, "__dict__") and vars(record):
+            payload = {k: self._serialize(v) for k, v in vars(record).items()}
+        elif hasattr(record, "__class__"):
+            payload = {}
+            for name in dir(record):
+                if name.startswith("_"):
+                    continue
+                value = getattr(record, name, None)
+                if callable(value):
+                    continue
+                payload[name] = self._serialize(value)
+        else:
+            payload = self._serialize(record)
+        self.state.setdefault("runtime_steps", []).append(payload)
 
     def record_risk_event(self, event: dict[str, Any]) -> None:
         self.state.setdefault("risk_events", []).append(self._serialize(event))

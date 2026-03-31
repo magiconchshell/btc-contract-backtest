@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Optional, Any
 
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
@@ -25,7 +25,7 @@ class RecoveryOrchestrator:
         self.adapter = adapter
         self.submit_ledger = submit_ledger
 
-    def recover(self, *, local_orders: list[dict[str, Any]] | None = None) -> RecoveryReport:
+    def recover(self, *, local_orders: Optional[list[dict[str, Any]]] = None) -> RecoveryReport:
         local_orders = local_orders or []
         open_result = self.adapter.fetch_open_orders()
         if not open_result.ok:

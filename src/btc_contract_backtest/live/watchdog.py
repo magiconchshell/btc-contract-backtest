@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -6,10 +7,10 @@ from datetime import datetime, timezone
 
 @dataclass
 class WatchdogState:
-    last_heartbeat_at: str | None = None
+    last_heartbeat_at: Optional[str] = None
     consecutive_failures: int = 0
     halted: bool = False
-    halt_reason: str | None = None
+    halt_reason: Optional[str] = None
 
 
 class HeartbeatWatchdog:

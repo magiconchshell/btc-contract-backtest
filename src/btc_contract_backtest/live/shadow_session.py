@@ -25,8 +25,8 @@ class ShadowTradingSession(TradingRuntime):
         risk: RiskConfig,
         strategy: BaseStrategy,
         timeframe: str = "1h",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
         audit_log: str = "shadow_audit.jsonl",
         state_file: str = "shadow_state.json",
     ):
@@ -56,12 +56,13 @@ class ShadowTradingSession(TradingRuntime):
         self.watchdog.state.halt_reason = wd.get("halt_reason")
         self.core.risk_events = self.state.get("risk_events", [])
 
-    def save_state(self, last_payload: dict | None = None):
+    def save_state(self, last_payload: Optional[dict] = None):
         store = self.state_store()
         if hasattr(store, "set_mode"):
             store.set_mode("shadow")
             store.set_governance_state({})
             store.set_last_runtime_snapshot(last_payload or {})
+            store.set_state_fields(last_payload=last_payload or {})
             store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,8 +14,8 @@ from btc_contract_backtest.live.reconcile import build_detailed_reconcile_report
 @dataclass
 class AdapterResult:
     ok: bool
-    payload: dict | list | None = None
-    error: str | None = None
+    payload: dict | Optional[list] = None
+    error: Optional[str] = None
 
 
 class ExchangeExecutionAdapter:
@@ -97,7 +98,7 @@ class ExchangeExecutionAdapter:
 
         return self._retry(op)
 
-    def reconcile_state(self, local_position_side: int, local_open_orders: int, local_position: dict | None = None, local_orders: list[dict] | None = None) -> AdapterResult:
+    def reconcile_state(self, local_position_side: int, local_open_orders: int, local_position: Optional[dict] = None, local_orders: Optional[list[dict]] = None) -> AdapterResult:
         positions = self.fetch_positions()
         open_orders = self.fetch_open_orders()
         if not positions.ok:

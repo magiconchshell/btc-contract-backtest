@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Optional, Any
 
 
 @dataclass
 class RuntimeStepRecord:
     timestamp: str
     event: str
-    signal: int | None = None
+    signal: Optional[int] = None
     snapshot: dict[str, Any] = field(default_factory=dict)
-    intended_order: dict[str, Any] | None = None
+    intended_order: Optional[dict[str, Any]] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

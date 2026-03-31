@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 import json
 from bisect import bisect_right
@@ -9,7 +10,7 @@ class FundingSnapshotStore:
     def __init__(self, path: str = "data/calibration/funding_snapshots.jsonl"):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._rows: list[dict] | None = None
+        self._rows: Optional[list[dict]] = None
         self._timestamps: list[str] | None = None
 
     def append(self, snapshot: dict) -> None:
@@ -38,7 +39,7 @@ class FundingSnapshotStore:
         self._timestamps = timestamps
         return rows
 
-    def lookup(self, timestamp: str) -> dict | None:
+    def lookup(self, timestamp: str) -> Optional[dict]:
         rows = self.load()
         timestamps = self._timestamps or []
         if not rows or not timestamps:

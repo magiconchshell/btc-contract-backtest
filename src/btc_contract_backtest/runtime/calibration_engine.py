@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from dataclasses import asdict
 
@@ -6,7 +7,7 @@ from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, 
 from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
 
 
-def market_quality_score(*, spread_bps: float | None, depth_notional: float | None, funding_rate: float | None, stale: bool = False) -> float:
+def market_quality_score(*, spread_bps: Optional[float], depth_notional: Optional[float], funding_rate: Optional[float], stale: bool = False) -> float:
     score = 1.0
     if stale:
         score -= 0.5
@@ -55,7 +56,7 @@ def calibrate_queue_probability(sample: CalibrationSample, config: CalibrationCo
     return max(config.queue_probability_floor, min(config.queue_probability_ceiling, base))
 
 
-def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfig, funding_store: FundingSnapshotStore | None = None) -> float:
+def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfig, funding_store: Optional[FundingSnapshotStore] = None) -> float:
     if sample.funding_rate is not None and sample.notional is not None:
         return sample.notional * sample.funding_rate
     if funding_store is not None:
@@ -67,7 +68,7 @@ def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfi
     return 0.0
 
 
-def validate_samples(samples: list[dict], config: CalibrationConfig, funding_store: FundingSnapshotStore | None = None) -> ValidationResult:
+def validate_samples(samples: list[dict], config: CalibrationConfig, funding_store: Optional[FundingSnapshotStore] = None) -> ValidationResult:
     if not samples:
         return ValidationResult(sample_count=0, slippage_mae_bps=0.0, fill_ratio_mae=0.0, funding_mae=0.0, quality_weighted_score=0.0, notes=["no samples"])
 
@@ -115,17 +116,17 @@ def sample_from_execution(
     quantity: float,
     notional: float,
     reference_price: float,
-    executed_price: float | None,
-    fill_quantity: float | None,
-    spread_bps: float | None,
-    depth_notional: float | None,
-    queue_model: str | None,
-    funding_rate: float | None,
-    funding_cost: float | None,
-    volatility_bucket: str | None,
-    latency_ms: int | None,
+    executed_price: Optional[float],
+    fill_quantity: Optional[float],
+    spread_bps: Optional[float],
+    depth_notional: Optional[float],
+    queue_model: Optional[str],
+    funding_rate: Optional[float],
+    funding_cost: Optional[float],
+    volatility_bucket: Optional[str],
+    latency_ms: Optional[int],
     stale: bool = False,
-    metadata: dict | None = None,
+    metadata: Optional[dict] = None,
 ) -> CalibrationSample:
     slippage_bps = None
     if executed_price is not None and reference_price > 0:

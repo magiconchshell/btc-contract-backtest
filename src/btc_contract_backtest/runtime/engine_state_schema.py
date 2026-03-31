@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Optional, Any
 
 from btc_contract_backtest.engine.execution_models import PositionState
 
@@ -13,8 +13,8 @@ SCHEMA_VERSION = 2
 class EngineState:
     schema_version: int = SCHEMA_VERSION
     mode: str = "unknown"
-    capital: float | None = None
-    position: dict[str, Any] | None = None
+    capital: Optional[float] = None
+    position: Optional[dict[str, Any]] = None
     orders: list[dict[str, Any]] = field(default_factory=list)
     fills: list[dict[str, Any]] = field(default_factory=list)
     trades: list[dict[str, Any]] = field(default_factory=list)
@@ -26,7 +26,7 @@ class EngineState:
     runtime_steps: list[dict[str, Any]] = field(default_factory=list)
     reconcile_report: dict[str, Any] = field(default_factory=dict)
     submit_ledger: dict[str, Any] = field(default_factory=dict)
-    updated_at: str | None = None
+    updated_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

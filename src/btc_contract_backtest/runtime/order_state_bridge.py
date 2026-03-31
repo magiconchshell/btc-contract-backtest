@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from btc_contract_backtest.engine.execution_models import Order, OrderStatus
 from btc_contract_backtest.runtime.order_state_machine import (
@@ -35,7 +36,7 @@ def canonical_record_from_order(order: Order, submission_mode: str) -> Canonical
     )
 
 
-def apply_local_submit(record: CanonicalOrderRecord, *, timestamp: str | None, payload: dict | None = None) -> CanonicalOrderRecord:
+def apply_local_submit(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.NEW.value,
@@ -43,7 +44,7 @@ def apply_local_submit(record: CanonicalOrderRecord, *, timestamp: str | None, p
     )
 
 
-def apply_local_cancel(record: CanonicalOrderRecord, *, timestamp: str | None, payload: dict | None = None) -> CanonicalOrderRecord:
+def apply_local_cancel(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.CANCEL_PENDING.value,
@@ -51,7 +52,7 @@ def apply_local_cancel(record: CanonicalOrderRecord, *, timestamp: str | None, p
     )
 
 
-def apply_local_replace(record: CanonicalOrderRecord, *, timestamp: str | None, payload: dict | None = None) -> CanonicalOrderRecord:
+def apply_local_replace(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.REPLACE_PENDING.value,
@@ -63,12 +64,12 @@ def apply_remote_status(
     record: CanonicalOrderRecord,
     *,
     status: str,
-    timestamp: str | None,
-    payload: dict | None = None,
-    filled_quantity: float | None = None,
-    avg_fill_price: float | None = None,
-    exchange_order_id: str | None = None,
-    last_error: str | None = None,
+    timestamp: Optional[str],
+    payload: Optional[dict] = None,
+    filled_quantity: Optional[float] = None,
+    avg_fill_price: Optional[float] = None,
+    exchange_order_id: Optional[str] = None,
+    last_error: Optional[str] = None,
 ) -> CanonicalOrderRecord:
     mapped = STATUS_MAP.get(status, CanonicalOrderState.ACKED)
     event_type = f"remote_{mapped.value}"

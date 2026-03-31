@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Optional, Any
 
 
 OPEN_STATES = {"new", "open", "acked", "partially_filled", "partial", "working"}
@@ -13,8 +13,8 @@ TERMINAL_STATES = {"filled", "canceled", "rejected", "expired", "closed"}
 class OrderMismatch:
     key: str
     mismatch_types: list[str] = field(default_factory=list)
-    local: dict[str, Any] | None = None
-    remote: dict[str, Any] | None = None
+    local: Optional[dict[str, Any]] = None
+    remote: Optional[dict[str, Any]] = None
     severity: str = "warning"
 
     def to_dict(self) -> dict[str, Any]:
@@ -24,8 +24,8 @@ class OrderMismatch:
 @dataclass
 class PositionMismatch:
     mismatch_types: list[str] = field(default_factory=list)
-    local: dict[str, Any] | None = None
-    remote: dict[str, Any] | None = None
+    local: Optional[dict[str, Any]] = None
+    remote: Optional[dict[str, Any]] = None
     severity: str = "warning"
 
     def to_dict(self) -> dict[str, Any]:
@@ -38,7 +38,7 @@ class DetailedReconcileReport:
     timestamp: str
     local_position: dict[str, Any] = field(default_factory=dict)
     remote_position: dict[str, Any] = field(default_factory=dict)
-    position_mismatch: dict[str, Any] | None = None
+    position_mismatch: Optional[dict[str, Any]] = None
     order_mismatches: list[dict[str, Any]] = field(default_factory=list)
     orphan_local_orders: list[dict[str, Any]] = field(default_factory=list)
     orphan_remote_orders: list[dict[str, Any]] = field(default_factory=list)
@@ -73,14 +73,14 @@ def _position_side(raw: dict[str, Any]) -> int:
     return 0
 
 
-def _position_entry(raw: dict[str, Any]) -> float | None:
+def _position_entry(raw: dict[str, Any]) -> Optional[float]:
     val = raw.get("entry_price")
     if val is None:
         val = raw.get("entryPrice")
     return None if val in (None, "") else float(val)
 
 
-def _order_key(raw: dict[str, Any]) -> str | None:
+def _order_key(raw: dict[str, Any]) -> Optional[str]:
     return raw.get("client_order_id") or raw.get("clientOrderId") or raw.get("exchange_order_id") or raw.get("id") or raw.get("order_id")
 
 
@@ -130,10 +130,10 @@ def _normalize_remote_order(raw: dict[str, Any]) -> dict[str, Any]:
 
 def build_detailed_reconcile_report(
     *,
-    local_position: dict[str, Any] | None,
-    remote_positions: list[dict[str, Any]] | None,
-    local_orders: list[dict[str, Any]] | None,
-    remote_orders: list[dict[str, Any]] | None,
+    local_position: Optional[dict[str, Any]],
+    remote_positions: Optional[list[dict[str, Any]]],
+    local_orders: Optional[list[dict[str, Any]]],
+    remote_orders: Optional[list[dict[str, Any]]],
     quantity_tolerance: float = 1e-9,
     price_tolerance: float = 1e-9,
 ) -> DetailedReconcileReport:

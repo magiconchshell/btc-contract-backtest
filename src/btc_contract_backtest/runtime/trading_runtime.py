@@ -31,9 +31,9 @@ class TradingRuntime:
         risk: RiskConfig,
         strategy: BaseStrategy,
         timeframe: str = "1h",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
-        persistence: RuntimePersistence | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
+        persistence: Optional[RuntimePersistence] = None,
     ):
         self.context = RuntimeContext(
             contract=contract,
@@ -69,7 +69,7 @@ class TradingRuntime:
     def evaluate_signal(self, latest) -> int:
         return int(latest.get("signal", 0))
 
-    def evaluate_risk(self, snapshot) -> tuple[bool, str | None]:
+    def evaluate_risk(self, snapshot) -> tuple[bool, Optional[str]]:
         if not self.core.check_snapshot_safety(snapshot):
             return False, "snapshot_safety_failed"
         return True, None
@@ -105,7 +105,7 @@ class TradingRuntime:
             "intended_order": intended,
         }
 
-    def persist_payload(self, payload: dict, metadata: dict | None = None):
+    def persist_payload(self, payload: dict, metadata: Optional[dict] = None):
         record = RuntimeStepRecord(
             timestamp=payload.get("timestamp", self.now_iso()),
             event=payload.get("event", "unknown"),

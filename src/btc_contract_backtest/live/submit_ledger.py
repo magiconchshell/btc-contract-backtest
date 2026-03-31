@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Optional, Any
 
 
 @dataclass
@@ -26,10 +26,10 @@ class SubmitIntent:
     quantity: float
     notional: float
     state: str = "created"
-    created_at: str | None = None
-    updated_at: str | None = None
-    exchange_order_id: str | None = None
-    error: str | None = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    exchange_order_id: Optional[str] = None
+    error: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
     attempts: list[dict[str, Any]] = field(default_factory=list)
 
@@ -53,19 +53,19 @@ class SubmitLedger:
     def list_intents(self) -> list[dict[str, Any]]:
         return self.load().get("intents", [])
 
-    def get(self, request_id: str) -> dict[str, Any] | None:
+    def get(self, request_id: str) -> Optional[dict[str, Any]]:
         for item in self.list_intents():
             if item.get("request_id") == request_id:
                 return item
         return None
 
-    def get_by_client_order_id(self, client_order_id: str) -> dict[str, Any] | None:
+    def get_by_client_order_id(self, client_order_id: str) -> Optional[dict[str, Any]]:
         for item in self.list_intents():
             if item.get("client_order_id") == client_order_id:
                 return item
         return None
 
-    def upsert(self, intent: SubmitIntent | dict[str, Any]) -> dict[str, Any]:
+    def upsert(self, intent: Any) -> dict[str, Any]:
         payload = intent.to_dict() if isinstance(intent, SubmitIntent) else dict(intent)
         data = self.load()
         intents = data.setdefault("intents", [])
@@ -78,7 +78,7 @@ class SubmitLedger:
         self.save(data)
         return payload
 
-    def append_attempt(self, request_id: str, attempt: SubmitAttempt | dict[str, Any]) -> dict[str, Any] | None:
+    def append_attempt(self, request_id: str, attempt: Any) -> Optional[dict[str, Any]]:
         data = self.load()
         intents = data.setdefault("intents", [])
         payload = attempt.to_dict() if isinstance(attempt, SubmitAttempt) else dict(attempt)
@@ -95,11 +95,11 @@ class SubmitLedger:
         request_id: str,
         *,
         state: str,
-        timestamp: str | None = None,
-        exchange_order_id: str | None = None,
-        error: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any] | None:
+        timestamp: Optional[str] = None,
+        exchange_order_id: Optional[str] = None,
+        error: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> Optional[dict[str, Any]]:
         data = self.load()
         intents = data.setdefault("intents", [])
         for item in intents:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 import uuid
 from datetime import datetime, timezone
@@ -20,8 +21,8 @@ class GuardedLiveExecutor:
         approvals: OperatorApprovalQueue,
         alerts: AlertSink,
         audit: AuditLogger,
-        submit_ledger: SubmitLedger | None = None,
-        event_source: EventDrivenExecutionSource | None = None,
+        submit_ledger: Optional[SubmitLedger] = None,
+        event_source: Optional[EventDrivenExecutionSource] = None,
     ):
         self.adapter = adapter
         self.governance = governance
@@ -41,6 +42,11 @@ class GuardedLiveExecutor:
         stale: bool,
         reconcile_ok: bool,
         watchdog_halted: bool,
+        available_margin: Optional[float] = None,
+        leverage: Optional[int] = None,
+        position_side: int = 0,
+        account_mode: str = "one_way",
+        current_open_positions: int = 0,
         emergency_stop: bool = False,
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
@@ -68,11 +74,11 @@ class GuardedLiveExecutor:
             reconcile_ok=reconcile_ok,
             watchdog_halted=watchdog_halted,
             quantity=quantity,
-            available_margin=None,
-            leverage=None,
-            position_side=0,
-            account_mode="one_way",
-            current_open_positions=0,
+            available_margin=available_margin,
+            leverage=leverage,
+            position_side=position_side,
+            account_mode=account_mode,
+            current_open_positions=current_open_positions,
             emergency_stop=emergency_stop,
             maintenance=maintenance,
             current_daily_loss_pct=current_daily_loss_pct,
@@ -150,10 +156,11 @@ class GuardedLiveExecutor:
         )
         if record is not None:
             try:
-                record = apply_local_cancel(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"cancel_order_id": cancel_order_id})
-                record = apply_local_replace(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"new_order_id": new_order.order_id})
+                cancel_pending = apply_local_cancel(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"cancel_order_id": cancel_order_id})
+                record = apply_local_replace(cancel_pending, timestamp=datetime.now(timezone.utc).isoformat(), payload={"new_order_id": new_order.order_id})
             except Exception:  # noqa: BLE001
-                pass
+                from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
+                record.state = CanonicalOrderState.REPLACE_PENDING.value
         self.event_source.emit("cancel_replace_requested", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "symbol": symbol, "quantity": quantity, "notional": notional})
         result = self.adapter.cancel_replace_order(cancel_order_id, new_order)
         if result.ok:

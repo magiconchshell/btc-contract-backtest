@@ -1,3 +1,4 @@
+from typing import Optional
 from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, RiskConfig
 from btc_contract_backtest.engine.execution_models import MarketSnapshot, OrderSide, OrderType
 from btc_contract_backtest.engine.simulator_core import SimulatorCore
@@ -20,7 +21,7 @@ def make_snapshot(close=100.0, bid=99.9, ask=100.1, mark_price=100.0, funding_ra
     )
 
 
-def make_core(execution: ExecutionConfig | None = None):
+def make_core(execution: Optional[ExecutionConfig] = None):
     return SimulatorCore(
         contract=ContractSpec(symbol="BTC/USDT", leverage=5),
         account=AccountConfig(initial_capital=1000.0),

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from datetime import datetime, timezone
 
@@ -16,7 +17,7 @@ class OrderLifecycleMonitor:
         self.alerts = alerts
         self.audit = audit
 
-    def inspect(self, order: Order, record: CanonicalOrderRecord | None = None):
+    def inspect(self, order: Order, record: Optional[CanonicalOrderRecord] = None):
         result = self.adapter.reconcile_order_status(order)
         if not result.ok:
             self.alerts.emit("order_reconcile_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": order.order_id, "error": result.error})

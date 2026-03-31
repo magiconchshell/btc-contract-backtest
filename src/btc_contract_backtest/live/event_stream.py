@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Optional, Any
 
 
 @dataclass
@@ -11,7 +11,7 @@ class ExecutionEvent:
     event_type: str
     timestamp: str
     payload: dict[str, Any] = field(default_factory=dict)
-    sequence: int | None = None
+    sequence: Optional[int] = None
     source: str = "poll"
 
     def to_dict(self) -> dict[str, Any]:
@@ -43,9 +43,9 @@ class EventRecorder:
 class EventDrivenExecutionSource:
     def __init__(self, recorder: EventRecorder | None = None):
         self.recorder = recorder or EventRecorder()
-        self.last_sequence: int | None = None
+        self.last_sequence: Optional[int] = None
 
-    def emit(self, event_type: str, timestamp: str, payload: dict[str, Any], *, source: str = "poll", sequence: int | None = None) -> dict[str, Any]:
+    def emit(self, event_type: str, timestamp: str, payload: dict[str, Any], *, source: str = "poll", sequence: Optional[int] = None) -> dict[str, Any]:
         if sequence is None:
             sequence = 1 if self.last_sequence is None else self.last_sequence + 1
         self.last_sequence = sequence

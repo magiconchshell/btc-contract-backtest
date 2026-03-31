@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from dataclasses import asdict
 
@@ -21,8 +22,8 @@ class BacktestRuntime(TradingRuntime):
         risk: RiskConfig,
         strategy: BaseStrategy,
         timeframe: str = "1h",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
     ):
         super().__init__(contract, account, risk, strategy, timeframe, execution, live_risk)
         self.market_data = market_data.copy()
@@ -107,7 +108,7 @@ class BacktestRuntime(TradingRuntime):
         self.core.position.margin_used = 0.0
         return True
 
-    def _maybe_close_position(self, snapshot) -> str | None:
+    def _maybe_close_position(self, snapshot) -> Optional[str]:
         if self.core.position.side == 0 or self.core.position.entry_price is None:
             return None
         price = snapshot.close

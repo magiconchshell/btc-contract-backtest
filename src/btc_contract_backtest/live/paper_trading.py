@@ -30,8 +30,8 @@ class PaperTradingSession(TradingRuntime):
         strategy: BaseStrategy,
         timeframe: str = "1h",
         state_file: str = "paper_state.json",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
     ):
         super().__init__(
             contract,
@@ -72,6 +72,8 @@ class PaperTradingSession(TradingRuntime):
 
     def _restore_core_from_state(self):
         self.core.capital = self.state.get("capital", self.context.account.initial_capital)
+        if self.core.capital is None:
+            self.core.capital = self.context.account.initial_capital
         pos = self.state.get("position")
         if pos:
             for key, value in pos.items():

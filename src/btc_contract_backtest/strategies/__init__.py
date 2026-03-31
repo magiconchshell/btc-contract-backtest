@@ -1,3 +1,4 @@
+from typing import Optional
 from .base import BaseStrategy
 from .indicators import RSIReversalStrategy, SMACrossStrategy, MACDCrossStrategy
 from .hybrid import VotingHybridStrategy
@@ -11,7 +12,7 @@ from .strong_bull_long import StrongBullLongStrategy
 from .sparse_portfolio import SparseMetaPortfolioStrategy
 
 
-def build_strategy(name: str, config: dict | None = None):
+def build_strategy(name: str, config: Optional[dict] = None):
     config = config or {}
     if name == "rsi":
         return RSIReversalStrategy(**config)

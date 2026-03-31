@@ -36,8 +36,8 @@ class GovernedLiveSession(TradingRuntime):
         risk: RiskConfig,
         strategy: BaseStrategy,
         timeframe: str = "1h",
-        execution: ExecutionConfig | None = None,
-        live_risk: LiveRiskConfig | None = None,
+        execution: Optional[ExecutionConfig] = None,
+        live_risk: Optional[LiveRiskConfig] = None,
         mode: TradingMode = TradingMode.APPROVAL_REQUIRED,
         audit_log: str = "live_governance_audit.jsonl",
         approval_file: str = "operator_approvals.json",
@@ -81,7 +81,7 @@ class GovernedLiveSession(TradingRuntime):
         self.recovery_orchestrator = RecoveryOrchestrator(self.adapter, self.submit_ledger)
         self._recovery_report = self.recovery_orchestrator.recover(local_orders=recovered.get("orders", []))
 
-    def save_state(self, payload: dict | None = None):
+    def save_state(self, payload: Optional[dict] = None):
         store = self.state_store()
         if hasattr(store, "set_mode"):
             store.set_mode("governed_live")

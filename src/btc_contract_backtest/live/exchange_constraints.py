@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Optional, Any
 
 from btc_contract_backtest.config.models import ContractSpec
 
@@ -39,7 +39,7 @@ class ExchangeConstraintChecker:
         units = round(quantity / lot)
         return round(units * lot, 12)
 
-    def _round_to_tick(self, price: float | None) -> float | None:
+    def _round_to_tick(self, price: Optional[float]) -> Optional[float]:
         if price is None:
             return None
         tick = self.contract.tick_size
@@ -52,14 +52,14 @@ class ExchangeConstraintChecker:
         self,
         *,
         quantity: float,
-        price: float | None,
+        price: Optional[float],
         notional: float,
-        available_margin: float | None = None,
-        leverage: int | None = None,
+        available_margin: Optional[float] = None,
+        leverage: Optional[int] = None,
         reduce_only: bool = False,
         position_side: int = 0,
         account_mode: str = "one_way",
-        max_open_positions: int | None = None,
+        max_open_positions: Optional[int] = None,
         current_open_positions: int = 0,
     ) -> ConstraintCheckResult:
         violations: list[dict[str, Any]] = []

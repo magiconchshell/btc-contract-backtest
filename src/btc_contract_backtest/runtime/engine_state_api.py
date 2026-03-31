@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Optional, Any
 
 
 class EngineStateStoreAPI:
@@ -10,10 +10,10 @@ class EngineStateStoreAPI:
     def set_mode(self, mode: str) -> None:
         raise NotImplementedError
 
-    def set_capital(self, capital: float | None) -> None:
+    def set_capital(self, capital: Optional[float]) -> None:
         raise NotImplementedError
 
-    def set_position(self, position: dict[str, Any] | None) -> None:
+    def set_position(self, position: Optional[dict[str, Any]]) -> None:
         raise NotImplementedError
 
     def set_orders(self, orders: list[dict[str, Any]]) -> None:

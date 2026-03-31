@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Optional, Any
 
 
 @dataclass
@@ -14,19 +14,19 @@ class CalibrationSample:
     quantity: float
     notional: float
     reference_price: float
-    executed_price: float | None = None
-    fill_quantity: float | None = None
-    spread_bps: float | None = None
-    slippage_bps: float | None = None
-    depth_notional: float | None = None
-    queue_model: str | None = None
-    queue_probability: float | None = None
-    fill_ratio: float | None = None
-    funding_rate: float | None = None
-    funding_cost: float | None = None
-    volatility_bucket: str | None = None
-    market_quality_score: float | None = None
-    latency_ms: int | None = None
+    executed_price: Optional[float] = None
+    fill_quantity: Optional[float] = None
+    spread_bps: Optional[float] = None
+    slippage_bps: Optional[float] = None
+    depth_notional: Optional[float] = None
+    queue_model: Optional[str] = None
+    queue_probability: Optional[float] = None
+    fill_ratio: Optional[float] = None
+    funding_rate: Optional[float] = None
+    funding_cost: Optional[float] = None
+    volatility_bucket: Optional[str] = None
+    market_quality_score: Optional[float] = None
+    latency_ms: Optional[int] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
