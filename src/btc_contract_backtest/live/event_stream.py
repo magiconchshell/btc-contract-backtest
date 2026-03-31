@@ -45,11 +45,25 @@ class EventDrivenExecutionSource:
         self.recorder = recorder or EventRecorder()
         self.last_sequence: Optional[int] = None
 
-    def emit(self, event_type: str, timestamp: str, payload: dict[str, Any], *, source: str = "poll", sequence: Optional[int] = None) -> dict[str, Any]:
+    def emit(
+        self,
+        event_type: str,
+        timestamp: str,
+        payload: dict[str, Any],
+        *,
+        source: str = "poll",
+        sequence: Optional[int] = None,
+    ) -> dict[str, Any]:
         if sequence is None:
             sequence = 1 if self.last_sequence is None else self.last_sequence + 1
         self.last_sequence = sequence
-        event = ExecutionEvent(event_type=event_type, timestamp=timestamp, payload=payload, sequence=sequence, source=source)
+        event = ExecutionEvent(
+            event_type=event_type,
+            timestamp=timestamp,
+            payload=payload,
+            sequence=sequence,
+            source=source,
+        )
         self.recorder.append(event)
         return event.to_dict()
 

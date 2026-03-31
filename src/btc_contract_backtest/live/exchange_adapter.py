@@ -19,7 +19,13 @@ class AdapterResult:
 
 
 class ExchangeExecutionAdapter:
-    def __init__(self, exchange: ccxt.Exchange, symbol: str, max_retries: int = 3, retry_delay_seconds: float = 1.0):
+    def __init__(
+        self,
+        exchange: ccxt.Exchange,
+        symbol: str,
+        max_retries: int = 3,
+        retry_delay_seconds: float = 1.0,
+    ):
         self.exchange = exchange
         self.symbol = symbol
         self.max_retries = max_retries
@@ -64,7 +70,13 @@ class ExchangeExecutionAdapter:
         submit_result = self.submit_order(new_order)
         if not submit_result.ok:
             return submit_result
-        return AdapterResult(ok=True, payload={"cancel": cancel_result.payload, "replace": submit_result.payload})
+        return AdapterResult(
+            ok=True,
+            payload={
+                "cancel": cancel_result.payload,
+                "replace": submit_result.payload,
+            },
+        )
 
     def fetch_open_orders(self) -> AdapterResult:
         return self._retry(lambda: self.exchange.fetch_open_orders(self.symbol))
@@ -86,7 +98,9 @@ class ExchangeExecutionAdapter:
         open_orders = result.payload if isinstance(result.payload, list) else []
         for row in open_orders:
             info = row.get("info")
-            if row.get("clientOrderId") == client_order_id or (isinstance(info, dict) and info.get("clientOrderId") == client_order_id):
+            if row.get("clientOrderId") == client_order_id or (
+                isinstance(info, dict) and info.get("clientOrderId") == client_order_id
+            ):
                 matches.append(row)
         return AdapterResult(ok=True, payload=matches)
 
@@ -94,12 +108,26 @@ class ExchangeExecutionAdapter:
         def op():
             remote = self.exchange.fetch_order(order.exchange_order_id or order.order_id, order.symbol)
             status = str(remote.get("status", "")).lower()
-            mapped = OrderStatus.FILLED if status == "closed" else OrderStatus.CANCELED if status == "canceled" else OrderStatus.PARTIALLY_FILLED if remote.get("filled", 0) not in (0, None) else OrderStatus.NEW
+            mapped = (
+                OrderStatus.FILLED
+                if status == "closed"
+                else OrderStatus.CANCELED
+                if status == "canceled"
+                else OrderStatus.PARTIALLY_FILLED
+                if remote.get("filled", 0) not in (0, None)
+                else OrderStatus.NEW
+            )
             return {"remote": remote, "mapped_status": mapped.value}
 
         return self._retry(op)
 
-    def reconcile_state(self, local_position_side: int, local_open_orders: int, local_position: Optional[dict] = None, local_orders: Optional[list[dict]] = None) -> AdapterResult:
+    def reconcile_state(
+        self,
+        local_position_side: int,
+        local_open_orders: int,
+        local_position: Optional[dict] = None,
+        local_orders: Optional[list[dict]] = None,
+    ) -> AdapterResult:
         positions = self.fetch_positions()
         open_orders = self.fetch_open_orders()
         if not positions.ok:

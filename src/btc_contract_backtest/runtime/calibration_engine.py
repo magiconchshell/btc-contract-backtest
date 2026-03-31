@@ -1,13 +1,21 @@
 from __future__ import annotations
 from typing import Optional
 
-from dataclasses import asdict
-
-from btc_contract_backtest.runtime.calibration_models import CalibrationConfig, CalibrationSample, ValidationResult
+from btc_contract_backtest.runtime.calibration_models import (
+    CalibrationConfig,
+    CalibrationSample,
+    ValidationResult,
+)
 from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
 
 
-def market_quality_score(*, spread_bps: Optional[float], depth_notional: Optional[float], funding_rate: Optional[float], stale: bool = False) -> float:
+def market_quality_score(
+    *,
+    spread_bps: Optional[float],
+    depth_notional: Optional[float],
+    funding_rate: Optional[float],
+    stale: bool = False,
+) -> float:
     score = 1.0
     if stale:
         score -= 0.5
@@ -56,7 +64,11 @@ def calibrate_queue_probability(sample: CalibrationSample, config: CalibrationCo
     return max(config.queue_probability_floor, min(config.queue_probability_ceiling, base))
 
 
-def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfig, funding_store: Optional[FundingSnapshotStore] = None) -> float:
+def funding_cost_from_sample(
+    sample: CalibrationSample,
+    config: CalibrationConfig,
+    funding_store: Optional[FundingSnapshotStore] = None,
+) -> float:
     if sample.funding_rate is not None and sample.notional is not None:
         return sample.notional * sample.funding_rate
     if funding_store is not None:
@@ -68,9 +80,20 @@ def funding_cost_from_sample(sample: CalibrationSample, config: CalibrationConfi
     return 0.0
 
 
-def validate_samples(samples: list[dict], config: CalibrationConfig, funding_store: Optional[FundingSnapshotStore] = None) -> ValidationResult:
+def validate_samples(
+    samples: list[dict],
+    config: CalibrationConfig,
+    funding_store: Optional[FundingSnapshotStore] = None,
+) -> ValidationResult:
     if not samples:
-        return ValidationResult(sample_count=0, slippage_mae_bps=0.0, fill_ratio_mae=0.0, funding_mae=0.0, quality_weighted_score=0.0, notes=["no samples"])
+        return ValidationResult(
+            sample_count=0,
+            slippage_mae_bps=0.0,
+            fill_ratio_mae=0.0,
+            funding_mae=0.0,
+            quality_weighted_score=0.0,
+            notes=["no samples"],
+        )
 
     slippage_errors = []
     fill_ratio_errors = []
@@ -132,7 +155,12 @@ def sample_from_execution(
     if executed_price is not None and reference_price > 0:
         slippage_bps = abs(executed_price - reference_price) / reference_price * 10000
     fill_ratio = None if fill_quantity is None or quantity <= 0 else fill_quantity / quantity
-    quality = market_quality_score(spread_bps=spread_bps, depth_notional=depth_notional, funding_rate=funding_rate, stale=stale)
+    quality = market_quality_score(
+        spread_bps=spread_bps,
+        depth_notional=depth_notional,
+        funding_rate=funding_rate,
+        stale=stale,
+    )
     sample = CalibrationSample(
         timestamp=timestamp,
         symbol=symbol,

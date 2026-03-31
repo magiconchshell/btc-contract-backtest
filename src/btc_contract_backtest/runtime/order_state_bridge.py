@@ -36,27 +36,60 @@ def canonical_record_from_order(order: Order, submission_mode: str) -> Canonical
     )
 
 
-def apply_local_submit(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
+def apply_local_submit(
+    record: CanonicalOrderRecord,
+    *,
+    timestamp: Optional[str],
+    payload: Optional[dict] = None,
+) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.NEW.value,
-        event=OrderEvent(source="local", event_type="submit_intent", state=CanonicalOrderState.NEW.value, timestamp=timestamp, payload=payload or {}),
+        event=OrderEvent(
+            source="local",
+            event_type="submit_intent",
+            state=CanonicalOrderState.NEW.value,
+            timestamp=timestamp,
+            payload=payload or {},
+        ),
     )
 
 
-def apply_local_cancel(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
+def apply_local_cancel(
+    record: CanonicalOrderRecord,
+    *,
+    timestamp: Optional[str],
+    payload: Optional[dict] = None,
+) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.CANCEL_PENDING.value,
-        event=OrderEvent(source="local", event_type="cancel_intent", state=CanonicalOrderState.CANCEL_PENDING.value, timestamp=timestamp, payload=payload or {}),
+        event=OrderEvent(
+            source="local",
+            event_type="cancel_intent",
+            state=CanonicalOrderState.CANCEL_PENDING.value,
+            timestamp=timestamp,
+            payload=payload or {},
+        ),
     )
 
 
-def apply_local_replace(record: CanonicalOrderRecord, *, timestamp: Optional[str], payload: Optional[dict] = None) -> CanonicalOrderRecord:
+def apply_local_replace(
+    record: CanonicalOrderRecord,
+    *,
+    timestamp: Optional[str],
+    payload: Optional[dict] = None,
+) -> CanonicalOrderRecord:
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.REPLACE_PENDING.value,
-        event=OrderEvent(source="local", event_type="replace_intent", state=CanonicalOrderState.REPLACE_PENDING.value, timestamp=timestamp, payload=payload or {}),
+        event=OrderEvent(
+            source="local",
+            event_type="replace_intent",
+            state=CanonicalOrderState.REPLACE_PENDING.value,
+            timestamp=timestamp,
+            payload=payload or {},
+        ),
     )
 
 
@@ -76,7 +109,13 @@ def apply_remote_status(
     return OrderStateMachine.apply_transition(
         record,
         next_state=mapped.value,
-        event=OrderEvent(source="remote", event_type=event_type, state=mapped.value, timestamp=timestamp, payload=payload or {}),
+        event=OrderEvent(
+            source="remote",
+            event_type=event_type,
+            state=mapped.value,
+            timestamp=timestamp,
+            payload=payload or {},
+        ),
         filled_quantity=filled_quantity,
         avg_fill_price=avg_fill_price,
         exchange_order_id=exchange_order_id,

@@ -70,7 +70,9 @@ class SubmitLedger:
         data = self.load()
         intents = data.setdefault("intents", [])
         for idx, existing in enumerate(intents):
-            if existing.get("request_id") == payload.get("request_id") or existing.get("client_order_id") == payload.get("client_order_id"):
+            if existing.get("request_id") == payload.get("request_id") or (
+                existing.get("client_order_id") == payload.get("client_order_id")
+            ):
                 intents[idx] = payload
                 self.save(data)
                 return payload
@@ -120,5 +122,14 @@ class SubmitLedger:
 
     def pending_intents(self) -> list[dict[str, Any]]:
         return [
-            item for item in self.list_intents() if item.get("state") in {"created", "pending_approval", "submit_pending", "submitted", "unknown"}
+            item
+            for item in self.list_intents()
+            if item.get("state")
+            in {
+                "created",
+                "pending_approval",
+                "submit_pending",
+                "submitted",
+                "unknown",
+            }
         ]

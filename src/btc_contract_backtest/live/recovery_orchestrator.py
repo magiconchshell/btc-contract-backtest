@@ -29,7 +29,10 @@ class RecoveryOrchestrator:
         local_orders = local_orders or []
         open_result = self.adapter.fetch_open_orders()
         if not open_result.ok:
-            return RecoveryReport(ok=False, notes=[f"fetch_open_orders_failed:{open_result.error}"])
+            return RecoveryReport(
+                ok=False,
+                notes=[f"fetch_open_orders_failed:{open_result.error}"],
+            )
 
         remote_orders = open_result.payload if isinstance(open_result.payload, list) else []
         recovered_intents = []
@@ -77,7 +80,11 @@ class RecoveryOrchestrator:
                 if recovered is not None:
                     recovered_intents.append(recovered)
                 continue
-            self.submit_ledger.mark_state(intent["request_id"], state="unknown", metadata={"recovery_lookup": "not_found"})
+            self.submit_ledger.mark_state(
+                intent["request_id"],
+                state="unknown",
+                metadata={"recovery_lookup": "not_found"},
+            )
             unresolved = self.submit_ledger.get(intent["request_id"])
             if unresolved is not None:
                 unresolved_intents.append(unresolved)

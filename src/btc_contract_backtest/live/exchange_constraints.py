@@ -72,25 +72,101 @@ class ExchangeConstraintChecker:
         }
 
         if quantity <= 0:
-            violations.append(ConstraintViolation("non_positive_quantity", "Quantity must be positive").to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "non_positive_quantity",
+                    "Quantity must be positive",
+                ).to_dict()
+            )
         if abs(normalized_quantity - quantity) > 1e-9:
-            violations.append(ConstraintViolation("lot_size_violation", "Quantity does not conform to lot size", metadata={"quantity": quantity, "normalized_quantity": normalized["quantity"], "lot_size": self.contract.lot_size}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "lot_size_violation",
+                    "Quantity does not conform to lot size",
+                    metadata={
+                        "quantity": quantity,
+                        "normalized_quantity": normalized["quantity"],
+                        "lot_size": self.contract.lot_size,
+                    },
+                ).to_dict()
+            )
         if price is not None and normalized_price is not None and abs(normalized_price - price) > 1e-9:
-            violations.append(ConstraintViolation("tick_size_violation", "Price does not conform to tick size", metadata={"price": price, "normalized_price": normalized["price"], "tick_size": self.contract.tick_size}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "tick_size_violation",
+                    "Price does not conform to tick size",
+                    metadata={
+                        "price": price,
+                        "normalized_price": normalized["price"],
+                        "tick_size": self.contract.tick_size,
+                    },
+                ).to_dict()
+            )
         if notional < self.min_notional:
-            violations.append(ConstraintViolation("min_notional_violation", "Notional below exchange minimum", metadata={"notional": notional, "min_notional": self.min_notional}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "min_notional_violation",
+                    "Notional below exchange minimum",
+                    metadata={
+                        "notional": notional,
+                        "min_notional": self.min_notional,
+                    },
+                ).to_dict()
+            )
         effective_leverage = leverage if leverage is not None else self.contract.leverage
         if effective_leverage != self.contract.leverage:
-            violations.append(ConstraintViolation("leverage_mismatch", "Requested leverage does not match contract configuration", metadata={"requested": effective_leverage, "contract": self.contract.leverage}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "leverage_mismatch",
+                    "Requested leverage does not match contract configuration",
+                    metadata={
+                        "requested": effective_leverage,
+                        "contract": self.contract.leverage,
+                    },
+                ).to_dict()
+            )
         if available_margin is not None and effective_leverage > 0:
             margin_required = notional / effective_leverage
             if available_margin + 1e-12 < margin_required:
-                violations.append(ConstraintViolation("insufficient_margin", "Available margin is insufficient", metadata={"available_margin": available_margin, "required_margin": margin_required}).to_dict())
+                violations.append(
+                    ConstraintViolation(
+                        "insufficient_margin",
+                        "Available margin is insufficient",
+                        metadata={
+                            "available_margin": available_margin,
+                            "required_margin": margin_required,
+                        },
+                    ).to_dict()
+                )
         if reduce_only and position_side == 0:
-            violations.append(ConstraintViolation("reduce_only_without_position", "Reduce-only order has no open position to reduce").to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "reduce_only_without_position",
+                    "Reduce-only order has no open position to reduce",
+                ).to_dict()
+            )
         if account_mode not in {"one_way", "hedge"}:
-            violations.append(ConstraintViolation("unknown_account_mode", "Unsupported account mode", metadata={"account_mode": account_mode}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "unknown_account_mode",
+                    "Unsupported account mode",
+                    metadata={"account_mode": account_mode},
+                ).to_dict()
+            )
         if max_open_positions is not None and current_open_positions > max_open_positions:
-            violations.append(ConstraintViolation("max_open_positions_exceeded", "Too many open positions", metadata={"current_open_positions": current_open_positions, "max_open_positions": max_open_positions}).to_dict())
+            violations.append(
+                ConstraintViolation(
+                    "max_open_positions_exceeded",
+                    "Too many open positions",
+                    metadata={
+                        "current_open_positions": current_open_positions,
+                        "max_open_positions": max_open_positions,
+                    },
+                ).to_dict()
+            )
 
-        return ConstraintCheckResult(ok=len(violations) == 0, violations=violations, normalized=normalized)
+        return ConstraintCheckResult(
+            ok=len(violations) == 0,
+            violations=violations,
+            normalized=normalized,
+        )
