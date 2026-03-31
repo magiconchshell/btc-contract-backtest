@@ -1,9 +1,11 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
 from btc_contract_backtest.live.audit_logger import AuditLogger
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_audit_logger_rotation(tmp_path):
@@ -21,15 +23,24 @@ def test_shadow_summary_and_review_tools(tmp_path):
     audit.write_text(
         "\n".join(
             [
-                json.dumps({"event_type": "reconcile", "result": {"ok": False, "differences": ["x"]}}),
-                json.dumps({"event_type": "shadow_blocked", "reason": "snapshot_safety_failed", "risk_events": [{"event_type": "mark_inconsistency"}]}),
+                json.dumps(
+                    {
+                        "event_type": "reconcile",
+                        "result": {"ok": False, "differences": ["x"]},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "event_type": "shadow_blocked",
+                        "reason": "snapshot_safety_failed",
+                        "risk_events": [{"event_type": "mark_inconsistency"}],
+                    }
+                ),
                 json.dumps({"event_type": "shadow_decision", "signal": 1}),
             ]
         ),
         encoding="utf-8",
     )
-
-    import subprocess, sys
 
     p1 = subprocess.run(
         [sys.executable, "research/shadow_audit_tools.py", str(audit)],
