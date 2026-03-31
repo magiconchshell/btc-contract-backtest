@@ -70,3 +70,55 @@ def test_cancel_replace_blocks_quarantined_record(tmp_path):
 
     assert result["status"] == "blocked"
     assert result["reason"] == "ambiguous_terminal_transition"
+
+
+def test_cancel_replace_blocks_duplicate_exposure_risk_record(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    executor = GuardedLiveExecutor(CancelReplaceAdapter(), policy, approvals, alerts, audit)
+
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0, client_order_id="c1")
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record.tags["duplicate_exposure_risk"] = {"blocked": True, "reason": "late_fill_after_replace_intent"}
+
+    result = executor.governed_cancel_replace("o1", symbol="BTC/USDT", new_signal=1, quantity=1.0, notional=100.0, record=record)
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "late_fill_after_replace_intent"
+
+
+def test_cancel_replace_blocks_second_replace_while_in_flight(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    executor = GuardedLiveExecutor(CancelReplaceAdapter(), policy, approvals, alerts, audit)
+
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0, client_order_id="c1")
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record.tags["pending_replacement_order_id"] = "o2"
+
+    result = executor.governed_cancel_replace("o1", symbol="BTC/USDT", new_signal=1, quantity=1.0, notional=100.0, record=record)
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "replace_already_in_flight"
+
+
+def test_cancel_replace_blocks_terminal_order_record(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    executor = GuardedLiveExecutor(CancelReplaceAdapter(), policy, approvals, alerts, audit)
+
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0, client_order_id="c1")
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record.state = CanonicalOrderState.FILLED.value
+    record.filled_quantity = 1.0
+
+    result = executor.governed_cancel_replace("o1", symbol="BTC/USDT", new_signal=1, quantity=1.0, notional=100.0, record=record)
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "replace_requested_for_terminal_order:filled"

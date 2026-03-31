@@ -104,6 +104,41 @@ def apply_local_replace(
     )
 
 
+def _mark_replace_race_risk(
+    record: CanonicalOrderRecord,
+    *,
+    mapped: CanonicalOrderState,
+    timestamp: Optional[str],
+    event_payload: dict,
+) -> None:
+    replacement_order_id = record.tags.get("pending_replacement_order_id") or record.tags.get("replaced_by_order_id")
+    if replacement_order_id is None:
+        return
+
+    duplicate_risk = record.tags.setdefault("duplicate_exposure_risk", {})
+    duplicate_risk.update(
+        {
+            "blocked": True,
+            "reason": "late_fill_after_replace_intent",
+            "at": timestamp,
+            "original_order_id": record.order_id,
+            "replacement_order_id": replacement_order_id,
+            "incoming_status": mapped.value,
+        }
+    )
+    quarantine = record.tags.setdefault("quarantine", {})
+    quarantine.update(
+        {
+            "blocked": True,
+            "reason": "late_fill_after_replace_intent",
+            "at": timestamp,
+            "incoming_status": mapped.value,
+            "incoming_payload": event_payload,
+            "replacement_order_id": replacement_order_id,
+        }
+    )
+
+
 def apply_remote_status(
     record: CanonicalOrderRecord,
     *,
@@ -123,7 +158,7 @@ def apply_remote_status(
     if exchange_order_id is not None:
         event_payload.setdefault("exchange_order_id", exchange_order_id)
     try:
-        return OrderStateMachine.apply_transition(
+        updated = OrderStateMachine.apply_transition(
             record,
             next_state=mapped.value,
             event=OrderEvent(
@@ -138,6 +173,14 @@ def apply_remote_status(
             exchange_order_id=exchange_order_id,
             last_error=last_error,
         )
+        if mapped == CanonicalOrderState.FILLED:
+            _mark_replace_race_risk(
+                updated,
+                mapped=mapped,
+                timestamp=timestamp,
+                event_payload=event_payload,
+            )
+        return updated
     except AmbiguousOrderState as exc:
         quarantine = record.tags.setdefault("quarantine", {})
         quarantine.update(

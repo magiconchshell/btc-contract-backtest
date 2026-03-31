@@ -56,6 +56,32 @@ def test_apply_remote_status_quarantines_unsafe_ambiguity():
     assert record.tags["quarantine"]["incoming_status"] == CanonicalOrderState.FILLED.value
 
 
+def test_apply_remote_fill_after_replace_marks_duplicate_exposure_risk():
+    parent = canonical_record_from_order(
+        Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0),
+        submission_mode="governed_live",
+    )
+    parent = apply_local_submit(parent, timestamp="2026-01-01T00:00:00+00:00")
+    child = canonical_record_from_order(
+        Order(order_id="o2", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=0.6),
+        submission_mode="governed_live",
+    )
+    propagate_replace_chain(parent, child)
+
+    updated = apply_remote_status(
+        parent,
+        status=OrderStatus.FILLED.value,
+        timestamp="2026-01-01T00:00:02+00:00",
+        payload={"external_sequence": "40", "filled": 1.0},
+        filled_quantity=1.0,
+    )
+
+    assert updated.state == CanonicalOrderState.FILLED.value
+    assert updated.tags["duplicate_exposure_risk"]["blocked"] is True
+    assert updated.tags["duplicate_exposure_risk"]["replacement_order_id"] == "o2"
+    assert updated.tags["quarantine"]["reason"] == "late_fill_after_replace_intent"
+
+
 def test_propagate_replace_chain_preserves_root_and_lineage():
     parent = canonical_record_from_order(
         Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0),

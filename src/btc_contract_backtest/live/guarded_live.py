@@ -401,17 +401,42 @@ class GuardedLiveExecutor:
                 0.0,
             )
             quarantine = record.tags.get("quarantine") or {}
+            duplicate_risk = record.tags.get("duplicate_exposure_risk") or {}
+            terminal_states = {
+                CanonicalOrderState.FILLED.value,
+                CanonicalOrderState.CANCELED.value,
+                CanonicalOrderState.REJECTED.value,
+                CanonicalOrderState.EXPIRED.value,
+            }
+            reason = None
             if quarantine.get("blocked"):
                 reason = quarantine.get("reason") or "order_state_quarantined"
-                self.event_source.emit(
-                    "cancel_replace_blocked",
-                    timestamp,
+            elif duplicate_risk.get("blocked"):
+                reason = duplicate_risk.get("reason") or "duplicate_exposure_risk"
+            elif record.state in terminal_states:
+                reason = f"replace_requested_for_terminal_order:{record.state}"
+            elif record.tags.get("pending_replacement_order_id"):
+                reason = "replace_already_in_flight"
+            elif record.tags.get("replaced_by_order_id"):
+                reason = "order_already_replaced"
+            elif residual_quantity <= 0.0:
+                reason = "replace_requested_with_no_residual_quantity"
+                record.tags.setdefault("quarantine", {}).update(
                     {
-                        "cancel_order_id": cancel_order_id,
+                        "blocked": True,
                         "reason": reason,
-                        "quarantine": quarantine,
-                    },
+                        "at": timestamp,
+                    }
                 )
+            if reason is not None:
+                block_details = {
+                    "cancel_order_id": cancel_order_id,
+                    "reason": reason,
+                    "quarantine": record.tags.get("quarantine") or quarantine,
+                    "duplicate_exposure_risk": duplicate_risk,
+                    "state": record.state,
+                }
+                self.event_source.emit("cancel_replace_blocked", timestamp, block_details)
                 self.alerts.emit(
                     "governed_cancel_replace_blocked",
                     {
@@ -421,38 +446,10 @@ class GuardedLiveExecutor:
                     },
                     severity="critical",
                 )
-                self.audit.log(
-                    "governed_cancel_replace_blocked",
-                    {
-                        "cancel_order_id": cancel_order_id,
-                        "reason": reason,
-                        "quarantine": quarantine,
-                    },
-                )
+                self.audit.log("governed_cancel_replace_blocked", block_details)
                 return {
                     "status": "blocked",
                     "reason": reason,
-                    "record": record,
-                }
-            if residual_quantity <= 0.0:
-                record.tags.setdefault("quarantine", {}).update(
-                    {
-                        "blocked": True,
-                        "reason": "replace_requested_with_no_residual_quantity",
-                        "at": timestamp,
-                    }
-                )
-                self.event_source.emit(
-                    "cancel_replace_blocked",
-                    timestamp,
-                    {
-                        "cancel_order_id": cancel_order_id,
-                        "reason": "replace_requested_with_no_residual_quantity",
-                    },
-                )
-                return {
-                    "status": "blocked",
-                    "reason": "replace_requested_with_no_residual_quantity",
                     "record": record,
                 }
         side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
