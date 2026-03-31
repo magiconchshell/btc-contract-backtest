@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from math import floor
-from typing import Optional, Any
+from typing import Any, Optional
 
 from btc_contract_backtest.config.models import ContractSpec, LeverageBracket
 
