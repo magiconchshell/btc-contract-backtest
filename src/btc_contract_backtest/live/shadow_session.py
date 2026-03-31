@@ -8,11 +8,17 @@ from typing import Optional
 import ccxt
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
+from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.shadow_recovery import ShadowRecovery
-from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -39,10 +45,24 @@ class ShadowTradingSession(TradingRuntime):
             timeframe,
             execution,
             live_risk,
-            persistence=JsonRuntimeStateStore(state_file, mode="shadow", symbol=contract.symbol, leverage=contract.leverage),
+            persistence=JsonRuntimeStateStore(
+                state_file,
+                mode="shadow",
+                symbol=contract.symbol,
+                leverage=contract.leverage,
+            ),
         )
-        self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
-        self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
+        self.exchange = ccxt.binance(
+            {
+                "enableRateLimit": True,
+                "options": {"defaultType": "future"},
+            }
+        )
+        self.adapter = ExchangeExecutionAdapter(
+            self.exchange,
+            contract.symbol,
+            max_retries=self.context.live_risk.max_consecutive_failures,
+        )
         self.audit = AuditLogger(audit_log)
         self.recovery = ShadowRecovery(state_file)
         loader = getattr(self.persistence, "load_normalized_state", None)
@@ -76,7 +96,11 @@ class ShadowTradingSession(TradingRuntime):
         self.persist_runtime_state(updated_at=datetime.now(timezone.utc).isoformat())
 
     def fetch_recent_data(self, limit: int = 300):
-        rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
+        rows = self.exchange.fetch_ohlcv(
+            self.context.contract.symbol,
+            timeframe=self.context.timeframe,
+            limit=limit,
+        )
         df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
@@ -92,12 +116,24 @@ class ShadowTradingSession(TradingRuntime):
             snapshot.ask = float(ticker["ask"])
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         bar_ms = int(signal_df.index[-1].timestamp() * 1000)
-        snapshot.stale = (now_ms - bar_ms) > (self.context.risk.stale_data_threshold_seconds * 1000)
+        snapshot.stale = (
+            now_ms - bar_ms
+        ) > (self.context.risk.stale_data_threshold_seconds * 1000)
         return snapshot
 
     def reconcile(self):
         result = self.adapter.reconcile_state(self.core.position.side, 0)
-        self.audit.log("reconcile", {"timestamp": self.now_iso(), "result": result.payload if result.ok else {"error": result.error}})
+        self.audit.log(
+            "reconcile",
+            {
+                "timestamp": self.now_iso(),
+                "result": (
+                    result.payload
+                    if result.ok
+                    else {"error": result.error}
+                ),
+            },
+        )
         return result
 
     def on_blocked_snapshot(self, payload: dict):

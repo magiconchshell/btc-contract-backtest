@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from btc_contract_backtest.live.incident_store import IncidentStore
-from btc_contract_backtest.live.pilot_controls import OperatorPreflightReport, PilotReadinessReport, PilotRiskEnvelopeStore
+from btc_contract_backtest.live.pilot_controls import (
+    OperatorPreflightReport,
+    PilotReadinessReport,
+    PilotRiskEnvelopeStore,
+)
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
 from btc_contract_backtest.runtime.funding_loader import FundingSnapshotStore
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
@@ -35,7 +39,11 @@ def run_post_submit_closed_loop(
     alerts_path = Path(alerts_file)
     incident_store = IncidentStore(incidents_file)
 
-    open_orders = [o for o in state.get("orders", []) if o.get("state") not in {"filled", "canceled", "rejected", "expired"}]
+    open_orders = [
+        o
+        for o in state.get("orders", [])
+        if o.get("state") not in {"filled", "canceled", "rejected", "expired"}
+    ]
     actions = []
 
     if alerts_path.exists():
@@ -55,7 +63,10 @@ def run_post_submit_closed_loop(
 
     if any(a.get("action") == "operator_escalation" for a in actions):
         incident_store.append(
-            __import__("btc_contract_backtest.live.incident_store", fromlist=["IncidentRecord"]).IncidentRecord(
+            __import__(
+                "btc_contract_backtest.live.incident_store",
+                fromlist=["IncidentRecord"],
+            ).IncidentRecord(
                 incident_id=f"closed-loop-{len(actions)}",
                 incident_type="post_submit_monitor",
                 severity="critical",
@@ -142,11 +153,25 @@ def evaluate_pilot_run(
 ) -> PilotEvaluationReport:
     state = JsonRuntimeStateStore(state_file, mode="governed_live").get_state()
     alerts_path = Path(alerts_file)
-    alerts = [json.loads(line) for line in alerts_path.read_text(encoding="utf-8").splitlines() if line.strip()] if alerts_path.exists() else []
+    alerts = (
+        [
+            json.loads(line)
+            for line in alerts_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if alerts_path.exists()
+        else []
+    )
     incidents = IncidentStore(incidents_file).load().get("incidents", [])
     calibration_samples = CalibrationSampleStore(calibration_samples_path).load()
 
-    submit_count = len([a for a in state.get("operator_actions", []) if a.get("action") == "submit_intended_order"])
+    submit_count = len(
+        [
+            a
+            for a in state.get("operator_actions", [])
+            if a.get("action") == "submit_intended_order"
+        ]
+    )
     recommendation = "go"
     notes = []
     if incidents:

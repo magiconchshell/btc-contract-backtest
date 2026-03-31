@@ -137,8 +137,20 @@ def build_operator_preflight(
     checklist = {
         "readiness_score": readiness.score,
         "watchdog_halted": state.get("watchdog", {}).get("halted", False),
-        "open_positions": 0 if not state.get("position") or state.get("position", {}).get("side", 0) == 0 else 1,
-        "open_orders": len([o for o in state.get("orders", []) if o.get("state") not in {"filled", "canceled", "rejected", "expired"}]),
+        "open_positions": (
+            0
+            if not state.get("position")
+            or state.get("position", {}).get("side", 0) == 0
+            else 1
+        ),
+        "open_orders": len(
+            [
+                o
+                for o in state.get("orders", [])
+                if o.get("state")
+                not in {"filled", "canceled", "rejected", "expired"}
+            ]
+        ),
         "governance_mode": governance.get("mode"),
         "emergency_stop": governance.get("emergency_stop", False),
         "maintenance": governance.get("maintenance", False),
@@ -151,8 +163,16 @@ def build_operator_preflight(
         hard_blocks.append("too_many_open_positions")
     if governance.get("mode") != "approval_required":
         soft_blocks.append("governance_mode_not_approval_required")
-    if envelope.require_approval and governance.get("mode") == "guarded_live":
+    if (
+        envelope.require_approval
+        and governance.get("mode") == "guarded_live"
+    ):
         soft_blocks.append("approval_bypass_mode_active")
 
     proceed = len(hard_blocks) == 0
-    return OperatorPreflightReport(proceed=proceed, hard_blocks=hard_blocks, soft_blocks=soft_blocks, checklist=checklist)
+    return OperatorPreflightReport(
+        proceed=proceed,
+        hard_blocks=hard_blocks,
+        soft_blocks=soft_blocks,
+        checklist=checklist,
+    )

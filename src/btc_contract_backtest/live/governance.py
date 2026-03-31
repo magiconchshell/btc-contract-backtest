@@ -122,7 +122,16 @@ class GovernanceState:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text(json.dumps({"mode": TradingMode.DISABLED.value, "emergency_stop": False, "maintenance": False}, indent=2))
+            self.path.write_text(
+                json.dumps(
+                    {
+                        "mode": TradingMode.DISABLED.value,
+                        "emergency_stop": False,
+                        "maintenance": False,
+                    },
+                    indent=2,
+                )
+            )
 
     def load(self) -> dict:
         return json.loads(self.path.read_text())

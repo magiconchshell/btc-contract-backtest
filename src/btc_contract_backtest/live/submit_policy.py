@@ -10,7 +10,12 @@ class PostSubmitPolicyDecision:
 
 
 class PostSubmitPolicy:
-    def __init__(self, stuck_timeout_seconds: int = 60, allow_replace_on_stuck: bool = True, cancel_partial_fill: bool = False):
+    def __init__(
+        self,
+        stuck_timeout_seconds: int = 60,
+        allow_replace_on_stuck: bool = True,
+        cancel_partial_fill: bool = False,
+    ):
         self.stuck_timeout_seconds = stuck_timeout_seconds
         self.allow_replace_on_stuck = allow_replace_on_stuck
         self.cancel_partial_fill = cancel_partial_fill

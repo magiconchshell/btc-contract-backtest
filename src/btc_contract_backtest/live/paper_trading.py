@@ -9,13 +9,23 @@ from typing import Optional
 import ccxt
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
-from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
+from btc_contract_backtest.runtime.order_state_bridge import (
+    apply_local_submit,
+    apply_remote_status,
+    canonical_record_from_order,
+)
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
@@ -41,11 +51,25 @@ class PaperTradingSession(TradingRuntime):
             timeframe,
             execution,
             live_risk,
-            persistence=JsonRuntimeStateStore(state_file, mode="paper", symbol=contract.symbol, leverage=contract.leverage),
+            persistence=JsonRuntimeStateStore(
+                state_file,
+                mode="paper",
+                symbol=contract.symbol,
+                leverage=contract.leverage,
+            ),
         )
         self.state_path = Path(state_file)
-        self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
-        self.adapter = ExchangeExecutionAdapter(self.exchange, contract.symbol, max_retries=self.context.live_risk.max_consecutive_failures)
+        self.exchange = ccxt.binance(
+            {
+                "enableRateLimit": True,
+                "options": {"defaultType": "future"},
+            }
+        )
+        self.adapter = ExchangeExecutionAdapter(
+            self.exchange,
+            contract.symbol,
+            max_retries=self.context.live_risk.max_consecutive_failures,
+        )
         self.recovery = SessionRecovery(str(self.state_path))
         self.calibration_store = CalibrationSampleStore()
         self.state = self._load()
@@ -81,7 +105,12 @@ class PaperTradingSession(TradingRuntime):
         self.core.orders = self.recovery.restore_orders(self.state)
         duplicates = self.recovery.dedupe_client_order_ids(self.core.orders)
         if duplicates:
-            self.core.emit_risk_event("duplicate_client_order_id", "Duplicate client order ids found during recovery", severity="critical", metadata={"duplicates": duplicates})
+            self.core.emit_risk_event(
+                "duplicate_client_order_id",
+                "Duplicate client order ids found during recovery",
+                severity="critical",
+                metadata={"duplicates": duplicates},
+            )
         self.core.trades = self.state.get("trades", [])
         self.core.risk_events = self.state.get("risk_events", [])
         wd = self.state.get("watchdog") or {}
@@ -91,11 +120,37 @@ class PaperTradingSession(TradingRuntime):
         self.watchdog.state.halt_reason = wd.get("halt_reason")
 
     def reconcile_with_exchange(self):
-        result = self.adapter.reconcile_state(self.core.position.side, len([o for o in self.core.orders.values() if getattr(o, "status", None) not in (None,) and str(o.status) not in {"OrderStatus.CANCELED", "OrderStatus.FILLED", "OrderStatus.REJECTED", "OrderStatus.EXPIRED"}]))
+        open_order_count = len(
+            [
+                o
+                for o in self.core.orders.values()
+                if getattr(o, "status", None) not in (None,)
+                and str(o.status)
+                not in {
+                    "OrderStatus.CANCELED",
+                    "OrderStatus.FILLED",
+                    "OrderStatus.REJECTED",
+                    "OrderStatus.EXPIRED",
+                }
+            ]
+        )
+        result = self.adapter.reconcile_state(
+            self.core.position.side,
+            open_order_count,
+        )
         if result.ok and result.payload and not result.payload.get("ok", True):
-            self.core.emit_risk_event("reconcile_mismatch", "Exchange reconciliation detected differences", severity="critical", metadata=result.payload)
+            self.core.emit_risk_event(
+                "reconcile_mismatch",
+                "Exchange reconciliation detected differences",
+                severity="critical",
+                metadata=result.payload,
+            )
         elif not result.ok:
-            self.core.emit_risk_event("reconcile_failed", result.error or "Unknown reconcile failure", severity="warning")
+            self.core.emit_risk_event(
+                "reconcile_failed",
+                result.error or "Unknown reconcile failure",
+                severity="warning",
+            )
 
     def save(self):
         store = self.state_store()
@@ -135,7 +190,11 @@ class PaperTradingSession(TradingRuntime):
         self.persist_runtime_state(updated_at=datetime.now(timezone.utc).isoformat())
 
     def fetch_recent_data(self, limit: int = 300):
-        rows = self.exchange.fetch_ohlcv(self.context.contract.symbol, timeframe=self.context.timeframe, limit=limit)
+        rows = self.exchange.fetch_ohlcv(
+            self.context.contract.symbol,
+            timeframe=self.context.timeframe,
+            limit=limit,
+        )
         df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
@@ -172,11 +231,22 @@ class PaperTradingSession(TradingRuntime):
         if self.core.position.side == 0 and signal != 0:
             intended = payload["intended_order"] or {}
             qty = float(intended.get("quantity", 0.0))
-            order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+            order = self.core.create_order(
+                OrderSide.BUY if signal == 1 else OrderSide.SELL,
+                qty,
+                OrderType.MARKET,
+            )
             store = self.state_store()
             if hasattr(store, "upsert_order"):
-                record = canonical_record_from_order(order, submission_mode="paper")
-                record = apply_local_submit(record, timestamp=order.created_at, payload={"signal": signal, "quantity": qty})
+                record = canonical_record_from_order(
+                    order,
+                    submission_mode="paper",
+                )
+                record = apply_local_submit(
+                    record,
+                    timestamp=order.created_at,
+                    payload={"signal": signal, "quantity": qty},
+                )
                 store.upsert_order(record.to_dict())
             snapshot = type("Snapshot", (), payload["snapshot"])()
             fills = []
@@ -197,7 +267,16 @@ class PaperTradingSession(TradingRuntime):
                     reference_price=snapshot_close,
                     executed_price=fill.fill_price,
                     fill_quantity=fill.fill_quantity,
-                    spread_bps=(abs((payload["snapshot"].get("ask") or snapshot_close) - (payload["snapshot"].get("bid") or snapshot_close)) / snapshot_close * 10000) if snapshot_close > 0 else None,
+                    spread_bps=(
+                        abs(
+                            (payload["snapshot"].get("ask") or snapshot_close)
+                            - (payload["snapshot"].get("bid") or snapshot_close)
+                        )
+                        / snapshot_close
+                        * 10000
+                        if snapshot_close > 0
+                        else None
+                    ),
                     depth_notional=self.context.execution.simulated_depth_notional,
                     queue_model=self.context.execution.queue_priority_model,
                     funding_rate=payload["snapshot"].get("funding_rate"),
@@ -209,8 +288,15 @@ class PaperTradingSession(TradingRuntime):
                 )
                 self.calibration_store.append(sample)
                 if hasattr(store, "upsert_order"):
-                    record = canonical_record_from_order(order, submission_mode="paper")
-                    remote_status = order.status.value if hasattr(order.status, "value") else str(order.status)
+                    record = canonical_record_from_order(
+                        order,
+                        submission_mode="paper",
+                    )
+                    remote_status = (
+                        order.status.value
+                        if hasattr(order.status, "value")
+                        else str(order.status)
+                    )
                     record = apply_remote_status(
                         record,
                         status=remote_status,
@@ -230,8 +316,19 @@ class PaperTradingSession(TradingRuntime):
     def summary(self):
         current = self.mark_price()
         unrealized = 0.0
-        if self.core.position.side != 0 and self.core.position.entry_price is not None:
-            unrealized = ((current - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.notional * self.core.position.leverage * self.core.position.side
+        if (
+            self.core.position.side != 0
+            and self.core.position.entry_price is not None
+        ):
+            unrealized = (
+                (
+                    (current - self.core.position.entry_price)
+                    / self.core.position.entry_price
+                )
+                * self.core.position.notional
+                * self.core.position.leverage
+                * self.core.position.side
+            )
         return {
             "symbol": self.context.contract.symbol,
             "market_type": self.context.contract.market_type,
