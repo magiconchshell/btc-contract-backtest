@@ -59,6 +59,7 @@ def test_backtest_applies_funding_cost():
     )
     results = engine.simulate(strategy.generate_signals(df))
     assert results["final_capital"] < 1000.0 or not results["equity_curve"].empty
+    assert engine.exchange is None
 
 
 def test_paper_blocks_mark_inconsistency(tmp_path, monkeypatch):

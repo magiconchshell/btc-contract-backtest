@@ -87,10 +87,16 @@ def test_exchange_factory_uses_profile_specific_endpoints():
     testnet = create_binance_futures_exchange(BINANCE_FUTURES_TESTNET.key)
     mainnet = create_binance_futures_exchange(BINANCE_FUTURES_MAINNET.key, allow_mainnet=True)
 
-    assert testnet.options["defaultType"] == "future"
-    assert testnet.urls["api"]["fapiPublic"].startswith(BINANCE_FUTURES_TESTNET.rest_base_url)
-    assert mainnet.urls["api"]["fapiPublic"].startswith(BINANCE_FUTURES_MAINNET.rest_base_url)
-    assert testnet.urls["api"]["fapiPublic"] != mainnet.urls["api"]["fapiPublic"]
+    try:
+        assert testnet.options["defaultType"] == "future"
+        assert testnet.urls["api"]["fapiPublic"].startswith(BINANCE_FUTURES_TESTNET.rest_base_url)
+        assert mainnet.urls["api"]["fapiPublic"].startswith(BINANCE_FUTURES_MAINNET.rest_base_url)
+        assert testnet.urls["api"]["fapiPublic"] != mainnet.urls["api"]["fapiPublic"]
+    finally:
+        for exchange in (testnet, mainnet):
+            close = getattr(exchange, "close", None)
+            if callable(close):
+                close()
 
 
 def test_mainnet_requires_explicit_opt_in():

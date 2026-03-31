@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
@@ -31,22 +31,37 @@ class FuturesBacktestEngine:
         self.timeframe = timeframe
         self.execution = execution or ExecutionConfig()
         self.live_risk = live_risk or LiveRiskConfig()
-        import ccxt
+        self.exchange: Optional[Any] = None
 
-        self.exchange = ccxt.binance(
-            {
-                "enableRateLimit": True,
-                "options": {"defaultType": "future"},
-            }
-        )
+    def _get_exchange(self):
+        if self.exchange is None:
+            import ccxt
+
+            self.exchange = ccxt.binance(
+                {
+                    "enableRateLimit": True,
+                    "options": {"defaultType": "future"},
+                }
+            )
+        return self.exchange
+
+    def close(self) -> None:
+        exchange = self.exchange
+        self.exchange = None
+        if exchange is None:
+            return
+        close = getattr(exchange, "close", None)
+        if callable(close):
+            close()
 
     def fetch_historical_data(
         self,
         start_date: str,
         end_date: str,
     ) -> pd.DataFrame:
+        exchange = self._get_exchange()
         since = int(pd.Timestamp(start_date).timestamp() * 1000)
-        rows = self.exchange.fetch_ohlcv(
+        rows = exchange.fetch_ohlcv(
             self.contract.symbol,
             timeframe=self.timeframe,
             since=since,
@@ -58,7 +73,7 @@ class FuturesBacktestEngine:
             and pd.to_datetime(rows[-1][0], unit="ms") < pd.Timestamp(end_date)
             and len(rows) < 20000
         ):
-            nxt = self.exchange.fetch_ohlcv(
+            nxt = exchange.fetch_ohlcv(
                 self.contract.symbol,
                 timeframe=self.timeframe,
                 since=rows[-1][0] + tf_ms,
