@@ -2,6 +2,10 @@
 
 A futures / perpetual contract backtesting and paper-trading toolkit focused on **leveraged BTCUSDT-style trading**, not spot-only simulation.
 
+## Python version
+
+This project now targets **Python 3.12** for local development, testing, and packaging.
+
 ## What this project is for
 
 This repo is specifically designed for:
@@ -27,6 +31,30 @@ This repo is **not intended as a spot-only buy/sell portfolio tracker**.
 - Enhanced exit framework: ATR stop, break-even, partial take profit, stepped trailing stop
 - Paper trading session state
 - Walk-forward analysis foundation
+
+## Environment setup
+
+### Minimal runtime
+
+```bash
+/Users/magiconch/.local/bin/uv venv --python /usr/local/bin/python3.12 .venv
+.venv/bin/python -m pip install -r requirements-runtime.txt
+```
+
+### Development / test environment
+
+```bash
+/Users/magiconch/.local/bin/uv venv --python /usr/local/bin/python3.12 .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
+```
+
+### Research / notebook environment
+
+```bash
+/Users/magiconch/.local/bin/uv venv --python /usr/local/bin/python3.12 .venv
+.venv/bin/python -m pip install -r requirements-research.txt
+```
 
 ## Repo structure
 
@@ -100,6 +128,15 @@ This repo now explicitly targets your original requirement:
 - supports **leverage**
 - supports **short selling**
 - built around **BTCUSDT-style perpetuals**
+
+## Dependency layout
+
+- `requirements-runtime.txt` — core engine / CLI / live-session runtime dependencies
+- `requirements-dev.txt` — runtime + testing/linting/docs dependencies
+- `requirements-research.txt` — dev + notebooks / research / optimization extras
+- `requirements.txt` — compatibility wrapper pointing to the dev/test set
+
+`numba` is intentionally not in the default install path right now because the current `llvmlite` build chain is a poor fit for the Python 3.12 macOS x86 environment used here, and the repo does not currently import or require it.
 
 ## Status
 

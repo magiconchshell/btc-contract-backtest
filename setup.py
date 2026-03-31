@@ -5,7 +5,7 @@ setup(
     version="5.0.0",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    python_requires=">=3.9",
+    python_requires=">=3.12",
     install_requires=[
         "ccxt>=4.0.0",
         "pandas>=2.0.0",
