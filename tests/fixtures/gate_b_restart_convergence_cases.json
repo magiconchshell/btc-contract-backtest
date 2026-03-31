@@ -1,0 +1,54 @@
+[
+  {
+    "name": "clean_resume",
+    "local_position": {"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+    "remote_position": {"positionAmt": "0.25", "entryPrice": "45000.0"},
+    "unresolved_intents": [],
+    "remote_only_orders": [],
+    "local_only_orders": [],
+    "events": [
+      {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-1", "status": "new"}},
+      {"sequence": 2, "event_type": "heartbeat", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {}, "replayable": false},
+      {"sequence": 3, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:02+00:00", "payload": {"client_order_id": "cid-1", "execution_type": "trade", "last_fill_quantity": "0.25", "last_fill_price": "45000.0", "average_price": "45000.0"}}
+    ],
+    "boundary": {"last_sequence": 3, "last_event_timestamp": "2026-01-01T00:00:02+00:00", "last_received_at": "2026-01-01T00:00:03+00:00", "last_external_sequence": "33", "poll_fallback_required": false, "upstream": {"connected": true, "listen_key_present": true}},
+    "expected": {"ok": true, "critical_action_count": 0, "warning_action_count": 0, "unresolved_classifications": [], "replay_event_count": 3, "replayable_event_count": 2, "replay_order_event_count": 2, "replay_fill_event_count": 1, "last_order_update_sequence": 3, "last_fill_sequence": 3}
+  },
+  {
+    "name": "ambiguous_submit_missing_remote",
+    "local_position": {"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+    "remote_position": {"positionAmt": "0.25", "entryPrice": "45000.0"},
+    "unresolved_intents": [{"request_id": "r1", "client_order_id": "cid-missing", "state": "unknown"}],
+    "remote_only_orders": [],
+    "local_only_orders": [],
+    "events": [
+      {"sequence": 9, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-missing"}}
+    ],
+    "boundary": {"last_sequence": 9, "last_event_timestamp": "2026-01-01T00:00:00+00:00", "last_received_at": "2026-01-01T00:00:01+00:00", "last_external_sequence": "99", "poll_fallback_required": false, "upstream": {"connected": true, "listen_key_present": true}},
+    "expected": {"ok": false, "critical_action_count": 1, "warning_action_count": 0, "unresolved_classifications": ["submit_ack_ambiguous"], "replay_event_count": 1, "replayable_event_count": 1, "replay_order_event_count": 1, "replay_fill_event_count": 0, "last_order_update_sequence": 9, "last_fill_sequence": null}
+  },
+  {
+    "name": "remote_open_order_needs_adoption_not_hard_halt",
+    "local_position": {"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+    "remote_position": {"positionAmt": "0.25", "entryPrice": "45000.0"},
+    "unresolved_intents": [{"request_id": "r2", "client_order_id": "cid-remote-open", "state": "submitted"}],
+    "remote_only_orders": [{"id": "ex-1", "clientOrderId": "cid-remote-open", "status": "open"}],
+    "local_only_orders": [],
+    "events": [
+      {"sequence": 5, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-remote-open", "status": "new"}}
+    ],
+    "boundary": {"last_sequence": 5, "last_event_timestamp": "2026-01-01T00:00:00+00:00", "last_received_at": "2026-01-01T00:00:01+00:00", "last_external_sequence": "55", "poll_fallback_required": false, "upstream": {"connected": true, "listen_key_present": true}},
+    "expected": {"ok": false, "critical_action_count": 1, "warning_action_count": 1, "unresolved_classifications": ["remote_open_order_present"], "replay_event_count": 1, "replayable_event_count": 1, "replay_order_event_count": 1, "replay_fill_event_count": 0, "last_order_update_sequence": 5, "last_fill_sequence": null}
+  },
+  {
+    "name": "entry_basis_drift_and_poll_fallback_warning_only",
+    "local_position": {"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+    "remote_position": {"positionAmt": "0.25", "entryPrice": "45010.0"},
+    "unresolved_intents": [],
+    "remote_only_orders": [],
+    "local_only_orders": [{"order_id": "local-1", "client_order_id": "cid-local", "state": "new"}],
+    "events": [],
+    "boundary": {"last_sequence": null, "last_event_timestamp": null, "last_received_at": null, "last_external_sequence": null, "poll_fallback_required": true, "upstream": {"connected": false, "listen_key_present": false}},
+    "expected": {"ok": true, "critical_action_count": 0, "warning_action_count": 3, "unresolved_classifications": [], "replay_event_count": 0, "replayable_event_count": 0, "replay_order_event_count": 0, "replay_fill_event_count": 0, "last_order_update_sequence": null, "last_fill_sequence": null}
+  }
+]

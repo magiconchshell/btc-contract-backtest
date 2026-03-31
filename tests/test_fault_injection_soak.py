@@ -217,6 +217,39 @@ def test_residual_risk_inspector_flags_fill_then_replace_exposure():
 
 
 
+def test_event_sequence_monitor_tracks_symbol_partitions_and_non_numeric_sequences():
+    monitor = EventSequenceMonitor()
+
+    first = monitor.observe({
+        "source": "binance_futures_user_data:testnet",
+        "symbol": "BTC/USDT",
+        "external_sequence": "10",
+    })
+    second = monitor.observe({
+        "source": "binance_futures_user_data:testnet",
+        "symbol": "ETH/USDT",
+        "external_sequence": "10",
+    })
+    third = monitor.observe({
+        "source": "binance_futures_user_data:testnet",
+        "symbol": "BTC/USDT",
+        "external_sequence": "11",
+    })
+    bad = monitor.observe({
+        "source": "binance_futures_user_data:testnet",
+        "symbol": "BTC/USDT",
+        "external_sequence": "abc",
+    })
+
+    assert first.status == "ok"
+    assert second.status == "ok"
+    assert third.status == "ok"
+    assert bad.status == "non_numeric"
+    assert monitor.summary()["counts"]["non_numeric"] == 1
+    assert monitor.summary()["counts"]["gap"] == 0
+
+
+
 def test_soak_harness_restart_replay_preserves_long_run_boundary(tmp_path):
     recorder = EventRecorder(str(tmp_path / "events.jsonl"))
     monitor = EventSequenceMonitor()

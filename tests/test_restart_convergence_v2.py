@@ -1,7 +1,14 @@
+import json
+from pathlib import Path
+
 from btc_contract_backtest.live.restart_convergence import (
+    build_execution_replay_summary,
     build_position_convergence,
     build_startup_convergence_report,
 )
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "gate_b_restart_convergence_cases.json"
 
 
 def test_position_convergence_detects_entry_basis_quantity_and_side_mismatch():
@@ -50,8 +57,36 @@ def test_startup_convergence_classifies_ambiguous_intents_and_replay_hooks():
     assert report["replay_hooks"]["last_fill_sequence"] == 10
     assert report["summary"]["unresolved_intent_count"] == 2
     assert {item["classification"] for item in report["unresolved_intents"]} == {
-        "submit_ack_ambiguous",
+        "replay_partial_fill_without_terminal",
         "missing_client_order_id",
     }
     assert any(action["action"] == "replay_and_lookup_unresolved_intents" for action in report["actions"])
     assert any(action["action"] == "adopt_or_cancel_remote_only_orders" for action in report["actions"])
+
+
+def test_gate_b_restart_convergence_corpus_expectations_hold():
+    cases = json.loads(FIXTURES.read_text(encoding="utf-8"))
+
+    for case in cases:
+        report = build_startup_convergence_report(
+            environment="testnet",
+            local_position=case["local_position"],
+            remote_position=case["remote_position"],
+            unresolved_intents=case["unresolved_intents"],
+            remote_only_orders=case["remote_only_orders"],
+            local_only_orders=case["local_only_orders"],
+            events=case["events"],
+            boundary=case["boundary"],
+        ).to_dict()
+        expected = case["expected"]
+
+        assert report["ok"] is expected["ok"], case["name"]
+        assert report["summary"]["critical_action_count"] == expected["critical_action_count"], case["name"]
+        assert report["summary"]["warning_action_count"] == expected["warning_action_count"], case["name"]
+        assert sorted(item["classification"] for item in report["unresolved_intents"]) == sorted(expected["unresolved_classifications"]), case["name"]
+        assert report["watermark"]["replay_event_count"] == expected["replay_event_count"], case["name"]
+        assert report["watermark"]["replayable_event_count"] == expected["replayable_event_count"], case["name"]
+        assert report["watermark"]["replay_order_event_count"] == expected["replay_order_event_count"], case["name"]
+        assert report["watermark"]["replay_fill_event_count"] == expected["replay_fill_event_count"], case["name"]
+        assert report["replay_hooks"]["last_order_update_sequence"] == expected["last_order_update_sequence"], case["name"]
+        assert report["replay_hooks"]["last_fill_sequence"] == expected["last_fill_sequence"], case["name"]
