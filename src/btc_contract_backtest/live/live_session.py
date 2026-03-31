@@ -15,8 +15,10 @@ from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, GovernanceState, OperatorApprovalQueue, TradingMode
 from btc_contract_backtest.live.guarded_live import GuardedLiveExecutor
 from btc_contract_backtest.live.incident_store import IncidentRecord, IncidentStore
+from btc_contract_backtest.live.event_stream import EventDrivenExecutionSource, EventRecorder
 from btc_contract_backtest.live.live_recovery import LiveSessionRecovery
 from btc_contract_backtest.live.order_monitor import OrderLifecycleMonitor
+from btc_contract_backtest.live.recovery_orchestrator import RecoveryOrchestrator
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
@@ -72,9 +74,12 @@ class GovernedLiveSession(TradingRuntime):
         state = self.gov_state.load()
         current_mode = TradingMode(state.get("mode", mode.value))
         self.submit_ledger = SubmitLedger(str(Path(state_file).with_name("submit_ledger.json")))
+        self.event_source = EventDrivenExecutionSource(EventRecorder(str(Path(state_file).with_name("execution_events.jsonl"))))
         self.policy = GovernancePolicy(risk, self.context.live_risk, current_mode, contract=contract)
-        self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit, submit_ledger=self.submit_ledger)
+        self.executor = GuardedLiveExecutor(self.adapter, self.policy, self.approvals, self.alerts, self.audit, submit_ledger=self.submit_ledger, event_source=self.event_source)
         self.order_monitor = OrderLifecycleMonitor(self.adapter, self.alerts, self.audit)
+        self.recovery_orchestrator = RecoveryOrchestrator(self.adapter, self.submit_ledger)
+        self._recovery_report = self.recovery_orchestrator.recover(local_orders=recovered.get("orders", []))
 
     def save_state(self, payload: dict | None = None):
         store = self.state_store()
@@ -84,6 +89,7 @@ class GovernedLiveSession(TradingRuntime):
             store.set_last_runtime_snapshot(payload or {})
             store.set_reconcile_report((payload or {}).get("reconcile_report") or {})
             store.set_submit_ledger(self.submit_ledger.load())
+            store.set_state_fields(recovery_report=self._recovery_report.to_dict() if hasattr(self._recovery_report, "to_dict") else self._recovery_report, execution_events=self.event_source.replay())
             store.set_watchdog({
                 "last_heartbeat_at": self.watchdog.state.last_heartbeat_at,
                 "consecutive_failures": self.watchdog.state.consecutive_failures,
@@ -122,6 +128,7 @@ class GovernedLiveSession(TradingRuntime):
 
     def on_decision(self, payload: dict):
         state = self.gov_state.load()
+        self.event_source.emit("runtime_decision", self.now_iso(), {"signal": payload.get("signal"), "snapshot": payload.get("snapshot") or {}, "intended_order": payload.get("intended_order") or {}}, source="runtime")
         if state.get("emergency_stop"):
             halted = {"event": "halted", "reason": "emergency_stop", "timestamp": self.now_iso()}
             self.audit.log("live_session_halt", halted)
@@ -142,6 +149,11 @@ class GovernedLiveSession(TradingRuntime):
         store = self.state_store()
         if hasattr(store, "get_state"):
             local_orders = store.get_state().get("orders", [])
+        balance = self.adapter.fetch_balance()
+        available_margin = None
+        if balance.ok and isinstance(balance.payload, dict):
+            usdt = balance.payload.get("USDT") or {}
+            available_margin = usdt.get("free")
         local_position = {
             "side": self.core.position.side,
             "quantity": abs(self.core.position.quantity),
@@ -159,6 +171,11 @@ class GovernedLiveSession(TradingRuntime):
             stale=payload["snapshot"].get("stale", False),
             reconcile_ok=reconcile_ok,
             watchdog_halted=self.watchdog.state.halted,
+            available_margin=None if available_margin is None else float(available_margin),
+            leverage=self.context.contract.leverage,
+            position_side=self.core.position.side,
+            account_mode="one_way",
+            current_open_positions=0 if self.core.position.side == 0 else 1,
             emergency_stop=state.get("emergency_stop", False),
             maintenance=state.get("maintenance", False),
             current_daily_loss_pct=0.0,
@@ -191,6 +208,23 @@ class GovernedLiveSession(TradingRuntime):
             if monitor_result.get("record") is not None:
                 store.upsert_order(monitor_result["record"].to_dict())
             payload["post_submit_monitor"] = {k: v for k, v in monitor_result.items() if k != "record"}
+            if monitor_result.get("status") in {"stuck_open", "partial_fill"}:
+                replace_result = self.executor.governed_cancel_replace(
+                    order.order_id,
+                    symbol=self.context.contract.symbol,
+                    new_signal=payload["signal"],
+                    quantity=float(intended.get("quantity", 0.0)),
+                    notional=float(intended.get("notional", 0.0)),
+                    record=monitor_result.get("record"),
+                )
+                payload["cancel_replace"] = {k: v for k, v in replace_result.items() if k not in {"record", "new_order"}}
+                if replace_result.get("record") is not None:
+                    store.upsert_order(replace_result["record"].to_dict())
+                new_order = replace_result.get("new_order")
+                if new_order is not None:
+                    replacement_record = canonical_record_from_order(new_order, submission_mode="governed_live")
+                    replacement_record = apply_local_submit(replacement_record, timestamp=new_order.created_at, payload={"replaces": order.order_id})
+                    store.upsert_order(replacement_record.to_dict())
             sample = sample_from_execution(
                 timestamp=self.now_iso(),
                 symbol=self.context.contract.symbol,

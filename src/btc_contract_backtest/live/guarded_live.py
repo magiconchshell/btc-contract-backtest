@@ -7,7 +7,9 @@ from btc_contract_backtest.engine.execution_models import Order, OrderSide, Orde
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.governance import AlertSink, GovernancePolicy, OperatorApprovalQueue
+from btc_contract_backtest.live.event_stream import EventDrivenExecutionSource
 from btc_contract_backtest.live.submit_ledger import SubmitAttempt, SubmitIntent, SubmitLedger
+from btc_contract_backtest.runtime.order_state_bridge import apply_local_cancel, apply_local_replace
 
 
 class GuardedLiveExecutor:
@@ -19,6 +21,7 @@ class GuardedLiveExecutor:
         alerts: AlertSink,
         audit: AuditLogger,
         submit_ledger: SubmitLedger | None = None,
+        event_source: EventDrivenExecutionSource | None = None,
     ):
         self.adapter = adapter
         self.governance = governance
@@ -26,6 +29,7 @@ class GuardedLiveExecutor:
         self.alerts = alerts
         self.audit = audit
         self.submit_ledger = submit_ledger or SubmitLedger()
+        self.event_source = event_source or EventDrivenExecutionSource()
 
     def submit_intended_order(
         self,
@@ -55,6 +59,7 @@ class GuardedLiveExecutor:
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
         self.submit_ledger.upsert(intent)
+        self.event_source.emit("submit_intent_created", intent.created_at or datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "symbol": symbol, "signal": signal, "quantity": quantity, "notional": notional})
         decision = self.governance.evaluate(
             symbol=symbol,
             notional=notional,
@@ -63,6 +68,11 @@ class GuardedLiveExecutor:
             reconcile_ok=reconcile_ok,
             watchdog_halted=watchdog_halted,
             quantity=quantity,
+            available_margin=None,
+            leverage=None,
+            position_side=0,
+            account_mode="one_way",
+            current_open_positions=0,
             emergency_stop=emergency_stop,
             maintenance=maintenance,
             current_daily_loss_pct=current_daily_loss_pct,
@@ -70,6 +80,7 @@ class GuardedLiveExecutor:
         if not decision.allowed:
             if decision.requires_approval:
                 self.submit_ledger.mark_state(request_id, state="pending_approval", timestamp=datetime.now(timezone.utc).isoformat(), metadata={"reason": decision.reason})
+                self.event_source.emit("submit_intent_pending_approval", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "reason": decision.reason})
                 self.approvals.request_approval(request_id, {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "symbol": symbol,
@@ -82,6 +93,7 @@ class GuardedLiveExecutor:
                 self.audit.log("governance_pending_approval", {"request_id": request_id, "client_order_id": client_order_id, "symbol": symbol, "signal": signal, "quantity": quantity, "notional": notional})
                 return {"status": "pending_approval", "request_id": request_id, "client_order_id": client_order_id, "reason": decision.reason}
             self.submit_ledger.mark_state(request_id, state="blocked", timestamp=datetime.now(timezone.utc).isoformat(), error=decision.reason)
+            self.event_source.emit("submit_intent_blocked", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "reason": decision.reason})
             self.alerts.emit("governance_block", {"timestamp": datetime.now(timezone.utc).isoformat(), "reason": decision.reason, "symbol": symbol})
             self.audit.log("governance_block", {"request_id": request_id, "client_order_id": client_order_id, "reason": decision.reason, "symbol": symbol, "signal": signal})
             return {"status": "blocked", "request_id": request_id, "client_order_id": client_order_id, "reason": decision.reason}
@@ -90,6 +102,7 @@ class GuardedLiveExecutor:
         existing = self.submit_ledger.get_by_client_order_id(client_order_id)
         if existing and existing.get("state") in {"submitted", "acked", "partial", "filled"}:
             self.audit.log("governance_submit_deduped", {"request_id": request_id, "client_order_id": client_order_id, "existing": existing})
+            self.event_source.emit("submit_intent_deduped", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "existing": existing})
             return {"status": "deduped", "request_id": request_id, "client_order_id": client_order_id, "existing": existing}
 
         order = Order(
@@ -107,6 +120,7 @@ class GuardedLiveExecutor:
             exchange_order_id = (result.payload or {}).get("id") if isinstance(result.payload, dict) else None
             self.submit_ledger.append_attempt(request_id, SubmitAttempt(timestamp=datetime.now(timezone.utc).isoformat(), action="submit", status="ok", payload={"response": result.payload}))
             self.submit_ledger.mark_state(request_id, state="submitted", timestamp=datetime.now(timezone.utc).isoformat(), exchange_order_id=exchange_order_id)
+            self.event_source.emit("submit_intent_submitted", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "exchange_order_id": exchange_order_id, "response": result.payload})
             self.audit.log("governance_submit", {"request_id": request_id, "client_order_id": client_order_id, "symbol": symbol, "signal": signal, "quantity": quantity, "notional": notional, "response": result.payload})
             return {"status": "submitted", "request_id": request_id, "client_order_id": client_order_id, "response": result.payload, "order": order}
         self.submit_ledger.append_attempt(request_id, SubmitAttempt(timestamp=datetime.now(timezone.utc).isoformat(), action="submit", status="error", payload={"error": result.error}))
@@ -115,14 +129,16 @@ class GuardedLiveExecutor:
             remote_order = remote_lookup.payload[0]
             exchange_order_id = remote_order.get("id")
             self.submit_ledger.mark_state(request_id, state="submitted", timestamp=datetime.now(timezone.utc).isoformat(), exchange_order_id=exchange_order_id, metadata={"recovered_from": "client_order_lookup"})
+            self.event_source.emit("submit_intent_recovered", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "exchange_order_id": exchange_order_id, "response": remote_order, "original_error": result.error})
             self.audit.log("governance_submit_recovered", {"request_id": request_id, "client_order_id": client_order_id, "response": remote_order, "original_error": result.error})
             return {"status": "submitted_recovered", "request_id": request_id, "client_order_id": client_order_id, "response": remote_order, "order": order}
         self.submit_ledger.mark_state(request_id, state="unknown", timestamp=datetime.now(timezone.utc).isoformat(), error=result.error)
+        self.event_source.emit("submit_intent_unknown", datetime.now(timezone.utc).isoformat(), {"request_id": request_id, "client_order_id": client_order_id, "error": result.error})
         self.alerts.emit("governance_submit_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "request_id": request_id, "error": result.error})
         self.audit.log("governance_submit_failed", {"request_id": request_id, "client_order_id": client_order_id, "error": result.error})
         return {"status": "submit_failed", "request_id": request_id, "client_order_id": client_order_id, "error": result.error}
 
-    def governed_cancel_replace(self, cancel_order_id: str, symbol: str, new_signal: int, quantity: float, notional: float):
+    def governed_cancel_replace(self, cancel_order_id: str, symbol: str, new_signal: int, quantity: float, notional: float, record=None):
         side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
         new_order = Order(
             order_id=str(uuid.uuid4()),
@@ -132,13 +148,22 @@ class GuardedLiveExecutor:
             quantity=quantity,
             client_order_id=str(uuid.uuid4()),
         )
+        if record is not None:
+            try:
+                record = apply_local_cancel(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"cancel_order_id": cancel_order_id})
+                record = apply_local_replace(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"new_order_id": new_order.order_id})
+            except Exception:  # noqa: BLE001
+                pass
+        self.event_source.emit("cancel_replace_requested", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "symbol": symbol, "quantity": quantity, "notional": notional})
         result = self.adapter.cancel_replace_order(cancel_order_id, new_order)
         if result.ok:
+            self.event_source.emit("cancel_replace_completed", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "response": result.payload})
             self.audit.log("governed_cancel_replace", {"cancel_order_id": cancel_order_id, "new_signal": new_signal, "quantity": quantity, "notional": notional, "response": result.payload})
-            return {"status": "cancel_replaced", "response": result.payload}
+            return {"status": "cancel_replaced", "response": result.payload, "record": record, "new_order": new_order}
+        self.event_source.emit("cancel_replace_failed", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "error": result.error})
         self.alerts.emit("governed_cancel_replace_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "cancel_order_id": cancel_order_id, "error": result.error})
         self.audit.log("governed_cancel_replace_failed", {"cancel_order_id": cancel_order_id, "error": result.error})
-        return {"status": "cancel_replace_failed", "error": result.error}
+        return {"status": "cancel_replace_failed", "error": result.error, "record": record}
 
     def process_approved_request(self, request_id: str):
         if self.approvals.is_rejected(request_id):
@@ -151,6 +176,7 @@ class GuardedLiveExecutor:
         if req is None:
             return {"status": "missing_request", "request_id": request_id}
         self.submit_ledger.mark_state(request_id, state="approved", timestamp=datetime.now(timezone.utc).isoformat())
+        self.event_source.emit("submit_intent_approved", datetime.now(timezone.utc).isoformat(), {"request_id": request_id})
         existing = self.submit_ledger.get(request_id)
         if existing and existing.get("state") in {"submitted", "acked", "partial", "filled"}:
             return {"status": "deduped", "request_id": request_id, "existing": existing}

@@ -60,10 +60,16 @@ class ExchangeExecutionAdapter:
         cancel_result = self.cancel_order(cancel_order_id)
         if not cancel_result.ok:
             return cancel_result
-        return self.submit_order(new_order)
+        submit_result = self.submit_order(new_order)
+        if not submit_result.ok:
+            return submit_result
+        return AdapterResult(ok=True, payload={"cancel": cancel_result.payload, "replace": submit_result.payload})
 
     def fetch_open_orders(self) -> AdapterResult:
         return self._retry(lambda: self.exchange.fetch_open_orders(self.symbol))
+
+    def fetch_balance(self) -> AdapterResult:
+        return self._retry(lambda: self.exchange.fetch_balance())
 
     def fetch_positions(self) -> AdapterResult:
         return self._retry(lambda: self.exchange.fetch_positions([self.symbol]))

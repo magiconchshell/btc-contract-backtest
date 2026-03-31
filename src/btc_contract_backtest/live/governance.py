@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 
 from btc_contract_backtest.config.models import ContractSpec, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.live.exchange_constraints import ExchangeConstraintChecker
 
 
 class TradingMode(str, Enum):
@@ -123,6 +124,7 @@ class GovernancePolicy:
         self.live_risk = live_risk
         self.mode = mode
         self.contract = contract
+        self.constraint_checker = ExchangeConstraintChecker(contract) if contract is not None else None
 
     def evaluate(
         self,
@@ -135,6 +137,11 @@ class GovernancePolicy:
         watchdog_halted: bool,
         quantity: float | None = None,
         reduce_only: bool = False,
+        available_margin: float | None = None,
+        leverage: int | None = None,
+        position_side: int = 0,
+        account_mode: str = "one_way",
+        current_open_positions: int = 0,
         emergency_stop: bool = False,
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
@@ -151,22 +158,24 @@ class GovernancePolicy:
             return GovernanceDecision(False, "reconcile_mismatch", severity="critical")
         if quantity is not None and quantity <= 0:
             return GovernanceDecision(False, "non_positive_quantity", severity="critical", metadata={"quantity": quantity})
-        if self.contract is not None:
-            lot = getattr(self.contract, "lot_size", None)
-            tick = getattr(self.contract, "tick_size", None)
-            if lot and quantity is not None:
-                rounded_qty = round(quantity / lot) * lot
-                if abs(rounded_qty - quantity) > 1e-9:
-                    return GovernanceDecision(False, "lot_size_violation", severity="critical", metadata={"quantity": quantity, "lot_size": lot})
-            if tick and notional > 0 and self.risk.max_symbol_exposure_pct is None:
-                pass
+        if self.constraint_checker is not None and quantity is not None:
+            constraint_result = self.constraint_checker.check(
+                quantity=quantity,
+                price=None,
+                notional=notional,
+                available_margin=available_margin,
+                leverage=leverage,
+                reduce_only=reduce_only,
+                position_side=position_side,
+                account_mode=account_mode,
+                max_open_positions=self.live_risk.max_open_positions,
+                current_open_positions=current_open_positions,
+            )
+            if not constraint_result.ok:
+                first = constraint_result.violations[0]
+                return GovernanceDecision(False, first["code"], severity=first.get("severity", "critical"), metadata={"violations": constraint_result.violations, "normalized": constraint_result.normalized})
         if self.risk.max_symbol_exposure_pct is not None and notional > self.risk.max_symbol_exposure_pct:
             return GovernanceDecision(False, "symbol_exposure_limit", severity="critical", metadata={"notional": notional})
-        min_notional = None
-        if self.contract is not None and getattr(self.contract, "lot_size", None) is not None:
-            min_notional = getattr(self.contract, "lot_size")
-        if min_notional is not None and notional < min_notional:
-            return GovernanceDecision(False, "min_notional_violation", severity="critical", metadata={"notional": notional, "min_notional": min_notional})
         if self.risk.max_daily_loss_pct is not None and current_daily_loss_pct >= self.risk.max_daily_loss_pct:
             return GovernanceDecision(False, "daily_loss_limit", severity="critical", metadata={"current_daily_loss_pct": current_daily_loss_pct})
         if self.mode == TradingMode.APPROVAL_REQUIRED:

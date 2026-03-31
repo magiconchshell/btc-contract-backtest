@@ -43,6 +43,22 @@ def apply_local_submit(record: CanonicalOrderRecord, *, timestamp: str | None, p
     )
 
 
+def apply_local_cancel(record: CanonicalOrderRecord, *, timestamp: str | None, payload: dict | None = None) -> CanonicalOrderRecord:
+    return OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.CANCEL_PENDING.value,
+        event=OrderEvent(source="local", event_type="cancel_intent", state=CanonicalOrderState.CANCEL_PENDING.value, timestamp=timestamp, payload=payload or {}),
+    )
+
+
+def apply_local_replace(record: CanonicalOrderRecord, *, timestamp: str | None, payload: dict | None = None) -> CanonicalOrderRecord:
+    return OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.REPLACE_PENDING.value,
+        event=OrderEvent(source="local", event_type="replace_intent", state=CanonicalOrderState.REPLACE_PENDING.value, timestamp=timestamp, payload=payload or {}),
+    )
+
+
 def apply_remote_status(
     record: CanonicalOrderRecord,
     *,

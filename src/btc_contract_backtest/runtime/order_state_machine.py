@@ -8,6 +8,8 @@ from typing import Any
 class CanonicalOrderState(str, Enum):
     NEW = "new"
     ACKED = "acked"
+    CANCEL_PENDING = "cancel_pending"
+    REPLACE_PENDING = "replace_pending"
     PARTIAL = "partial"
     FILLED = "filled"
     CANCELED = "canceled"
@@ -24,9 +26,11 @@ TERMINAL_STATES = {
 
 
 VALID_TRANSITIONS: dict[CanonicalOrderState, set[CanonicalOrderState]] = {
-    CanonicalOrderState.NEW: {CanonicalOrderState.NEW, CanonicalOrderState.ACKED, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
-    CanonicalOrderState.ACKED: {CanonicalOrderState.ACKED, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
-    CanonicalOrderState.PARTIAL: {CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
+    CanonicalOrderState.NEW: {CanonicalOrderState.NEW, CanonicalOrderState.ACKED, CanonicalOrderState.CANCEL_PENDING, CanonicalOrderState.REPLACE_PENDING, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
+    CanonicalOrderState.ACKED: {CanonicalOrderState.ACKED, CanonicalOrderState.CANCEL_PENDING, CanonicalOrderState.REPLACE_PENDING, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
+    CanonicalOrderState.CANCEL_PENDING: {CanonicalOrderState.CANCEL_PENDING, CanonicalOrderState.CANCELED, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
+    CanonicalOrderState.REPLACE_PENDING: {CanonicalOrderState.REPLACE_PENDING, CanonicalOrderState.ACKED, CanonicalOrderState.PARTIAL, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
+    CanonicalOrderState.PARTIAL: {CanonicalOrderState.PARTIAL, CanonicalOrderState.CANCEL_PENDING, CanonicalOrderState.REPLACE_PENDING, CanonicalOrderState.FILLED, CanonicalOrderState.CANCELED, CanonicalOrderState.REJECTED, CanonicalOrderState.EXPIRED},
     CanonicalOrderState.FILLED: {CanonicalOrderState.FILLED},
     CanonicalOrderState.CANCELED: {CanonicalOrderState.CANCELED},
     CanonicalOrderState.REJECTED: {CanonicalOrderState.REJECTED},
