@@ -6,6 +6,20 @@ Depends on: race-hardening landing, partial-fill merge landing, Gate B replay/ev
 
 ---
 
+## Current Status
+
+Gate C is the first supervised testnet pilot gate, but it is still **blocked**
+until Gate B stays green and the supervised evidence package is reviewed.
+
+In practice, that means the operator needs three things before calling a Gate C
+run ready:
+
+- Gate B replay, restart, and event-state checks still passing
+- reviewed pilot fixtures / drill records for the required scenarios
+- a tiny-size, single-symbol, approval-required supervised runbook
+
+---
+
 ## Purpose
 
 Gate C should be the **first supervised testnet pilot gate**, not a paper-only quality gate.
@@ -95,6 +109,24 @@ A Gate C supervised pilot should only be considered passed when all of the follo
 - any partial-fill episode preserved correct cumulative quantity across restart boundaries
 - incident log is empty or only contains reviewed non-critical noise
 - pilot dossier and post-run evaluation recommend `go` or at least do not force `rollback`
+
+---
+
+## Practical Operator Runbook
+
+Use this sequence when preparing a supervised Gate C pilot:
+
+1. Confirm Gate B is still green on the current commit.
+2. Review the four versioned fixtures listed above and make sure they match the run you are about to perform.
+3. Run the governed live preflight and verify:
+   - `approval_required` mode
+   - emergency stop off
+   - maintenance off
+   - tiny-size, single-symbol limits
+4. Start in shadow or dry-run mode first if anything about the exchange state is uncertain.
+5. Run the supervised testnet pilot with one operator watching reconcile, recovery, and incident output in real time.
+6. Stop immediately on any critical reconcile mismatch, duplicate submit, or unresolved ambiguous intent.
+7. Save the pilot dossier and post-run notes before any resume or retry.
 
 ---
 

@@ -87,6 +87,16 @@ Target runtime: Python 3.12
 
 ## 3. Operational Go-Live Checklist
 
+## Current release posture
+
+This repo currently treats **Gate B** as the active progression gate for restart-convergence and event-state correctness. **Gate C** is a supervised testnet pilot gate and should stay blocked until the required fixtures, drills, and pilot evidence are reviewed.
+
+Practical operator path:
+
+- keep Gate B green
+- use shadow / paper / governed dry-run evidence first
+- only then move to the supervised tiny-size Gate C pilot
+
 ### Human controls
 - [ ] Emergency stop verified
 - [ ] Maintenance mode verified

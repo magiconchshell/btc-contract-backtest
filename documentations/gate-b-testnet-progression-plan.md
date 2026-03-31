@@ -5,6 +5,20 @@ Project: `github-btc-backtest`
 
 ---
 
+## Current Status
+
+Gate B is the current progression gate for this repo. It is intended to keep
+restart-convergence, event-continuity, and cancel/replace residual-risk checks
+green before any broader testnet movement.
+
+Gate C is not yet a live-go-live gate. It remains blocked on the supervised
+pilot evidence package described in the Gate C plan: race-hardening coverage,
+partial-fill continuity across restart, and reviewed soak/drill artifacts.
+
+Operators should treat this as a **progression gate**, not a profitability gate.
+
+---
+
 ## Purpose
 
 Gate B should be the **last controlled checkpoint before broader testnet progression** after the restart-convergence and event-state work lands.
