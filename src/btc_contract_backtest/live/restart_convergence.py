@@ -4,9 +4,13 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from btc_contract_backtest.runtime.order_state_bridge import apply_remote_status
+from btc_contract_backtest.runtime.order_state_machine import OrderStateMachine
+
 
 OPEN_REMOTE_ORDER_STATES = {"new", "open", "acked", "partially_filled", "partial", "working"}
 TERMINAL_INTENT_STATES = {"filled", "canceled", "rejected", "expired", "failed"}
+TERMINAL_REPLAY_ORDER_STATES = {"filled", "canceled", "rejected", "expired"}
 
 
 @dataclass
@@ -132,6 +136,38 @@ def _position_entry_price(position: Optional[dict[str, Any]]) -> Optional[float]
     return float(str(value))
 
 
+def _normalize_order_state(value: Any) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    normalized = str(value).strip().lower()
+    aliases = {
+        "cancelled": "canceled",
+        "closed": "filled",
+        "partiallyfilled": "partially_filled",
+        "partially_filled": "partial",
+        "partially-filled": "partial",
+        "partial_fill": "partial",
+        "partialfilled": "partial",
+        "trade": "partial",
+        "new": "new",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    if value in (None, ""):
+        return None
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    payload = event.get("payload")
+    return payload if isinstance(payload, dict) else {}
+
+
 def build_convergence_watermark(
     *,
     boundary: Optional[dict[str, Any]],
@@ -148,7 +184,7 @@ def build_convergence_watermark(
     fill_events = [
         event for event in replayable
         if str(event.get("event_type") or "") in {"order_trade_update", "fill", "fill_update"}
-        or str((event.get("payload") or {}).get("execution_type") or "").lower() == "trade"
+        or str((_event_payload(event).get("execution_type") or "")).lower() == "trade"
     ]
     upstream_value = boundary.get("upstream")
     upstream = upstream_value if isinstance(upstream_value, dict) else {}
@@ -202,10 +238,104 @@ def build_position_convergence(
     )
 
 
+def summarize_replay_state(events: Optional[list[dict[str, Any]]]) -> dict[str, Any]:
+    replayable = [event for event in (events or []) if bool(event.get("replayable", True))]
+    orders_by_client: dict[str, dict[str, Any]] = {}
+    latest_account_update: Optional[dict[str, Any]] = None
+
+    for event in replayable:
+        payload = _event_payload(event)
+        event_type = str(event.get("event_type") or "")
+        client_order_id = payload.get("client_order_id")
+        order_id = payload.get("order_id")
+        state = _normalize_order_state(payload.get("status")) or _normalize_order_state(event_type.removeprefix("order_"))
+        filled_quantity = _safe_float(payload.get("filled_quantity"))
+        last_fill_quantity = _safe_float(payload.get("last_fill_quantity")) or 0.0
+        average_price = _safe_float(payload.get("average_price"))
+        target = None
+        if client_order_id:
+            target = orders_by_client.setdefault(
+                str(client_order_id),
+                {
+                    "client_order_id": str(client_order_id),
+                    "order_id": order_id,
+                    "state": None,
+                    "terminal": False,
+                    "filled_quantity": 0.0,
+                    "last_fill_quantity": 0.0,
+                    "average_price": None,
+                    "last_sequence": None,
+                    "last_timestamp": None,
+                    "event_types": [],
+                },
+            )
+        elif order_id is not None:
+            target = orders_by_client.setdefault(
+                str(order_id),
+                {
+                    "client_order_id": None,
+                    "order_id": order_id,
+                    "state": None,
+                    "terminal": False,
+                    "filled_quantity": 0.0,
+                    "last_fill_quantity": 0.0,
+                    "average_price": None,
+                    "last_sequence": None,
+                    "last_timestamp": None,
+                    "event_types": [],
+                },
+            )
+
+        if target is not None and event_type.startswith("order_"):
+            target["order_id"] = target.get("order_id") or order_id
+            target["state"] = state or target.get("state")
+            target["terminal"] = bool(target.get("state") in TERMINAL_REPLAY_ORDER_STATES)
+            target["last_sequence"] = event.get("sequence")
+            target["last_timestamp"] = event.get("timestamp")
+            target["last_fill_quantity"] = last_fill_quantity
+            if filled_quantity is not None:
+                target["filled_quantity"] = filled_quantity
+            elif event_type == "order_trade_update":
+                target["filled_quantity"] = max(float(target.get("filled_quantity") or 0.0), last_fill_quantity)
+            if average_price is not None:
+                target["average_price"] = average_price
+            target.setdefault("event_types", []).append(event_type)
+
+        if event_type == "account_update":
+            latest_account_update = event
+
+    position_hint = None
+    if latest_account_update is not None:
+        payload = _event_payload(latest_account_update)
+        positions = payload.get("positions") or []
+        if positions:
+            best = positions[0]
+            for position in positions:
+                qty = abs(float(position.get("pa") or position.get("positionAmt") or position.get("quantity") or 0.0))
+                if qty > abs(float(best.get("pa") or best.get("positionAmt") or best.get("quantity") or 0.0)):
+                    best = position
+            position_hint = {
+                "side": _position_side(best),
+                "quantity": _position_quantity(best),
+                "entry_price": _position_entry_price(best),
+                "raw": best,
+                "timestamp": latest_account_update.get("timestamp"),
+                "sequence": latest_account_update.get("sequence"),
+            }
+
+    return {
+        "orders_by_client_order_id": orders_by_client,
+        "terminal_order_count": sum(1 for item in orders_by_client.values() if item.get("terminal")),
+        "position_hint": position_hint,
+        "latest_account_update_sequence": latest_account_update.get("sequence") if latest_account_update else None,
+    }
+
+
 def classify_unresolved_intents(
     *,
     intents: list[dict[str, Any]],
     remote_orders: list[dict[str, Any]],
+    replay_state: Optional[dict[str, Any]] = None,
 ) -> list[IntentConvergence]:
     remote_by_client: dict[str, dict[str, Any]] = {}
     for order in remote_orders:
@@ -215,12 +345,14 @@ def classify_unresolved_intents(
         if client_id:
             remote_by_client[str(client_id)] = order
 
+    replay_by_client = ((replay_state or {}).get("orders_by_client_order_id") or {}) if isinstance(replay_state, dict) else {}
     results: list[IntentConvergence] = []
     for intent in intents:
         state = str(intent.get("state") or "unknown")
         client_id = intent.get("client_order_id")
         request_id = str(intent.get("request_id") or "")
         remote = remote_by_client.get(str(client_id)) if client_id else None
+        replay = replay_by_client.get(str(client_id)) if client_id else None
         if not client_id:
             results.append(IntentConvergence(
                 request_id=request_id,
@@ -241,6 +373,30 @@ def classify_unresolved_intents(
                 reason="Remote open order still exists and requires local state convergence",
                 exchange_order_id=intent.get("exchange_order_id"),
                 remote_order_id=remote.get("id"),
+            ))
+            continue
+        replay_state_name = _normalize_order_state((replay or {}).get("state"))
+        replay_filled_quantity = float((replay or {}).get("filled_quantity") or 0.0)
+        if replay_state_name in TERMINAL_REPLAY_ORDER_STATES:
+            results.append(IntentConvergence(
+                request_id=request_id,
+                client_order_id=client_id,
+                state=state,
+                classification="replay_terminal_state",
+                severity="info",
+                reason=f"Replay recorded terminal state={replay_state_name}; intent can converge without open remote order",
+                exchange_order_id=intent.get("exchange_order_id") or (replay or {}).get("order_id"),
+            ))
+            continue
+        if replay_filled_quantity > 0.0:
+            results.append(IntentConvergence(
+                request_id=request_id,
+                client_order_id=client_id,
+                state=state,
+                classification="replay_partial_fill_without_terminal",
+                severity="warning",
+                reason="Replay recorded fills but no terminal state or remote open order remains",
+                exchange_order_id=intent.get("exchange_order_id") or (replay or {}).get("order_id"),
             ))
             continue
         if state in {"unknown", "submit_pending", "submitted"}:
@@ -284,13 +440,14 @@ def recommend_recovery_actions(
             reason="Position quantity / side / entry basis diverged at startup",
             metadata=position.to_dict(),
         ))
-    if unresolved_intents:
-        highest = "critical" if any(item.severity == "critical" for item in unresolved_intents) else "warning"
+    blocking_intents = [item for item in unresolved_intents if item.classification != "replay_terminal_state"]
+    if blocking_intents:
+        highest = "critical" if any(item.severity == "critical" for item in blocking_intents) else "warning"
         actions.append(RecoveryAction(
             action="replay_and_lookup_unresolved_intents",
             severity=highest,
             reason="Submit intents remain unresolved after remote open-order snapshot",
-            metadata={"count": len(unresolved_intents)},
+            metadata={"count": len(blocking_intents)},
         ))
     if remote_only_orders:
         actions.append(RecoveryAction(
@@ -329,9 +486,9 @@ def build_replay_hooks(events: list[dict[str, Any]]) -> dict[str, Any]:
             "sequence": event.get("sequence"),
             "event_type": event.get("event_type"),
             "timestamp": event.get("timestamp"),
-            "client_order_id": (event.get("payload") or {}).get("client_order_id"),
-            "order_id": (event.get("payload") or {}).get("order_id"),
-            "status": (event.get("payload") or {}).get("status"),
+            "client_order_id": (_event_payload(event)).get("client_order_id"),
+            "order_id": (_event_payload(event)).get("order_id"),
+            "status": (_event_payload(event)).get("status"),
         }
         for event in replayable
         if str(event.get("event_type") or "").startswith("order_")
@@ -341,21 +498,26 @@ def build_replay_hooks(events: list[dict[str, Any]]) -> dict[str, Any]:
             "sequence": event.get("sequence"),
             "event_type": event.get("event_type"),
             "timestamp": event.get("timestamp"),
-            "client_order_id": (event.get("payload") or {}).get("client_order_id"),
-            "order_id": (event.get("payload") or {}).get("order_id"),
-            "last_fill_quantity": (event.get("payload") or {}).get("last_fill_quantity"),
-            "last_fill_price": (event.get("payload") or {}).get("last_fill_price"),
-            "average_price": (event.get("payload") or {}).get("average_price"),
+            "client_order_id": (_event_payload(event)).get("client_order_id"),
+            "order_id": (_event_payload(event)).get("order_id"),
+            "last_fill_quantity": (_event_payload(event)).get("last_fill_quantity"),
+            "last_fill_price": (_event_payload(event)).get("last_fill_price"),
+            "average_price": (_event_payload(event)).get("average_price"),
         }
         for event in replayable
         if str(event.get("event_type") or "") == "order_trade_update"
-        or str((event.get("payload") or {}).get("execution_type") or "").lower() == "trade"
+        or str((_event_payload(event).get("execution_type") or "")).lower() == "trade"
     ]
+    replay_state = summarize_replay_state(replayable)
     return {
         "order_update_events": order_events,
         "fill_events": fill_events,
         "last_order_update_sequence": order_events[-1]["sequence"] if order_events else None,
         "last_fill_sequence": fill_events[-1]["sequence"] if fill_events else None,
+        "orders_by_client_order_id": replay_state["orders_by_client_order_id"],
+        "terminal_order_count": replay_state["terminal_order_count"],
+        "position_hint": replay_state["position_hint"],
+        "latest_account_update_sequence": replay_state["latest_account_update_sequence"],
     }
 
 
@@ -373,8 +535,14 @@ def build_startup_convergence_report(
     events = events or []
     watermark = build_convergence_watermark(boundary=boundary, events=events)
     position = build_position_convergence(local_position=local_position, remote_position=remote_position)
-    classified = classify_unresolved_intents(intents=unresolved_intents, remote_orders=remote_only_orders)
     replay_hooks = build_replay_hooks(events)
+    classified = classify_unresolved_intents(
+        intents=unresolved_intents,
+        remote_orders=remote_only_orders,
+        replay_state={
+            "orders_by_client_order_id": replay_hooks.get("orders_by_client_order_id") or {},
+        },
+    )
     actions = recommend_recovery_actions(
         position=position,
         unresolved_intents=classified,
@@ -387,11 +555,13 @@ def build_startup_convergence_report(
         "critical_action_count": sum(1 for action in actions if action.severity == "critical"),
         "warning_action_count": sum(1 for action in actions if action.severity == "warning"),
         "unresolved_intent_count": len(classified),
+        "blocking_unresolved_intent_count": sum(1 for item in classified if item.classification != "replay_terminal_state"),
         "remote_only_order_count": len(remote_only_orders),
         "local_only_order_count": len(local_only_orders),
         "replay_fill_event_count": watermark.replay_fill_event_count,
         "replay_order_event_count": watermark.replay_order_event_count,
         "position_ok": position.ok,
+        "replay_terminal_order_count": replay_hooks.get("terminal_order_count") or 0,
     }
     return StartupConvergenceReport(
         ok=ok,

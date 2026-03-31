@@ -4,8 +4,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Optional, Any
 
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
-from btc_contract_backtest.live.restart_convergence import build_startup_convergence_report
+from btc_contract_backtest.live.restart_convergence import build_startup_convergence_report, summarize_replay_state
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
+
+
+TERMINAL_REPLAY_STATES = {"filled", "canceled", "rejected", "expired"}
+TERMINAL_LOCAL_STATES = TERMINAL_REPLAY_STATES | {"failed"}
 
 
 @dataclass
@@ -40,6 +44,25 @@ class RecoveryOrchestrator:
                 return position
         return positions[0] if positions else {}
 
+    @staticmethod
+    def _replay_terminal_details(replay_order: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if not isinstance(replay_order, dict):
+            return None
+        state = str(replay_order.get("state") or "").lower()
+        if state not in TERMINAL_REPLAY_STATES:
+            return None
+        return {
+            "state": state,
+            "exchange_order_id": replay_order.get("order_id"),
+            "metadata": {
+                "recovered_by": "event_replay",
+                "replay_last_sequence": replay_order.get("last_sequence"),
+                "replay_last_timestamp": replay_order.get("last_timestamp"),
+                "replay_filled_quantity": replay_order.get("filled_quantity"),
+                "replay_average_price": replay_order.get("average_price"),
+            },
+        }
+
     def recover(
         self,
         *,
@@ -52,6 +75,9 @@ class RecoveryOrchestrator:
         local_orders = local_orders or []
         local_position = local_position or {}
         events = events or []
+        replay_state = summarize_replay_state(events)
+        replay_orders = replay_state.get("orders_by_client_order_id") or {}
+
         open_result = self.adapter.fetch_open_orders()
         if not open_result.ok:
             return RecoveryReport(
@@ -75,27 +101,49 @@ class RecoveryOrchestrator:
         notes = []
 
         local_keys = set()
+        local_terminal_keys = set()
         for order in local_orders:
             key = order.get("client_order_id") or order.get("exchange_order_id") or order.get("order_id")
             if key:
                 local_keys.add(key)
+            status = str(order.get("state") or order.get("status") or "").lower()
+            if key and status in TERMINAL_LOCAL_STATES:
+                local_terminal_keys.add(key)
 
         remote_keys = set()
         for order in remote_orders:
             key = order.get("clientOrderId") or order.get("id")
             if key:
                 remote_keys.add(key)
-            if key and key not in local_keys:
+            if key and key not in local_keys and key not in local_terminal_keys:
                 remote_only_orders.append(order)
 
         for order in local_orders:
             key = order.get("client_order_id") or order.get("exchange_order_id") or order.get("order_id")
             status = str(order.get("state") or order.get("status") or "").lower()
-            if key and key not in remote_keys and status not in {"filled", "canceled", "rejected", "expired"}:
+            replay_order = replay_orders.get(str(order.get("client_order_id") or key or ""))
+            replay_terminal = self._replay_terminal_details(replay_order)
+            if replay_terminal is not None:
+                continue
+            if key and key not in remote_keys and status not in TERMINAL_LOCAL_STATES:
                 local_only_orders.append(order)
 
         for intent in self.submit_ledger.pending_intents():
             client_order_id = intent.get("client_order_id")
+            request_id = intent["request_id"]
+            replay_order = replay_orders.get(str(client_order_id or "")) if client_order_id else None
+            replay_terminal = self._replay_terminal_details(replay_order)
+            if replay_terminal is not None:
+                self.submit_ledger.mark_state(
+                    request_id,
+                    state=replay_terminal["state"],
+                    exchange_order_id=replay_terminal["exchange_order_id"],
+                    metadata=replay_terminal["metadata"],
+                )
+                recovered = self.submit_ledger.get(request_id)
+                if recovered is not None:
+                    recovered_intents.append(recovered)
+                continue
             if not client_order_id:
                 unresolved_intents.append(intent)
                 continue
@@ -104,21 +152,21 @@ class RecoveryOrchestrator:
             if lookup.ok and recovered_orders:
                 remote = recovered_orders[0]
                 self.submit_ledger.mark_state(
-                    intent["request_id"],
+                    request_id,
                     state="submitted",
                     exchange_order_id=remote.get("id"),
                     metadata={"recovered_by": "recovery_orchestrator"},
                 )
-                recovered = self.submit_ledger.get(intent["request_id"])
+                recovered = self.submit_ledger.get(request_id)
                 if recovered is not None:
                     recovered_intents.append(recovered)
                 continue
             self.submit_ledger.mark_state(
-                intent["request_id"],
+                request_id,
                 state="unknown",
                 metadata={"recovery_lookup": "not_found"},
             )
-            unresolved = self.submit_ledger.get(intent["request_id"])
+            unresolved = self.submit_ledger.get(request_id)
             if unresolved is not None:
                 unresolved_intents.append(unresolved)
 

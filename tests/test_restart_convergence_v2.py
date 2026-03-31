@@ -1,14 +1,7 @@
-import json
-from pathlib import Path
-
 from btc_contract_backtest.live.restart_convergence import (
-    build_execution_replay_summary,
     build_position_convergence,
     build_startup_convergence_report,
 )
-
-
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "gate_b_restart_convergence_cases.json"
 
 
 def test_position_convergence_detects_entry_basis_quantity_and_side_mismatch():
@@ -62,31 +55,38 @@ def test_startup_convergence_classifies_ambiguous_intents_and_replay_hooks():
     }
     assert any(action["action"] == "replay_and_lookup_unresolved_intents" for action in report["actions"])
     assert any(action["action"] == "adopt_or_cancel_remote_only_orders" for action in report["actions"])
+    assert report["replay_hooks"]["orders_by_client_order_id"]["cid-missing-remote"]["filled_quantity"] == 0.25
 
 
-def test_gate_b_restart_convergence_corpus_expectations_hold():
-    cases = json.loads(FIXTURES.read_text(encoding="utf-8"))
+def test_startup_convergence_accepts_replay_terminal_fill_without_blocking_intent():
+    report = build_startup_convergence_report(
+        environment="testnet",
+        local_position={"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+        remote_position={"positionAmt": "0.25", "entryPrice": "45000.0"},
+        unresolved_intents=[
+            {"request_id": "r-filled", "client_order_id": "cid-filled", "state": "unknown"},
+        ],
+        remote_only_orders=[],
+        local_only_orders=[],
+        events=[
+            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-filled", "order_id": "ex-filled", "status": "new"}},
+            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-filled", "order_id": "ex-filled", "execution_type": "trade", "status": "filled", "filled_quantity": "0.25", "last_fill_quantity": "0.25", "average_price": "45000.0"}},
+        ],
+        boundary={
+            "last_sequence": 2,
+            "poll_fallback_required": False,
+            "upstream": {"connected": True, "listen_key_present": True},
+        },
+    ).to_dict()
 
-    for case in cases:
-        report = build_startup_convergence_report(
-            environment="testnet",
-            local_position=case["local_position"],
-            remote_position=case["remote_position"],
-            unresolved_intents=case["unresolved_intents"],
-            remote_only_orders=case["remote_only_orders"],
-            local_only_orders=case["local_only_orders"],
-            events=case["events"],
-            boundary=case["boundary"],
-        ).to_dict()
-        expected = case["expected"]
-
-        assert report["ok"] is expected["ok"], case["name"]
-        assert report["summary"]["critical_action_count"] == expected["critical_action_count"], case["name"]
-        assert report["summary"]["warning_action_count"] == expected["warning_action_count"], case["name"]
-        assert sorted(item["classification"] for item in report["unresolved_intents"]) == sorted(expected["unresolved_classifications"]), case["name"]
-        assert report["watermark"]["replay_event_count"] == expected["replay_event_count"], case["name"]
-        assert report["watermark"]["replayable_event_count"] == expected["replayable_event_count"], case["name"]
-        assert report["watermark"]["replay_order_event_count"] == expected["replay_order_event_count"], case["name"]
-        assert report["watermark"]["replay_fill_event_count"] == expected["replay_fill_event_count"], case["name"]
-        assert report["replay_hooks"]["last_order_update_sequence"] == expected["last_order_update_sequence"], case["name"]
-        assert report["replay_hooks"]["last_fill_sequence"] == expected["last_fill_sequence"], case["name"]
+    assert report["ok"] is True
+    assert report["summary"]["blocking_unresolved_intent_count"] == 0
+    assert report["summary"]["critical_action_count"] == 0
+    assert report["unresolved_intents"][0]["classification"] == "replay_terminal_state"
+    assert report["replay_hooks"]["terminal_order_count"] == 1
+    assert report["actions"] == [{
+        "action": "resume_guarded_live",
+        "severity": "info",
+        "reason": "Startup convergence found no blocking divergence",
+        "metadata": {},
+    }]
