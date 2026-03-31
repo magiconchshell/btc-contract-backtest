@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 from btc_contract_backtest.live.submit_policy import PostSubmitPolicy
 
 
@@ -21,8 +23,14 @@ def test_live_readiness_check(tmp_path):
     approvals.write_text(json.dumps({"requests": [], "approved_ids": [], "rejected_ids": []}))
 
     proc = subprocess.run(
-        [sys.executable, "research/live_readiness_check.py", str(gov), str(audit), str(approvals)],
-        cwd="/Users/magiconch/.openclaw/workspace/github-btc-backtest",
+        [
+            sys.executable,
+            "research/live_readiness_check.py",
+            str(gov),
+            str(audit),
+            str(approvals),
+        ],
+        cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,

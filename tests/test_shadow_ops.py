@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 from btc_contract_backtest.live.audit_logger import AuditLogger
 
 
@@ -29,7 +31,19 @@ def test_shadow_summary_and_review_tools(tmp_path):
 
     import subprocess, sys
 
-    p1 = subprocess.run([sys.executable, "research/shadow_audit_tools.py", str(audit)], cwd="/Users/magiconch/.openclaw/workspace/github-btc-backtest", check=True, capture_output=True, text=True)
-    p2 = subprocess.run([sys.executable, "research/shadow_review_report.py", str(audit)], cwd="/Users/magiconch/.openclaw/workspace/github-btc-backtest", check=True, capture_output=True, text=True)
+    p1 = subprocess.run(
+        [sys.executable, "research/shadow_audit_tools.py", str(audit)],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    p2 = subprocess.run(
+        [sys.executable, "research/shadow_review_report.py", str(audit)],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     assert "summary" in p1.stdout
     assert "review_markdown" in p2.stdout
