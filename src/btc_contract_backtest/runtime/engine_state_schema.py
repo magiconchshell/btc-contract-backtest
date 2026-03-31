@@ -26,6 +26,10 @@ class EngineState:
     runtime_steps: list[dict[str, Any]] = field(default_factory=list)
     reconcile_report: dict[str, Any] = field(default_factory=dict)
     submit_ledger: dict[str, Any] = field(default_factory=dict)
+    recovery_report: dict[str, Any] = field(default_factory=dict)
+    startup_report: dict[str, Any] = field(default_factory=dict)
+    event_stream_boundary: dict[str, Any] = field(default_factory=dict)
+    execution_events: list[dict[str, Any]] = field(default_factory=list)
     updated_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,5 +66,9 @@ def normalize_legacy_state(raw: dict[str, Any], *, mode: str, symbol: str, lever
     state["runtime_steps"] = raw.get("runtime_steps", [])
     state["reconcile_report"] = raw.get("reconcile_report", {})
     state["submit_ledger"] = raw.get("submit_ledger", {})
+    state["recovery_report"] = raw.get("recovery_report", {})
+    state["startup_report"] = raw.get("startup_report", {})
+    state["event_stream_boundary"] = raw.get("event_stream_boundary", {})
+    state["execution_events"] = raw.get("execution_events", [])
     state["updated_at"] = raw.get("updated_at")
     return state

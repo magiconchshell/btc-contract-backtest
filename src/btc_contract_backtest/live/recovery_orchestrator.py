@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Optional, Any
 
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
+from btc_contract_backtest.live.restart_convergence import build_startup_convergence_report
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
 
 
@@ -15,6 +16,7 @@ class RecoveryReport:
     remote_only_orders: list[dict[str, Any]] = field(default_factory=list)
     local_only_orders: list[dict[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    startup_convergence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -25,8 +27,31 @@ class RecoveryOrchestrator:
         self.adapter = adapter
         self.submit_ledger = submit_ledger
 
-    def recover(self, *, local_orders: Optional[list[dict[str, Any]]] = None) -> RecoveryReport:
+    def _resolve_remote_position(self, positions: list[dict[str, Any]]) -> dict[str, Any]:
+        for position in positions:
+            qty = float(
+                position.get("contracts")
+                or position.get("positionAmt")
+                or position.get("quantity")
+                or position.get("pa")
+                or 0.0
+            )
+            if qty != 0:
+                return position
+        return positions[0] if positions else {}
+
+    def recover(
+        self,
+        *,
+        local_orders: Optional[list[dict[str, Any]]] = None,
+        local_position: Optional[dict[str, Any]] = None,
+        events: Optional[list[dict[str, Any]]] = None,
+        event_boundary: Optional[dict[str, Any]] = None,
+        environment: str = "testnet",
+    ) -> RecoveryReport:
         local_orders = local_orders or []
+        local_position = local_position or {}
+        events = events or []
         open_result = self.adapter.fetch_open_orders()
         if not open_result.ok:
             return RecoveryReport(
@@ -34,7 +59,15 @@ class RecoveryOrchestrator:
                 notes=[f"fetch_open_orders_failed:{open_result.error}"],
             )
 
+        positions_result = self.adapter.fetch_positions()
+        if not positions_result.ok:
+            return RecoveryReport(
+                ok=False,
+                notes=[f"fetch_positions_failed:{positions_result.error}"],
+            )
+
         remote_orders = open_result.payload if isinstance(open_result.payload, list) else []
+        remote_positions = positions_result.payload if isinstance(positions_result.payload, list) else []
         recovered_intents = []
         unresolved_intents = []
         remote_only_orders = []
@@ -96,11 +129,25 @@ class RecoveryOrchestrator:
         if unresolved_intents:
             notes.append("unresolved_submit_intents")
 
+        startup_convergence = build_startup_convergence_report(
+            environment=environment,
+            local_position=local_position,
+            remote_position=self._resolve_remote_position(remote_positions),
+            unresolved_intents=unresolved_intents,
+            remote_only_orders=remote_only_orders,
+            local_only_orders=local_only_orders,
+            events=events,
+            boundary=event_boundary,
+        ).to_dict()
+        if not startup_convergence.get("ok", False):
+            notes.append("startup_convergence_blocked")
+
         return RecoveryReport(
-            ok=len(unresolved_intents) == 0,
+            ok=len(unresolved_intents) == 0 and bool(startup_convergence.get("ok", False)),
             recovered_intents=recovered_intents,
             unresolved_intents=unresolved_intents,
             remote_only_orders=remote_only_orders,
             local_only_orders=local_only_orders,
             notes=notes,
+            startup_convergence=startup_convergence,
         )
