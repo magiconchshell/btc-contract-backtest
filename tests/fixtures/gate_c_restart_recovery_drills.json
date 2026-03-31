@@ -1,0 +1,38 @@
+[
+  {
+    "name": "clean_restart_no_exposure_drift",
+    "required": true,
+    "expected_resume": "allowed",
+    "required_artifacts": ["startup_convergence", "reconcile_report"]
+  },
+  {
+    "name": "restart_during_partial_fill",
+    "required": true,
+    "expected_resume": "allowed_after_review",
+    "required_artifacts": ["startup_convergence", "recovery_report", "fill_continuity_note"]
+  },
+  {
+    "name": "restart_after_ambiguous_submit_timeout",
+    "required": true,
+    "expected_resume": "allowed_after_remote_lookup",
+    "required_artifacts": ["submit_ledger", "recovery_report"]
+  },
+  {
+    "name": "restart_with_poll_fallback_boundary_loss",
+    "required": true,
+    "expected_resume": "allowed_with_warning",
+    "required_artifacts": ["startup_convergence", "boundary_watermark"]
+  },
+  {
+    "name": "restart_with_remote_only_open_order",
+    "required": true,
+    "expected_resume": "blocked_pending_operator_decision",
+    "required_artifacts": ["startup_convergence", "reconcile_report", "operator_decision_record"]
+  },
+  {
+    "name": "restart_after_critical_divergence",
+    "required": true,
+    "expected_resume": "blocked",
+    "required_artifacts": ["startup_convergence", "halt_reason", "incident_record"]
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "preflight": {
+    "governance_mode": "approval_required",
+    "single_symbol_only": true,
+    "tiny_size_only": true,
+    "require_restart_drill_review": true,
+    "require_post_submit_monitoring": true,
+    "required_paths": [
+      "reconcile_report",
+      "submit_ledger",
+      "recovery_report",
+      "pilot_dossier"
+    ]
+  },
+  "exit_criteria": [
+    "all_live_intents_operator_approved",
+    "no_duplicate_submit",
+    "no_unresolved_ambiguous_intents_at_end",
+    "no_critical_reconcile_mismatch_at_end",
+    "partial_fill_quantity_continuity_preserved_across_restart",
+    "incident_log_empty_or_reviewed_non_critical_only",
+    "post_run_recommendation_not_rollback"
+  ]
+}

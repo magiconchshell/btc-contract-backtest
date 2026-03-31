@@ -1,0 +1,54 @@
+[
+  {
+    "name": "websocket_gap_then_catchup_replay",
+    "category": "fault_injection",
+    "required": true,
+    "focus": ["gap_detection", "reconnect", "catchup_replay"],
+    "pass_conditions": [
+      "reconnect_required",
+      "no_duplicate_submit",
+      "boundary_watermark_preserved"
+    ]
+  },
+  {
+    "name": "out_of_order_duplicate_remote_updates",
+    "category": "fault_injection",
+    "required": true,
+    "focus": ["reorder_detection", "duplicate_detection", "race_hardening"],
+    "pass_conditions": [
+      "residual_risk_classified",
+      "session_does_not_resume_silently"
+    ]
+  },
+  {
+    "name": "partial_fill_then_restart_then_completion",
+    "category": "fault_injection",
+    "required": true,
+    "focus": ["partial_fill_merge", "restart_recovery", "quantity_continuity"],
+    "pass_conditions": [
+      "cumulative_fill_quantity_preserved",
+      "average_entry_basis_converges",
+      "no_duplicate_submit"
+    ]
+  },
+  {
+    "name": "fill_while_cancel_replace_in_flight",
+    "category": "fault_injection",
+    "required": true,
+    "focus": ["cancel_replace_race", "residual_exposure", "partial_fill_merge"],
+    "pass_conditions": [
+      "residual_exposure_risk_or_double_open_risk_detected",
+      "operator_review_required"
+    ]
+  },
+  {
+    "name": "ambiguous_submit_resolves_remote_open_after_restart",
+    "category": "fault_injection",
+    "required": true,
+    "focus": ["submit_ack_ambiguity", "restart_recovery", "remote_lookup"],
+    "pass_conditions": [
+      "remote_open_order_present_classified",
+      "recovered_intent_linked_to_exchange_order"
+    ]
+  }
+]

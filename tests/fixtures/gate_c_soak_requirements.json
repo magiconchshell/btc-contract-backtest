@@ -1,0 +1,33 @@
+{
+  "environment": "testnet_or_fault_harness",
+  "required": true,
+  "campaigns": [
+    {
+      "name": "ci_deterministic_short_soak",
+      "minimum_runtime_minutes": 5,
+      "minimum_event_count": 250,
+      "max_critical_incidents": 0,
+      "max_duplicate_submits": 0,
+      "max_unreconciled_remote_only_orders": 0,
+      "notes_required": false
+    },
+    {
+      "name": "supervised_operator_soak",
+      "minimum_runtime_minutes": 60,
+      "minimum_event_count": 1000,
+      "max_critical_incidents": 0,
+      "max_duplicate_submits": 0,
+      "max_unreconciled_remote_only_orders": 0,
+      "notes_required": true
+    }
+  ],
+  "human_review": {
+    "required": true,
+    "artifacts": [
+      "reconcile_report",
+      "recovery_report",
+      "pilot_dossier",
+      "incident_log"
+    ]
+  }
+}
