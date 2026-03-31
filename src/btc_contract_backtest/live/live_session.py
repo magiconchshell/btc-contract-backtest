@@ -3,10 +3,8 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-import ccxt
 import pandas as pd
 
 from btc_contract_backtest.config.models import (
@@ -20,7 +18,9 @@ from btc_contract_backtest.engine.execution_models import MarketSnapshot
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.binance_futures import (
     BinanceFuturesMetadataSync,
+    build_binance_futures_runtime_paths,
     create_binance_futures_exchange,
+    require_binance_profile_enabled,
     with_binance_symbol_rules,
 )
 from btc_contract_backtest.live.binance_futures_stream import (
@@ -78,13 +78,23 @@ class GovernedLiveSession(TradingRuntime):
         alerts_file: str = "live_alerts.jsonl",
         state_file: str = "live_session_state.json",
         metadata_cache_file: str = "var/binance_futures_exchange_info.json",
+        allow_mainnet: bool = False,
+        exchange: Optional[Any] = None,
     ):
+        require_binance_profile_enabled(contract.exchange_profile, allow_mainnet=allow_mainnet)
+        runtime_paths = build_binance_futures_runtime_paths(contract.exchange_profile, contract.symbol)
+        metadata_cache_file = metadata_cache_file or runtime_paths.metadata_cache_file
+        approval_file = approval_file or runtime_paths.approval_file
+        governance_state_file = governance_state_file or runtime_paths.governance_state_file
+        alerts_file = alerts_file or runtime_paths.alerts_file
+        state_file = state_file or runtime_paths.live_state_file
+        audit_log = audit_log or runtime_paths.live_audit_log
         metadata_sync = BinanceFuturesMetadataSync(
             profile=contract.exchange_profile,
             cache_path=metadata_cache_file,
         )
         try:
-            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol)
+            symbol_rules = metadata_sync.get_symbol_rules(contract.symbol, refresh_on_miss=False)
             contract = with_binance_symbol_rules(contract, symbol_rules)
         except Exception:  # noqa: BLE001
             pass
@@ -103,7 +113,10 @@ class GovernedLiveSession(TradingRuntime):
                 leverage=contract.leverage,
             ),
         )
-        self.exchange = create_binance_futures_exchange(contract.exchange_profile)
+        self.exchange = exchange or create_binance_futures_exchange(
+            contract.exchange_profile,
+            allow_mainnet=allow_mainnet,
+        )
         self.metadata_sync = metadata_sync
         self.adapter = ExchangeExecutionAdapter(
             self.exchange,
@@ -129,9 +142,7 @@ class GovernedLiveSession(TradingRuntime):
         self.watchdog.state.halt_reason = wd.get("halt_reason")
         state = self.gov_state.load()
         current_mode = TradingMode(state.get("mode", mode.value))
-        self.submit_ledger = SubmitLedger(
-            str(Path(state_file).with_name("submit_ledger.json"))
-        )
+        self.submit_ledger = SubmitLedger(runtime_paths.submit_ledger_file)
         self.exchange_events = BinanceFuturesUserDataEventSource(
             self.adapter,
             BinanceFuturesStreamConfig(
@@ -140,7 +151,7 @@ class GovernedLiveSession(TradingRuntime):
             ),
         )
         self.event_source = EventDrivenExecutionSource(
-            EventRecorder(str(Path(state_file).with_name("execution_events.jsonl"))),
+            EventRecorder(runtime_paths.execution_events_file),
             upstream=self.exchange_events,
         )
         replayed_events = self.event_source.replay()
@@ -186,9 +197,10 @@ class GovernedLiveSession(TradingRuntime):
                 if hasattr(self._recovery_report, "to_dict")
                 else self._recovery_report
             )
+            recovery_report_payload = recovery_report if isinstance(recovery_report, dict) else {}
             store.set_state_fields(
                 recovery_report=recovery_report,
-                startup_report=(recovery_report or {}).get("startup_convergence") or {},
+                startup_report=recovery_report_payload.get("startup_convergence") or {},
                 execution_events=self.event_source.replay(),
                 event_stream_boundary=self.event_source.boundary_state(),
             )

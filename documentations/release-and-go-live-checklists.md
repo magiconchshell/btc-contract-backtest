@@ -24,11 +24,14 @@ Target runtime: Python 3.12
 - [ ] Fresh virtualenv can be created successfully
 
 ### Quality gates
-- [ ] `pytest -q` passes
-- [ ] `python -m build` passes
-- [ ] `flake8 src` passes
-- [ ] `mypy src` passes
+- [ ] `python scripts/release_gate.py --report --json --check-clean` reflects the intended hard gate
+- [ ] `python scripts/release_gate.py --run --check-clean` passes locally
 - [ ] CI on GitHub Actions hard gate is green
+- [ ] Underlying hard-gate steps still match the current production scope:
+  - [ ] `pytest -q` passes
+  - [ ] `flake8 src` passes
+  - [ ] `mypy src` passes
+  - [ ] `python -m build` passes
 
 ### Documentation
 - [ ] README matches actual install/test flow
@@ -132,10 +135,9 @@ These items are known and should be improved, but they should not block all deli
 ## 5. Recommended CI Policy
 
 ### Hard fail gates
-- `pytest -q`
-- `python -m build`
+- `python scripts/release_gate.py --run --check-clean`
 
-### Current hard gates
+### Current hard gates expanded
 - `pytest -q`
 - `flake8 src`
 - `mypy src`

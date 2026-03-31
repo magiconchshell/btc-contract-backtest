@@ -9,7 +9,8 @@ This project now targets **Python 3.12** for local development, testing, and pac
 ## Packaging and CI
 
 - `pyproject.toml` is now the primary packaging/tooling metadata file.
-- GitHub Actions CI runs a **hard quality gate** on Python 3.12 for the production-facing code path:
+- GitHub Actions CI runs a **hard quality gate** on Python 3.12 for the production-facing code path via `python scripts/release_gate.py --run --check-clean --allow-dirty`.
+- The gate definition is inspectable locally via `python scripts/release_gate.py --report --json` and currently expands to:
   - `pytest -q`
   - `flake8 src`
   - `mypy src`
@@ -57,7 +58,7 @@ This repo is **not intended as a spot-only buy/sell portfolio tracker**.
 ```bash
 /Users/magiconch/.local/bin/uv venv --python /usr/local/bin/python3.12 .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest -q
+.venv/bin/python scripts/release_gate.py --run --check-clean
 ```
 
 ### Research / notebook environment

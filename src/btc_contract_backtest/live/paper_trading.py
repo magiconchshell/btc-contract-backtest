@@ -4,9 +4,8 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-import ccxt
 import pandas as pd
 
 from btc_contract_backtest.config.models import (
@@ -17,6 +16,7 @@ from btc_contract_backtest.config.models import (
     RiskConfig,
 )
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
+from btc_contract_backtest.live.binance_futures import create_binance_futures_exchange, require_binance_profile_enabled
 from btc_contract_backtest.live.exchange_adapter import ExchangeExecutionAdapter
 from btc_contract_backtest.live.session_recovery import SessionRecovery
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
@@ -42,7 +42,10 @@ class PaperTradingSession(TradingRuntime):
         state_file: str = "paper_state.json",
         execution: Optional[ExecutionConfig] = None,
         live_risk: Optional[LiveRiskConfig] = None,
+        allow_mainnet: bool = False,
+        exchange: Optional[Any] = None,
     ):
+        require_binance_profile_enabled(contract.exchange_profile, allow_mainnet=allow_mainnet)
         super().__init__(
             contract,
             account,
@@ -59,11 +62,9 @@ class PaperTradingSession(TradingRuntime):
             ),
         )
         self.state_path = Path(state_file)
-        self.exchange = ccxt.binance(
-            {
-                "enableRateLimit": True,
-                "options": {"defaultType": "future"},
-            }
+        self.exchange = exchange or create_binance_futures_exchange(
+            contract.exchange_profile,
+            allow_mainnet=allow_mainnet,
         )
         self.adapter = ExchangeExecutionAdapter(
             self.exchange,

@@ -174,7 +174,11 @@ secrets/
 research/
 scripts/
 
-# Allowlist a small, portable subset of research runners to be versioned.
+# Allowlist a small, portable subset of repo utilities and research runners to be versioned.
+!scripts/
+scripts/*
+!scripts/release_gate.py
+!scripts/run_best_strategy_report.py
 !research/
 research/*
 !research/strategy_lab/

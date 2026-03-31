@@ -44,7 +44,13 @@ class BinanceFuturesEventNormalizer:
     def __init__(self, symbol: str):
         self.symbol = symbol
 
-    def normalize(self, message: dict[str, Any], *, source: str, received_at: Optional[str] = None) -> list[ExecutionEvent]:
+    def normalize(
+        self,
+        message: dict[str, Any],
+        *,
+        source: str,
+        received_at: Optional[str] = None,
+    ) -> list[ExecutionEvent]:
         received_at = received_at or datetime.now(timezone.utc).isoformat()
         event_type = message.get("e")
         if event_type == "ORDER_TRADE_UPDATE":

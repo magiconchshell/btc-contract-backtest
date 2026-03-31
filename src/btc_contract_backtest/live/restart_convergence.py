@@ -129,7 +129,7 @@ def _position_entry_price(position: Optional[dict[str, Any]]) -> Optional[float]
         value = position.get("entryPrice")
     if value in (None, ""):
         return None
-    return float(value)
+    return float(str(value))
 
 
 def build_convergence_watermark(
@@ -150,7 +150,8 @@ def build_convergence_watermark(
         if str(event.get("event_type") or "") in {"order_trade_update", "fill", "fill_update"}
         or str((event.get("payload") or {}).get("execution_type") or "").lower() == "trade"
     ]
-    upstream = boundary.get("upstream") if isinstance(boundary.get("upstream"), dict) else {}
+    upstream_value = boundary.get("upstream")
+    upstream = upstream_value if isinstance(upstream_value, dict) else {}
     return ConvergenceWatermark(
         last_sequence=boundary.get("last_sequence"),
         last_event_timestamp=boundary.get("last_event_timestamp"),
@@ -208,7 +209,9 @@ def classify_unresolved_intents(
 ) -> list[IntentConvergence]:
     remote_by_client: dict[str, dict[str, Any]] = {}
     for order in remote_orders:
-        client_id = order.get("clientOrderId") or ((order.get("info") or {}).get("clientOrderId") if isinstance(order.get("info"), dict) else None)
+        info = order.get("info")
+        remote_info = info if isinstance(info, dict) else {}
+        client_id = order.get("clientOrderId") or remote_info.get("clientOrderId")
         if client_id:
             remote_by_client[str(client_id)] = order
 

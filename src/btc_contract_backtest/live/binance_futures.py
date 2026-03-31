@@ -1,22 +1,29 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 from urllib.request import urlopen
 
-import ccxt
-
 from btc_contract_backtest.config.models import ContractSpec
+
+
+DEFAULT_BINANCE_FUTURES_RUNTIME_ROOT = "var/exchanges/binance_futures"
+DEFAULT_METADATA_MAX_AGE_SECONDS = 6 * 60 * 60
 
 
 def _decimal_to_float(value: Any, default: float = 0.0) -> float:
     if value in (None, "", False):
         return default
     return float(Decimal(str(value)))
+
+
+def _slugify_symbol(symbol: str) -> str:
+    return normalize_binance_symbol(symbol).lower() or "unknown_symbol"
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,9 @@ class BinanceFuturesProfile:
     ccxt_id: str = "binance"
     default_type: str = "future"
     testnet: bool = False
+    api_key_env: str = ""
+    secret_env: str = ""
+    mainnet_opt_in_env: Optional[str] = None
 
 
 BINANCE_FUTURES_TESTNET = BinanceFuturesProfile(
@@ -34,6 +44,8 @@ BINANCE_FUTURES_TESTNET = BinanceFuturesProfile(
     label="Binance USDⓈ-M Futures Testnet",
     rest_base_url="https://testnet.binancefuture.com",
     testnet=True,
+    api_key_env="BINANCE_FUTURES_TESTNET_API_KEY",
+    secret_env="BINANCE_FUTURES_TESTNET_API_SECRET",
 )
 
 BINANCE_FUTURES_MAINNET = BinanceFuturesProfile(
@@ -41,6 +53,9 @@ BINANCE_FUTURES_MAINNET = BinanceFuturesProfile(
     label="Binance USDⓈ-M Futures Mainnet",
     rest_base_url="https://fapi.binance.com",
     testnet=False,
+    api_key_env="BINANCE_FUTURES_MAINNET_API_KEY",
+    secret_env="BINANCE_FUTURES_MAINNET_API_SECRET",
+    mainnet_opt_in_env="BINANCE_FUTURES_ENABLE_MAINNET",
 )
 
 
@@ -50,33 +65,38 @@ BINANCE_FUTURES_PROFILES = {
 }
 
 
-def get_binance_futures_profile(profile: str) -> BinanceFuturesProfile:
-    try:
-        return BINANCE_FUTURES_PROFILES[profile]
-    except KeyError as exc:
-        raise ValueError(f"Unsupported Binance Futures profile: {profile}") from exc
+@dataclass(frozen=True)
+class BinanceFuturesCredentials:
+    api_key: Optional[str] = None
+    secret: Optional[str] = None
+    source: str = "none"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key and self.secret)
 
 
-def create_binance_futures_exchange(profile: str, api_key: Optional[str] = None, secret: Optional[str] = None) -> ccxt.Exchange:
-    selected = get_binance_futures_profile(profile)
-    exchange = ccxt.binance(
-        {
-            "apiKey": api_key,
-            "secret": secret,
-            "enableRateLimit": True,
-            "options": {"defaultType": selected.default_type},
-            "urls": {
-                "api": {
-                    "fapiPublic": selected.rest_base_url + "/fapi/v1",
-                    "fapiPrivate": selected.rest_base_url + "/fapi/v1",
-                    "fapiPrivateV2": selected.rest_base_url + "/fapi/v2",
-                    "fapiPrivateV3": selected.rest_base_url + "/fapi/v3",
-                }
-            },
-        }
-    )
-    exchange.set_sandbox_mode(selected.testnet)
-    return exchange
+@dataclass(frozen=True)
+class BinanceFuturesRuntimePaths:
+    root_dir: str
+    profile: str
+    symbol: str
+    profile_dir: str
+    symbol_dir: str
+    metadata_cache_file: str
+    paper_state_file: str
+    shadow_state_file: str
+    live_state_file: str
+    live_audit_log: str
+    shadow_audit_log: str
+    governance_state_file: str
+    approval_file: str
+    alerts_file: str
+    submit_ledger_file: str
+    execution_events_file: str
+
+    def to_dict(self) -> dict[str, str]:
+        return asdict(self)
 
 
 @dataclass
@@ -131,6 +151,8 @@ class BinanceExchangeMetadataSnapshot:
     exchange_timezone: str
     server_time: Optional[int]
     symbols: dict[str, dict[str, Any]] = field(default_factory=dict)
+    source_url: Optional[str] = None
+    cache_path: Optional[str] = None
 
     def get_symbol_rules(self, symbol: str) -> BinanceSymbolRules:
         payload = self.symbols[symbol]
@@ -138,6 +160,13 @@ class BinanceExchangeMetadataSnapshot:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def get_binance_futures_profile(profile: str) -> BinanceFuturesProfile:
+    try:
+        return BINANCE_FUTURES_PROFILES[profile]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported Binance Futures profile: {profile}") from exc
 
 
 def normalize_binance_symbol(symbol: str) -> str:
@@ -148,11 +177,128 @@ def normalize_binance_symbol(symbol: str) -> str:
     return raw
 
 
+def load_binance_futures_credentials(
+    profile: str,
+    api_key: Optional[str] = None,
+    secret: Optional[str] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> BinanceFuturesCredentials:
+    env = environ or os.environ
+    selected = get_binance_futures_profile(profile)
+    direct_key = api_key or env.get(selected.api_key_env) or env.get("BINANCE_API_KEY")
+    direct_secret = secret or env.get(selected.secret_env) or env.get("BINANCE_API_SECRET")
+    if api_key or secret:
+        source = "arguments"
+    elif direct_key or direct_secret:
+        source = "environment"
+    else:
+        source = "none"
+    return BinanceFuturesCredentials(api_key=direct_key, secret=direct_secret, source=source)
+
+
+def is_binance_mainnet_enabled(
+    profile: str,
+    *,
+    allow_mainnet: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
+) -> bool:
+    selected = get_binance_futures_profile(profile)
+    if selected.testnet:
+        return True
+    if allow_mainnet:
+        return True
+    env = environ or os.environ
+    token = str(env.get(selected.mainnet_opt_in_env or "", "")).strip().lower()
+    return token in {"1", "true", "yes", "on", "enable", "enabled"}
+
+
+def require_binance_profile_enabled(
+    profile: str,
+    *,
+    allow_mainnet: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
+) -> None:
+    if is_binance_mainnet_enabled(profile, allow_mainnet=allow_mainnet, environ=environ):
+        return
+    selected = get_binance_futures_profile(profile)
+    raise PermissionError(
+        f"{selected.label} is disabled by default. Re-run with explicit "
+        f"mainnet opt-in or set {selected.mainnet_opt_in_env}=true."
+    )
+
+
+def build_binance_futures_runtime_paths(
+    profile: str,
+    symbol: str,
+    root_dir: str = DEFAULT_BINANCE_FUTURES_RUNTIME_ROOT,
+) -> BinanceFuturesRuntimePaths:
+    selected = get_binance_futures_profile(profile)
+    root = Path(root_dir)
+    profile_dir = root / selected.key
+    symbol_dir = profile_dir / _slugify_symbol(symbol)
+    return BinanceFuturesRuntimePaths(
+        root_dir=str(root),
+        profile=selected.key,
+        symbol=symbol,
+        profile_dir=str(profile_dir),
+        symbol_dir=str(symbol_dir),
+        metadata_cache_file=str(profile_dir / "exchange_info.json"),
+        paper_state_file=str(symbol_dir / "paper_state.json"),
+        shadow_state_file=str(symbol_dir / "shadow_state.json"),
+        live_state_file=str(symbol_dir / "live_state.json"),
+        live_audit_log=str(symbol_dir / "live_governance_audit.jsonl"),
+        shadow_audit_log=str(symbol_dir / "shadow_audit.jsonl"),
+        governance_state_file=str(symbol_dir / "governance_state.json"),
+        approval_file=str(symbol_dir / "operator_approvals.json"),
+        alerts_file=str(symbol_dir / "live_alerts.jsonl"),
+        submit_ledger_file=str(symbol_dir / "submit_ledger.json"),
+        execution_events_file=str(symbol_dir / "execution_events.jsonl"),
+    )
+
+
+def create_binance_futures_exchange(
+    profile: str,
+    api_key: Optional[str] = None,
+    secret: Optional[str] = None,
+    *,
+    allow_mainnet: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Any:
+    selected = get_binance_futures_profile(profile)
+    require_binance_profile_enabled(profile, allow_mainnet=allow_mainnet, environ=environ)
+    credentials = load_binance_futures_credentials(profile, api_key=api_key, secret=secret, environ=environ)
+    import ccxt
+
+    exchange = ccxt.binance(
+        {
+            "apiKey": credentials.api_key,
+            "secret": credentials.secret,
+            "enableRateLimit": True,
+            "options": {"defaultType": selected.default_type},
+            "urls": {
+                "api": {
+                    "fapiPublic": selected.rest_base_url + "/fapi/v1",
+                    "fapiPrivate": selected.rest_base_url + "/fapi/v1",
+                    "fapiPrivateV2": selected.rest_base_url + "/fapi/v2",
+                    "fapiPrivateV3": selected.rest_base_url + "/fapi/v3",
+                }
+            },
+        }
+    )
+    return exchange
+
+
 class BinanceFuturesMetadataSync:
-    def __init__(self, profile: str = BINANCE_FUTURES_TESTNET.key, cache_path: str = "var/binance_futures_exchange_info.json"):
+    def __init__(
+        self,
+        profile: str = BINANCE_FUTURES_TESTNET.key,
+        cache_path: str = "var/binance_futures_exchange_info.json",
+        max_age_seconds: int = DEFAULT_METADATA_MAX_AGE_SECONDS,
+    ):
         self.profile = get_binance_futures_profile(profile)
         self.cache_path = Path(cache_path)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self.max_age_seconds = max_age_seconds
 
     def _exchange_info_url(self) -> str:
         return self.profile.rest_base_url + "/fapi/v1/exchangeInfo"
@@ -181,8 +327,14 @@ class BinanceFuturesMetadataSync:
             contract_type=str(row.get("contractType") or "PERPETUAL"),
             tick_size=_decimal_to_float(price_filter.get("tickSize"), 0.0),
             lot_size=_decimal_to_float(lot_filter.get("stepSize"), 0.0),
-            market_lot_size=_decimal_to_float(market_lot_filter.get("stepSize"), _decimal_to_float(lot_filter.get("stepSize"), 0.0)),
-            min_notional=_decimal_to_float(notional_filter.get("notional") or notional_filter.get("minNotional"), 5.0),
+            market_lot_size=_decimal_to_float(
+                market_lot_filter.get("stepSize"),
+                _decimal_to_float(lot_filter.get("stepSize"), 0.0),
+            ),
+            min_notional=_decimal_to_float(
+                notional_filter.get("notional") or notional_filter.get("minNotional"),
+                5.0,
+            ),
             min_quantity=_decimal_to_float(lot_filter.get("minQty"), 0.0),
             max_quantity=_decimal_to_float(lot_filter.get("maxQty"), 0.0),
             price_precision=row.get("pricePrecision"),
@@ -208,6 +360,8 @@ class BinanceFuturesMetadataSync:
             exchange_timezone=str(exchange_info.get("timezone") or "UTC"),
             server_time=exchange_info.get("serverTime"),
             symbols=symbols,
+            source_url=self._exchange_info_url(),
+            cache_path=str(self.cache_path),
         )
 
     def save_snapshot(self, snapshot: BinanceExchangeMetadataSnapshot) -> Path:
@@ -220,14 +374,34 @@ class BinanceFuturesMetadataSync:
         payload = json.loads(self.cache_path.read_text())
         return BinanceExchangeMetadataSnapshot(**payload)
 
+    def snapshot_is_stale(self, snapshot: Optional[BinanceExchangeMetadataSnapshot]) -> bool:
+        if snapshot is None:
+            return True
+        try:
+            fetched_at = datetime.fromisoformat(snapshot.fetched_at)
+        except Exception:
+            return True
+        age = (datetime.now(timezone.utc) - fetched_at).total_seconds()
+        return age > self.max_age_seconds
+
     def sync(self) -> BinanceExchangeMetadataSnapshot:
         snapshot = self.build_snapshot(self.fetch_exchange_info())
         self.save_snapshot(snapshot)
         return snapshot
 
-    def get_symbol_rules(self, symbol: str, allow_stale: bool = True) -> BinanceSymbolRules:
+    def get_symbol_rules(
+        self,
+        symbol: str,
+        allow_stale: bool = True,
+        refresh_on_miss: bool = True,
+    ) -> BinanceSymbolRules:
         snapshot = self.load_snapshot()
         if snapshot is None:
+            if refresh_on_miss:
+                snapshot = self.sync()
+            else:
+                raise KeyError(f"No Binance metadata snapshot available for profile: {self.profile.key}")
+        elif allow_stale and self.snapshot_is_stale(snapshot):
             snapshot = self.sync()
         if symbol in snapshot.symbols:
             return snapshot.get_symbol_rules(symbol)
@@ -236,7 +410,7 @@ class BinanceFuturesMetadataSync:
             candidate_exchange_symbol = str(payload.get("exchange_symbol") or "")
             if normalize_binance_symbol(candidate) == target or candidate_exchange_symbol == target:
                 return BinanceSymbolRules(**payload)
-        if allow_stale:
+        if allow_stale and refresh_on_miss:
             snapshot = self.sync()
             if symbol in snapshot.symbols:
                 return snapshot.get_symbol_rules(symbol)

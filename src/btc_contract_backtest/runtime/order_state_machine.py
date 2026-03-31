@@ -187,7 +187,12 @@ class OrderStateMachine:
         if incoming_sequence is not None:
             incoming_sequence = str(incoming_sequence)
         current_rank = cls._remote_event_rank(
-            OrderEvent(source="remote", event_type="current", state=current.value, payload={"filled": record.filled_quantity})
+            OrderEvent(
+                source="remote",
+                event_type="current",
+                state=current.value,
+                payload={"filled": record.filled_quantity},
+            )
         )
         incoming_rank = cls._remote_event_rank(event)
 
@@ -197,20 +202,31 @@ class OrderStateMachine:
             if incoming_rank < current_rank:
                 return False, False
             raise AmbiguousOrderState(
-                f"terminal order {record.order_id} received conflicting remote state {next_state.value} after {current.value}"
+                "terminal order "
+                f"{record.order_id} received conflicting remote state "
+                f"{next_state.value} after {current.value}"
             )
 
         if current == CanonicalOrderState.REPLACE_PENDING and next_state == CanonicalOrderState.ACKED:
             return True, False
 
-        if current == CanonicalOrderState.PARTIAL and next_state in {CanonicalOrderState.NEW, CanonicalOrderState.ACKED}:
+        if current == CanonicalOrderState.PARTIAL and next_state in {
+            CanonicalOrderState.NEW,
+            CanonicalOrderState.ACKED,
+        }:
             return True, False
 
-        if last_sequence is not None and incoming_sequence is not None and incoming_sequence < str(last_sequence):
+        if (
+            last_sequence is not None
+            and incoming_sequence is not None
+            and incoming_sequence < str(last_sequence)
+        ):
             if incoming_rank <= current_rank:
                 return True, False
             raise AmbiguousOrderState(
-                f"out-of-order remote event for {record.order_id} advanced state from {current.value} to {next_state.value}"
+                "out-of-order remote event for "
+                f"{record.order_id} advanced state from {current.value} "
+                f"to {next_state.value}"
             )
         return False, False
 

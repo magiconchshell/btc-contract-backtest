@@ -9,6 +9,7 @@ from btc_contract_backtest.config.models import (
     RiskConfig,
 )
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
+from btc_contract_backtest.live.binance_futures import build_binance_futures_runtime_paths
 from btc_contract_backtest.live.paper_trading import PaperTradingSession
 from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 from btc_contract_backtest.reporting.metrics import summarize_results
@@ -21,8 +22,14 @@ def parse_args():
         description="Futures/perpetual contract backtest and paper trading toolkit"
     )
     p.add_argument("--symbol", default="BTC/USDT")
-    p.add_argument("--exchange-profile", default="binance_futures_testnet", choices=["binance_futures_testnet", "binance_futures_mainnet"])
-    p.add_argument("--metadata-cache-file", default="var/binance_futures_exchange_info.json")
+    p.add_argument(
+        "--exchange-profile",
+        default="binance_futures_testnet",
+        choices=["binance_futures_testnet", "binance_futures_mainnet"],
+    )
+    p.add_argument("--runtime-root", default="var/exchanges/binance_futures")
+    p.add_argument("--metadata-cache-file", default=None)
+    p.add_argument("--paper-state-file", default=None)
     p.add_argument("--timeframe", default="1h")
     p.add_argument("--days", type=int, default=180)
     p.add_argument("--leverage", type=int, default=5)
@@ -36,10 +43,11 @@ def parse_args():
     p.add_argument("--paper-summary", action="store_true")
     p.add_argument("--paper-loop", action="store_true")
     p.add_argument("--shadow-loop", action="store_true")
-    p.add_argument("--shadow-audit-log", default="shadow_audit.jsonl")
-    p.add_argument("--shadow-state-file", default="shadow_state.json")
+    p.add_argument("--shadow-audit-log", default=None)
+    p.add_argument("--shadow-state-file", default=None)
     p.add_argument("--shadow-summary", action="store_true")
     p.add_argument("--shadow-review", action="store_true")
+    p.add_argument("--allow-mainnet", action="store_true")
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--iterations", type=int, default=None)
     p.add_argument("--stop-loss-pct", type=float, default=None)
@@ -81,12 +89,20 @@ def parse_args():
 
 def main():
     args = parse_args()
+    runtime_paths = build_binance_futures_runtime_paths(
+        args.exchange_profile,
+        args.symbol,
+        root_dir=args.runtime_root,
+    )
+    paper_state_file = args.paper_state_file or runtime_paths.paper_state_file
+    shadow_audit_log = args.shadow_audit_log or runtime_paths.shadow_audit_log
+    shadow_state_file = args.shadow_state_file or runtime_paths.shadow_state_file
 
     if args.shadow_summary:
         from pathlib import Path
         from research.shadow_audit_tools import load_jsonl, summarize, write_reports
 
-        audit_path = Path(args.shadow_audit_log)
+        audit_path = Path(shadow_audit_log)
         rows = load_jsonl(audit_path)
         summary = summarize(rows)
         md, js = write_reports(audit_path, summary)
@@ -98,7 +114,7 @@ def main():
         from research.shadow_audit_tools import load_jsonl, summarize
         from research.shadow_review_report import build_review, write_review
 
-        audit_path = Path(args.shadow_audit_log)
+        audit_path = Path(shadow_audit_log)
         rows = load_jsonl(audit_path)
         summary = summarize(rows)
         review = build_review(rows, summary)
@@ -164,8 +180,10 @@ def main():
             risk,
             strategy,
             timeframe=args.timeframe,
+            state_file=paper_state_file,
             execution=execution,
             live_risk=live_risk,
+            allow_mainnet=args.allow_mainnet,
         )
         print(paper.summary())
         return
@@ -177,8 +195,10 @@ def main():
             risk,
             strategy,
             timeframe=args.timeframe,
+            state_file=paper_state_file,
             execution=execution,
             live_risk=live_risk,
+            allow_mainnet=args.allow_mainnet,
         )
         paper.run_loop(
             interval_seconds=args.interval,
@@ -195,8 +215,9 @@ def main():
             timeframe=args.timeframe,
             execution=execution,
             live_risk=live_risk,
-            audit_log=args.shadow_audit_log,
-            state_file=args.shadow_state_file,
+            audit_log=shadow_audit_log,
+            state_file=shadow_state_file,
+            allow_mainnet=args.allow_mainnet,
         )
         shadow.run_loop(
             interval_seconds=args.interval,
