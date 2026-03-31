@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any
 
 from shadow_audit_tools import load_jsonl, summarize
 
 
-def build_review(rows: list[dict], summary: dict):
+def build_review(rows: list[dict[str, Any]], summary: dict[str, Any]) -> dict[str, Any]:
     reconcile_rows = [r for r in rows if r.get("event_type") == "reconcile"]
     blocked_rows = [r for r in rows if r.get("event_type") == "shadow_blocked"]
     decision_rows = [r for r in rows if r.get("event_type") == "shadow_decision"]
@@ -17,7 +18,7 @@ def build_review(rows: list[dict], summary: dict):
     latest_block = blocked_rows[-1] if blocked_rows else None
     latest_reconcile = reconcile_rows[-1] if reconcile_rows else None
 
-    review = {
+    review: dict[str, Any] = {
         "summary": summary,
         "latest_decision": latest_decision,
         "latest_block": latest_block,
@@ -35,7 +36,10 @@ def build_review(rows: list[dict], summary: dict):
     return review
 
 
-def write_review(audit_path: Path, review: dict):
+def write_review(
+    audit_path: Path,
+    review: dict[str, Any],
+) -> tuple[Path, Path]:
     out_json = audit_path.with_suffix(".review.json")
     out_md = audit_path.with_suffix(".review.md")
     out_json.write_text(json.dumps(review, indent=2, ensure_ascii=False), encoding="utf-8")

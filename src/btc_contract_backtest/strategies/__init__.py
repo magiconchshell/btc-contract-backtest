@@ -1,5 +1,5 @@
 from typing import Optional
-from .base import BaseStrategy
+
 from .indicators import RSIReversalStrategy, SMACrossStrategy, MACDCrossStrategy
 from .hybrid import VotingHybridStrategy
 from .regime_filtered import RegimeFilteredStrategy

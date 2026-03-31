@@ -61,4 +61,4 @@ python_version = "3.12"
 files = ["src"]
 ignore_missing_imports = true
 warn_unused_configs = true
-exclude = "(?x)(^build/|^dist/|^src/btc_contract_backtest\\.egg-info/)"
+exclude = "(?x)(^build/|^dist/|^research/|^src/btc_contract_backtest\\.egg-info/)"

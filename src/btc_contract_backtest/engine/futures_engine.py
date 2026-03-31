@@ -1,12 +1,20 @@
 from __future__ import annotations
+
 from typing import Optional
 
 import ccxt
 import numpy as np
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.runtime.backtest_runtime import BacktestRuntime
+from btc_contract_backtest.strategies.base import BaseStrategy
 
 
 class FuturesBacktestEngine:
@@ -25,14 +33,37 @@ class FuturesBacktestEngine:
         self.timeframe = timeframe
         self.execution = execution or ExecutionConfig()
         self.live_risk = live_risk or LiveRiskConfig()
-        self.exchange = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "future"}})
+        self.exchange = ccxt.binance(
+            {
+                "enableRateLimit": True,
+                "options": {"defaultType": "future"},
+            }
+        )
 
-    def fetch_historical_data(self, start_date: str, end_date: str) -> pd.DataFrame:
+    def fetch_historical_data(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
         since = int(pd.Timestamp(start_date).timestamp() * 1000)
-        rows = self.exchange.fetch_ohlcv(self.contract.symbol, timeframe=self.timeframe, since=since, limit=1000)
+        rows = self.exchange.fetch_ohlcv(
+            self.contract.symbol,
+            timeframe=self.timeframe,
+            since=since,
+            limit=1000,
+        )
         tf_ms = self._parse_timeframe()
-        while rows and pd.to_datetime(rows[-1][0], unit="ms") < pd.Timestamp(end_date) and len(rows) < 20000:
-            nxt = self.exchange.fetch_ohlcv(self.contract.symbol, timeframe=self.timeframe, since=rows[-1][0] + tf_ms, limit=1000)
+        while (
+            rows
+            and pd.to_datetime(rows[-1][0], unit="ms") < pd.Timestamp(end_date)
+            and len(rows) < 20000
+        ):
+            nxt = self.exchange.fetch_ohlcv(
+                self.contract.symbol,
+                timeframe=self.timeframe,
+                since=rows[-1][0] + tf_ms,
+                limit=1000,
+            )
             if not nxt:
                 break
             rows.extend(nxt)
@@ -43,7 +74,15 @@ class FuturesBacktestEngine:
         return df
 
     def _parse_timeframe(self):
-        mapping = {"1m": 60000, "5m": 300000, "15m": 900000, "30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000}
+        mapping = {
+            "1m": 60000,
+            "5m": 300000,
+            "15m": 900000,
+            "30m": 1800000,
+            "1h": 3600000,
+            "4h": 14400000,
+            "1d": 86400000,
+        }
         return mapping.get(self.timeframe, 3600000)
 
     def _compute_atr(self, df: pd.DataFrame, window: int = 14) -> pd.Series:
@@ -58,7 +97,7 @@ class FuturesBacktestEngine:
         if "atr" not in signal_df.columns:
             signal_df["atr"] = self._compute_atr(signal_df)
 
-        class _BacktestStrategy:
+        class _BacktestStrategy(BaseStrategy):
             def name(self) -> str:
                 return "backtest_runtime_strategy"
 
@@ -81,11 +120,27 @@ class FuturesBacktestEngine:
         equity = results["equity_curve"]["equity"]
         returns = equity.pct_change().dropna()
         total_return = ((results["final_capital"] - results["initial_capital"]) / results["initial_capital"]) * 100
-        sharpe = 0.0 if len(returns) < 2 or returns.std() == 0 else (returns.mean() / returns.std()) * np.sqrt(252)
-        dd = 0.0 if equity.empty else ((equity - equity.cummax()) / equity.cummax()).min() * 100
+        sharpe = (
+            0.0
+            if len(returns) < 2 or returns.std() == 0
+            else (returns.mean() / returns.std()) * np.sqrt(252)
+        )
+        dd = (
+            0.0
+            if equity.empty
+            else ((equity - equity.cummax()) / equity.cummax()).min() * 100
+        )
         trades = results["trades"]
-        closed = trades[~trades.get("is_partial", False)] if not trades.empty and "is_partial" in trades.columns else trades
-        win_rate = 0.0 if closed.empty else (len(closed[closed["pnl_after_costs"] > 0]) / len(closed)) * 100
+        closed = (
+            trades[~trades.get("is_partial", False)]
+            if not trades.empty and "is_partial" in trades.columns
+            else trades
+        )
+        win_rate = (
+            0.0
+            if closed.empty
+            else (len(closed[closed["pnl_after_costs"] > 0]) / len(closed)) * 100
+        )
         return {
             "total_return": total_return,
             "sharpe_ratio": float(sharpe),
@@ -94,7 +149,11 @@ class FuturesBacktestEngine:
             "total_trades": int(len(trades)),
             "final_capital": float(results["final_capital"]),
             "liquidation_events": int(results["liquidation_events"]),
-            "risk_events": 0 if "risk_events" not in results or results["risk_events"].empty else int(len(results["risk_events"])),
+            "risk_events": (
+                0
+                if "risk_events" not in results or results["risk_events"].empty
+                else int(len(results["risk_events"]))
+            ),
             "calibration_mode": getattr(self.execution, "calibration_mode", "calibrated"),
             "calibration_version": getattr(self.execution, "calibration_version", "t4-v1"),
         }

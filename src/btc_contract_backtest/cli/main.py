@@ -1,17 +1,25 @@
 import argparse
 from datetime import datetime, timedelta
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
+from btc_contract_backtest.live.paper_trading import PaperTradingSession
+from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 from btc_contract_backtest.reporting.metrics import summarize_results
 from btc_contract_backtest.strategies import build_strategy
 from btc_contract_backtest.strategies.hybrid import VotingHybridStrategy
-from btc_contract_backtest.live.paper_trading import PaperTradingSession
-from btc_contract_backtest.live.shadow_session import ShadowTradingSession
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Futures/perpetual contract backtest and paper trading toolkit")
+    p = argparse.ArgumentParser(
+        description="Futures/perpetual contract backtest and paper trading toolkit"
+    )
     p.add_argument("--symbol", default="BTC/USDT")
     p.add_argument("--timeframe", default="1h")
     p.add_argument("--days", type=int, default=180)
@@ -140,26 +148,68 @@ def main():
     )
 
     if args.strategy == "hybrid":
-        strategy = VotingHybridStrategy([build_strategy("rsi"), build_strategy("macd")], required_votes=1)
+        strategy = VotingHybridStrategy(
+            [build_strategy("rsi"), build_strategy("macd")],
+            required_votes=1,
+        )
     else:
         strategy = build_strategy(args.strategy)
 
     if args.paper_summary:
-        paper = PaperTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk)
+        paper = PaperTradingSession(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe=args.timeframe,
+            execution=execution,
+            live_risk=live_risk,
+        )
         print(paper.summary())
         return
 
     if args.paper_loop:
-        paper = PaperTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk)
-        paper.run_loop(interval_seconds=args.interval, iterations=args.iterations)
+        paper = PaperTradingSession(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe=args.timeframe,
+            execution=execution,
+            live_risk=live_risk,
+        )
+        paper.run_loop(
+            interval_seconds=args.interval,
+            iterations=args.iterations,
+        )
         return
 
     if args.shadow_loop:
-        shadow = ShadowTradingSession(contract, account, risk, strategy, timeframe=args.timeframe, execution=execution, live_risk=live_risk, audit_log=args.shadow_audit_log, state_file=args.shadow_state_file)
-        shadow.run_loop(interval_seconds=args.interval, iterations=args.iterations)
+        shadow = ShadowTradingSession(
+            contract,
+            account,
+            risk,
+            strategy,
+            timeframe=args.timeframe,
+            execution=execution,
+            live_risk=live_risk,
+            audit_log=args.shadow_audit_log,
+            state_file=args.shadow_state_file,
+        )
+        shadow.run_loop(
+            interval_seconds=args.interval,
+            iterations=args.iterations,
+        )
         return
 
-    engine = FuturesBacktestEngine(contract, account, risk, timeframe=args.timeframe, execution=execution, live_risk=live_risk)
+    engine = FuturesBacktestEngine(
+        contract,
+        account,
+        risk,
+        timeframe=args.timeframe,
+        execution=execution,
+        live_risk=live_risk,
+    )
     start = (datetime.now() - timedelta(days=args.days)).strftime("%Y-%m-%d")
     end = datetime.now().strftime("%Y-%m-%d")
     df = engine.fetch_historical_data(start, end)

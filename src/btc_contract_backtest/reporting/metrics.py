@@ -1,6 +1,3 @@
-import numpy as np
-
-
 def summarize_results(results: dict, metrics: dict) -> str:
     return (
         f"Total Return: {metrics['total_return']:.2f}%\n"
