@@ -111,4 +111,45 @@ def test_execution_replay_summary_is_deterministic_for_out_of_order_events():
     assert summary["last_applied_external_sequence"] == "101"
     assert summary["order_records"][0]["state"] == "partial"
     assert summary["derived_position"]["side"] == 1
+    assert summary["derived_position"]["source"] == "account_update"
     assert summary["derived_account"]["balances"][0]["a"] == "USDT"
+
+
+
+def test_execution_replay_summary_derives_partial_fill_position_without_account_snapshot():
+    summary = build_execution_replay_summary(
+        [
+            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-long-1", "side": "buy", "order_type": "limit", "status": "new"}},
+            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-long-1", "side": "buy", "execution_type": "trade", "status": "partially_filled", "last_fill_quantity": "0.25", "filled_quantity": "0.25", "last_fill_price": "45000.0", "average_price": "45000.0"}},
+            {"sequence": 3, "event_type": "order_new", "timestamp": "2026-01-01T00:00:02+00:00", "payload": {"client_order_id": "cid-long-2", "side": "buy", "order_type": "limit", "status": "new"}},
+            {"sequence": 4, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:03+00:00", "payload": {"client_order_id": "cid-long-2", "side": "buy", "execution_type": "trade", "status": "filled", "last_fill_quantity": "0.15", "filled_quantity": "0.15", "last_fill_price": "45100.0", "average_price": "45100.0"}},
+        ],
+        symbol="BTC/USDT",
+    )
+
+    assert summary["derived_position"] == {
+        "symbol": "BTC/USDT",
+        "side": 1,
+        "quantity": 0.4,
+        "entry_price": 45037.5,
+        "timestamp": "2026-01-01T00:00:03+00:00",
+        "sequence": None,
+        "source": "order_replay",
+    }
+    assert {row["state"] for row in summary["order_records"]} == {"partial", "filled"}
+
+
+
+def test_execution_replay_summary_keeps_account_snapshot_authoritative_over_order_replay():
+    summary = build_execution_replay_summary(
+        [
+            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-1", "side": "buy", "order_type": "market", "status": "new"}},
+            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-1", "side": "buy", "execution_type": "trade", "status": "filled", "filled_quantity": "0.25", "last_fill_quantity": "0.25", "average_price": "45000.0"}},
+            {"sequence": 3, "event_type": "account_update", "timestamp": "2026-01-01T00:00:02+00:00", "payload": {"balances": [{"a": "USDT", "wb": "998.0"}], "positions": [{"s": "BTCUSDT", "pa": "0.10", "ep": "44950.0"}]}}
+        ],
+        symbol="BTC/USDT",
+    )
+
+    assert summary["derived_position"]["quantity"] == 0.10
+    assert summary["derived_position"]["entry_price"] == 44950.0
+    assert summary["derived_position"]["source"] == "account_update"

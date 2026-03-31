@@ -184,6 +184,96 @@ def _event_sequence_sort_key(event: dict[str, Any]) -> tuple[int, int, str, str,
     )
 
 
+def _order_row_sort_key(row: dict[str, Any]) -> tuple[int, int, str, str]:
+    try:
+        sequence = int(str(row.get("last_sequence")))
+        rank = 0
+    except (TypeError, ValueError):
+        sequence = 0
+        rank = 1
+    return (
+        rank,
+        sequence,
+        str(row.get("last_timestamp") or ""),
+        str(row.get("order_id") or row.get("client_order_id") or ""),
+    )
+
+
+
+def _side_sign(value: Any) -> int:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"buy", "long", "1"}:
+        return 1
+    if normalized in {"sell", "short", "-1"}:
+        return -1
+    return 0
+
+
+
+def _merge_position_fill(
+    *,
+    current_side: int,
+    current_quantity: float,
+    current_entry_price: Optional[float],
+    fill_side: int,
+    fill_quantity: float,
+    fill_price: Optional[float],
+) -> tuple[int, float, Optional[float]]:
+    if fill_side == 0 or fill_quantity <= 0.0:
+        return current_side, current_quantity, current_entry_price
+    if current_side == 0 or current_quantity <= 0.0:
+        return fill_side, fill_quantity, fill_price
+    if current_side == fill_side:
+        if current_entry_price is None or fill_price is None:
+            next_entry = current_entry_price if current_entry_price is not None else fill_price
+        else:
+            next_entry = ((current_quantity * current_entry_price) + (fill_quantity * fill_price)) / (current_quantity + fill_quantity)
+        return current_side, current_quantity + fill_quantity, next_entry
+
+    if fill_quantity < current_quantity:
+        return current_side, current_quantity - fill_quantity, current_entry_price
+    if fill_quantity == current_quantity:
+        return 0, 0.0, None
+    return fill_side, fill_quantity - current_quantity, fill_price
+
+
+
+def _derive_position_hint_from_orders(orders_by_client: dict[str, dict[str, Any]], *, symbol: Optional[str] = None) -> Optional[dict[str, Any]]:
+    side = 0
+    quantity = 0.0
+    entry_price: Optional[float] = None
+    last_timestamp: Optional[str] = None
+    last_sequence: Optional[Any] = None
+    source_orders = sorted((orders_by_client or {}).values(), key=_order_row_sort_key)
+    for row in source_orders:
+        filled_quantity = float(row.get("filled_quantity") or 0.0)
+        if filled_quantity <= 0.0:
+            continue
+        fill_side = _side_sign(row.get("side"))
+        average_price = _safe_float(row.get("average_price") or row.get("avg_fill_price"))
+        side, quantity, entry_price = _merge_position_fill(
+            current_side=side,
+            current_quantity=quantity,
+            current_entry_price=entry_price,
+            fill_side=fill_side,
+            fill_quantity=filled_quantity,
+            fill_price=average_price,
+        )
+        last_timestamp = row.get("last_timestamp") or last_timestamp
+        last_sequence = row.get("last_sequence") or last_sequence
+    if side == 0 or quantity <= 0.0:
+        return None
+    return {
+        "symbol": symbol,
+        "side": side,
+        "quantity": quantity,
+        "entry_price": entry_price,
+        "timestamp": last_timestamp,
+        "sequence": last_sequence,
+        "source": "order_replay",
+    }
+
+
 def build_convergence_watermark(
     *,
     boundary: Optional[dict[str, Any]],
@@ -347,7 +437,7 @@ def summarize_replay_state(events: Optional[list[dict[str, Any]]], *, symbol: Op
         client_key = row.get("client_order_id") or row.get("order_id") or key
         orders_by_client[str(client_key)] = row
 
-    position_hint = None
+    position_hint = _derive_position_hint_from_orders(orders_by_client, symbol=symbol)
     account_hint = None
     if latest_account_update is not None:
         payload = _event_payload(latest_account_update)
