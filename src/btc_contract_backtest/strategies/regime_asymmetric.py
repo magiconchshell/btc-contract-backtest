@@ -82,9 +82,21 @@ class RegimeAsymmetricStrategy(BaseStrategy):
         df["atr_pct"] = df["atr"] / df["close"]
         df["adx"] = self._compute_adx(df)
 
-        long_rsi = RSIReversalStrategy(rsi_period=self.rsi_period, threshold_low=self.long_rsi_threshold, threshold_high=100).generate_signals(df.copy())
-        short_rsi = RSIReversalStrategy(rsi_period=self.rsi_period, threshold_low=0, threshold_high=self.short_rsi_threshold).generate_signals(df.copy())
-        macd_df = MACDCrossStrategy(fast_ema=self.macd_fast, slow_ema=self.macd_slow, signal_smooth=self.macd_signal).generate_signals(df.copy())
+        long_rsi = RSIReversalStrategy(
+            rsi_period=self.rsi_period,
+            threshold_low=self.long_rsi_threshold,
+            threshold_high=100,
+        ).generate_signals(df.copy())
+        short_rsi = RSIReversalStrategy(
+            rsi_period=self.rsi_period,
+            threshold_low=0,
+            threshold_high=self.short_rsi_threshold,
+        ).generate_signals(df.copy())
+        macd_df = MACDCrossStrategy(
+            fast_ema=self.macd_fast,
+            slow_ema=self.macd_slow,
+            signal_smooth=self.macd_signal,
+        ).generate_signals(df.copy())
 
         long_ok = (
             df["trend_up"]

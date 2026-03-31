@@ -69,8 +69,16 @@ class RegimeFilteredStrategy(BaseStrategy):
         df["trend_up"] = df["ema_fast_trend"] > df["ema_slow_trend"]
         df["trend_down"] = df["ema_fast_trend"] < df["ema_slow_trend"]
 
-        rsi_df = RSIReversalStrategy(rsi_period=self.rsi_period, threshold_low=self.rsi_long_threshold, threshold_high=self.rsi_short_threshold).generate_signals(df.copy())
-        macd_df = MACDCrossStrategy(fast_ema=self.macd_fast, slow_ema=self.macd_slow, signal_smooth=self.macd_signal).generate_signals(df.copy())
+        rsi_df = RSIReversalStrategy(
+            rsi_period=self.rsi_period,
+            threshold_low=self.rsi_long_threshold,
+            threshold_high=self.rsi_short_threshold,
+        ).generate_signals(df.copy())
+        macd_df = MACDCrossStrategy(
+            fast_ema=self.macd_fast,
+            slow_ema=self.macd_slow,
+            signal_smooth=self.macd_signal,
+        ).generate_signals(df.copy())
 
         tr1 = df["high"] - df["low"]
         tr2 = (df["high"] - df["close"].shift(1)).abs()
@@ -84,8 +92,20 @@ class RegimeFilteredStrategy(BaseStrategy):
 
         volatility_ok = (df["atr_pct"] >= self.min_atr_pct) & (df["atr_pct"] <= self.max_atr_pct)
         regime_ok = df["adx"] >= self.adx_threshold
-        long_setup = df["trend_up"] & regime_ok & volatility_ok & (rsi_df["signal"] == 1) & (macd_df["signal"] == 1)
-        short_setup = df["trend_down"] & regime_ok & volatility_ok & (rsi_df["signal"] == -1) & (macd_df["signal"] == -1)
+        long_setup = (
+            df["trend_up"]
+            & regime_ok
+            & volatility_ok
+            & (rsi_df["signal"] == 1)
+            & (macd_df["signal"] == 1)
+        )
+        short_setup = (
+            df["trend_down"]
+            & regime_ok
+            & volatility_ok
+            & (rsi_df["signal"] == -1)
+            & (macd_df["signal"] == -1)
+        )
 
         df.loc[long_setup, "signal"] = 1
         df.loc[short_setup, "signal"] = -1

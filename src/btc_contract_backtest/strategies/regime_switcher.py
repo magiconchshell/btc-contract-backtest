@@ -25,7 +25,12 @@ class RegimeSwitcherStrategy(BaseStrategy):
         self.crash_adx_threshold = crash_adx_threshold
         self.neutral_allows_position = neutral_allows_position
         self.long_module = LongOnlyRegimeStrategy()
-        self.short_module = ExtremeDowntrendShortStrategy(ema_fast=fast_ema, ema_slow=slow_ema, breakdown_lookback=crash_lookback, adx_threshold=crash_adx_threshold)
+        self.short_module = ExtremeDowntrendShortStrategy(
+            ema_fast=fast_ema,
+            ema_slow=slow_ema,
+            breakdown_lookback=crash_lookback,
+            adx_threshold=crash_adx_threshold,
+        )
 
     def name(self) -> str:
         return "regime_switcher"
@@ -57,7 +62,11 @@ class RegimeSwitcherStrategy(BaseStrategy):
         df["adx"] = self._compute_adx(df)
 
         bull_regime = (df["ema_fast"] > df["ema_slow"]) & (df["adx"] >= self.bull_adx_threshold)
-        crash_regime = (df["ema_fast"] < df["ema_slow"]) & (df["drawdown_from_recent_high"] <= -self.crash_threshold_pct) & (df["adx"] >= self.crash_adx_threshold)
+        crash_regime = (
+            (df["ema_fast"] < df["ema_slow"])
+            & (df["drawdown_from_recent_high"] <= -self.crash_threshold_pct)
+            & (df["adx"] >= self.crash_adx_threshold)
+        )
         neutral_regime = ~(bull_regime | crash_regime)
 
         long_df = self.long_module.generate_signals(df.copy())

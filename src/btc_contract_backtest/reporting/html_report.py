@@ -11,14 +11,43 @@ HTML_TEMPLATE = """
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BTC 合約回測報告</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script
+    src="https://cdn.plot.ly/plotly-2.35.2.min.js"
+  ></script>
   <style>
-    body { font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; background:#0b1020; color:#e8ecf3; margin:0; }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0b1020;
+      color: #e8ecf3;
+      margin: 0;
+    }
     .wrap { max-width:1400px; margin:0 auto; padding:24px; }
-    .hero { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; margin-bottom:24px; }
-    .card { background:#121a30; border:1px solid #25304f; border-radius:18px; padding:20px; box-shadow:0 8px 30px rgba(0,0,0,0.25); }
-    .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
-    .metric .label { color:#8ea0c9; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #121a30;
+      border: 1px solid #25304f;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric .label {
+      color: #8ea0c9;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
     .metric .value { font-size:28px; font-weight:700; margin-top:8px; }
     .section-title { font-size:22px; font-weight:700; margin:24px 0 12px; }
     .chart { height:460px; margin-bottom:20px; }
@@ -33,9 +62,13 @@ HTML_TEMPLATE = """
     <div class="hero">
       <div>
         <h1>BTC/USDT 合約回測報告</h1>
-        <div class="small">期間：2025-01-01 至今｜本金：100 USD｜市場：Perpetual Futures｜可做多做空｜槓桿 5x</div>
+        <div class="small">
+          期間：2025-01-01 至今｜本金：100 USD｜市場：Perpetual Futures｜可做多做空｜槓桿 5x
+        </div>
       </div>
-      <div class="card small">高可視化 HTML 報表，可透過 FastAPI 提供並由 ngrok 對外。</div>
+      <div class="card small">
+        高可視化 HTML 報表，可透過 FastAPI 提供並由 ngrok 對外。
+      </div>
     </div>
 
     <div id="summary-cards" class="grid"></div>
@@ -54,7 +87,17 @@ HTML_TEMPLATE = """
     <div class="section-title">策略明細</div>
     <div class="card">
       <table>
-        <thead><tr><th>策略</th><th>總報酬</th><th>Sharpe</th><th>最大回撤</th><th>勝率</th><th>交易數</th><th>最終資金</th></tr></thead>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>總報酬</th>
+            <th>Sharpe</th>
+            <th>最大回撤</th>
+            <th>勝率</th>
+            <th>交易數</th>
+            <th>最終資金</th>
+          </tr>
+        </thead>
         <tbody id="table-body"></tbody>
       </table>
     </div>
@@ -83,14 +126,78 @@ Plotly.newPlot('equity-chart', strategies.map(s => ({
   name: s.name,
   line: {width: 3}
 })), {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8ecf3'}, margin:{t:20}});
-Plotly.newPlot('returns-chart', [{type:'bar', x: strategies.map(s=>s.name), y: strategies.map(s=>s.metrics.total_return), marker:{color:['#4ade80','#60a5fa','#f59e0b']}}], {title:'總報酬 (%)', paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8ecf3'}});
-Plotly.newPlot('drawdown-chart', [{type:'bar', x: strategies.map(s=>s.name), y: strategies.map(s=>s.metrics.max_drawdown), marker:{color:'#f87171'}}], {title:'最大回撤 (%)', paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8ecf3'}});
-Plotly.newPlot('trades-chart', [{type:'bar', x: strategies.map(s=>s.name), y: strategies.map(s=>s.metrics.total_trades), marker:{color:'#a78bfa'}}], {title:'交易數', paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8ecf3'}});
-Plotly.newPlot('winrate-chart', [{type:'bar', x: strategies.map(s=>s.name), y: strategies.map(s=>s.metrics.win_rate), marker:{color:'#22d3ee'}}], {title:'勝率 (%)', paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8ecf3'}});
+Plotly.newPlot(
+  'returns-chart',
+  [{
+    type: 'bar',
+    x: strategies.map(s => s.name),
+    y: strategies.map(s => s.metrics.total_return),
+    marker: {color: ['#4ade80', '#60a5fa', '#f59e0b']}
+  }],
+  {
+    title: '總報酬 (%)',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {color: '#e8ecf3'}
+  }
+);
+Plotly.newPlot(
+  'drawdown-chart',
+  [{
+    type: 'bar',
+    x: strategies.map(s => s.name),
+    y: strategies.map(s => s.metrics.max_drawdown),
+    marker: {color: '#f87171'}
+  }],
+  {
+    title: '最大回撤 (%)',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {color: '#e8ecf3'}
+  }
+);
+Plotly.newPlot(
+  'trades-chart',
+  [{
+    type: 'bar',
+    x: strategies.map(s => s.name),
+    y: strategies.map(s => s.metrics.total_trades),
+    marker: {color: '#a78bfa'}
+  }],
+  {
+    title: '交易數',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {color: '#e8ecf3'}
+  }
+);
+Plotly.newPlot(
+  'winrate-chart',
+  [{
+    type: 'bar',
+    x: strategies.map(s => s.name),
+    y: strategies.map(s => s.metrics.win_rate),
+    marker: {color: '#22d3ee'}
+  }],
+  {
+    title: '勝率 (%)',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {color: '#e8ecf3'}
+  }
+);
 const tbody = document.getElementById('table-body');
 strategies.forEach(s => {
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td>${s.name}</td><td>${s.metrics.total_return.toFixed(2)}%</td><td>${s.metrics.sharpe_ratio.toFixed(2)}</td><td>${s.metrics.max_drawdown.toFixed(2)}%</td><td>${s.metrics.win_rate.toFixed(2)}%</td><td>${s.metrics.total_trades}</td><td>${s.metrics.final_capital.toFixed(2)}</td>`;
+  tr.innerHTML = `
+    <td>${s.name}</td>
+    <td>${s.metrics.total_return.toFixed(2)}%</td>
+    <td>${s.metrics.sharpe_ratio.toFixed(2)}</td>
+    <td>${s.metrics.max_drawdown.toFixed(2)}%</td>
+    <td>${s.metrics.win_rate.toFixed(2)}%</td>
+    <td>${s.metrics.total_trades}</td>
+    <td>${s.metrics.final_capital.toFixed(2)}</td>
+  `;
   tbody.appendChild(tr);
 });
 </script>

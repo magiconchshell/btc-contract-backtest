@@ -21,7 +21,12 @@ class LongOnlyRegimeStrategy(BaseStrategy):
 
 
 class ShortLiteRegimeStrategy(BaseStrategy):
-    def __init__(self, short_adx_threshold: float = 28.0, short_max_atr_pct: float = 0.02, **kwargs):
+    def __init__(
+        self,
+        short_adx_threshold: float = 28.0,
+        short_max_atr_pct: float = 0.02,
+        **kwargs,
+    ):
         cfg = dict(kwargs)
         cfg.setdefault("short_adx_threshold", short_adx_threshold)
         cfg.setdefault("short_max_atr_pct", short_max_atr_pct)
@@ -35,7 +40,14 @@ class ShortLiteRegimeStrategy(BaseStrategy):
 
 
 class ExtremeDowntrendShortStrategy(BaseStrategy):
-    def __init__(self, ema_fast: int = 50, ema_slow: int = 200, breakdown_lookback: int = 20, adx_window: int = 14, adx_threshold: float = 28.0):
+    def __init__(
+        self,
+        ema_fast: int = 50,
+        ema_slow: int = 200,
+        breakdown_lookback: int = 20,
+        adx_window: int = 14,
+        adx_threshold: float = 28.0,
+    ):
         self.ema_fast = ema_fast
         self.ema_slow = ema_slow
         self.breakdown_lookback = breakdown_lookback
@@ -70,6 +82,10 @@ class ExtremeDowntrendShortStrategy(BaseStrategy):
         df["rolling_low"] = df["low"].rolling(self.breakdown_lookback).min().shift(1)
         df["adx"] = self._compute_adx(df)
         df["signal"] = 0
-        short_cond = (df["ema_fast"] < df["ema_slow"]) & (df["close"] < df["rolling_low"]) & (df["adx"] >= self.adx_threshold)
+        short_cond = (
+            (df["ema_fast"] < df["ema_slow"])
+            & (df["close"] < df["rolling_low"])
+            & (df["adx"] >= self.adx_threshold)
+        )
         df.loc[short_cond, "signal"] = -1
         return df
