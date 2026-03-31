@@ -170,3 +170,18 @@ research/strategy_lab/output/**
 credentials.json
 service_account.json
 secrets/
+
+research/
+scripts/
+
+# Allowlist a small, portable subset of research runners to be versioned.
+!research/
+research/*
+!research/strategy_lab/
+research/strategy_lab/*
+!research/strategy_lab/run_research.py
+!research/strategy_lab/run_research_v2.py
+!research/strategy_lab/run_research_v3.py
+!research/strategy_lab/run_research_v4.py
+!research/strategy_lab/run_research_v5.py
+research/strategy_lab/output/**
