@@ -81,6 +81,33 @@ def test_event_stream_records_and_replays_sequence(tmp_path):
     assert replay[1]["event_type"] == "submit_intent_submitted"
 
 
+def test_event_stream_replay_sorts_by_sequence_and_tracks_numeric_watermarks(tmp_path):
+    recorder = EventRecorder(str(tmp_path / "events.jsonl"))
+    recorder.append({
+        "event_type": "order_trade_update",
+        "timestamp": "2026-01-01T00:00:03+00:00",
+        "payload": {"client_order_id": "c1"},
+        "sequence": 10,
+        "external_sequence": "100",
+        "received_at": "2026-01-01T00:00:03+00:00",
+    })
+    recorder.append({
+        "event_type": "order_new",
+        "timestamp": "2026-01-01T00:00:01+00:00",
+        "payload": {"client_order_id": "c1"},
+        "sequence": 2,
+        "external_sequence": "9",
+        "received_at": "2026-01-01T00:00:01+00:00",
+    })
+    source = EventDrivenExecutionSource(recorder)
+
+    replay = source.replay()
+
+    assert [row["sequence"] for row in replay] == [2, 10]
+    assert source.last_sequence == 10
+    assert source.last_external_sequence == "100"
+
+
 def test_event_stream_boundary_requires_polling_without_live_upstream(tmp_path):
     exchange = FakeListenKeyExchange()
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")

@@ -7,6 +7,40 @@ from pathlib import Path
 from typing import Any, Optional, Protocol
 
 
+def _coerce_int(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _event_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    sequence = row.get("sequence")
+    numeric_sequence = _coerce_int(sequence)
+    return (
+        0 if numeric_sequence is not None else 1,
+        numeric_sequence if numeric_sequence is not None else 0,
+        str(row.get("timestamp") or ""),
+        str(row.get("received_at") or ""),
+        str(row.get("event_id") or ""),
+        str(row.get("event_type") or ""),
+    )
+
+
+def _max_external_sequence(rows: list[dict[str, Any]]) -> Optional[str]:
+    numeric_values = [
+        _coerce_int(row.get("external_sequence"))
+        for row in rows
+        if _coerce_int(row.get("external_sequence")) is not None
+    ]
+    if numeric_values:
+        return str(max(numeric_values))
+    values = [str(row.get("external_sequence")) for row in rows if row.get("external_sequence") not in (None, "")]
+    return max(values) if values else None
+
+
 class RawExecutionEventSource(Protocol):
     """Interface for exchange-backed event sources.
 
@@ -165,11 +199,16 @@ class EventDrivenExecutionSource:
         return not self.upstream.is_live()
 
     def replay(self) -> list[dict[str, Any]]:
-        rows = self.recorder.load()
+        rows = sorted(self.recorder.load(), key=_event_sort_key)
         if rows:
             last = rows[-1]
-            self.last_sequence = last.get("sequence")
+            numeric_sequences = [
+                _coerce_int(row.get("sequence"))
+                for row in rows
+                if _coerce_int(row.get("sequence")) is not None
+            ]
+            self.last_sequence = max(numeric_sequences) if numeric_sequences else last.get("sequence")
             self.last_event_timestamp = last.get("timestamp")
             self.last_received_at = last.get("received_at")
-            self.last_external_sequence = last.get("external_sequence")
+            self.last_external_sequence = _max_external_sequence(rows)
         return rows

@@ -1,4 +1,5 @@
 from btc_contract_backtest.live.restart_convergence import (
+    build_execution_replay_summary,
     build_position_convergence,
     build_startup_convergence_report,
 )
@@ -18,7 +19,7 @@ def test_position_convergence_detects_entry_basis_quantity_and_side_mismatch():
 def test_startup_convergence_classifies_ambiguous_intents_and_replay_hooks():
     report = build_startup_convergence_report(
         environment="testnet",
-        local_position={"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+        local_position={"symbol": "BTC/USDT", "side": 1, "quantity": 0.25, "entry_price": 45000.0},
         remote_position={"positionAmt": "0.25", "entryPrice": "45000.0"},
         unresolved_intents=[
             {"request_id": "r1", "client_order_id": "cid-missing-remote", "state": "unknown"},
@@ -31,13 +32,14 @@ def test_startup_convergence_classifies_ambiguous_intents_and_replay_hooks():
             {"order_id": "local-1", "client_order_id": "local-extra", "state": "new"},
         ],
         events=[
-            {"sequence": 9, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-missing-remote"}},
-            {"sequence": 10, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-missing-remote", "execution_type": "trade", "last_fill_quantity": "0.25", "last_fill_price": "45000.0", "average_price": "45000.0"}},
+            {"sequence": 9, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "cid-missing-remote", "side": "buy", "order_type": "market"}},
+            {"sequence": 10, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-missing-remote", "execution_type": "trade", "status": "filled", "last_fill_quantity": "0.25", "filled_quantity": "0.25", "last_fill_price": "45000.0", "average_price": "45000.0"}},
+            {"sequence": 11, "event_type": "account_update", "timestamp": "2026-01-01T00:00:02+00:00", "payload": {"balances": [{"a": "USDT", "wb": "1000"}], "positions": [{"s": "BTCUSDT", "pa": "0.25", "ep": "45000.0"}]}},
         ],
         boundary={
-            "last_sequence": 10,
-            "last_event_timestamp": "2026-01-01T00:00:01+00:00",
-            "last_received_at": "2026-01-01T00:00:02+00:00",
+            "last_sequence": 11,
+            "last_event_timestamp": "2026-01-01T00:00:02+00:00",
+            "last_received_at": "2026-01-01T00:00:03+00:00",
             "last_external_sequence": "99",
             "poll_fallback_required": True,
             "upstream": {"connected": False, "listen_key_present": False},
@@ -49,19 +51,20 @@ def test_startup_convergence_classifies_ambiguous_intents_and_replay_hooks():
     assert report["watermark"]["replay_fill_event_count"] == 1
     assert report["replay_hooks"]["last_fill_sequence"] == 10
     assert report["summary"]["unresolved_intent_count"] == 2
+    assert report["replay_hooks"]["authoritative_replay"]["derived_position"]["quantity"] == 0.25
+    assert report["replay_hooks"]["authoritative_replay"]["order_records"][0]["state"] == "filled"
     assert {item["classification"] for item in report["unresolved_intents"]} == {
-        "replay_partial_fill_without_terminal",
+        "replay_terminal_state",
         "missing_client_order_id",
     }
     assert any(action["action"] == "replay_and_lookup_unresolved_intents" for action in report["actions"])
     assert any(action["action"] == "adopt_or_cancel_remote_only_orders" for action in report["actions"])
-    assert report["replay_hooks"]["orders_by_client_order_id"]["cid-missing-remote"]["filled_quantity"] == 0.25
 
 
 def test_startup_convergence_accepts_replay_terminal_fill_without_blocking_intent():
     report = build_startup_convergence_report(
         environment="testnet",
-        local_position={"side": 1, "quantity": 0.25, "entry_price": 45000.0},
+        local_position={"symbol": "BTC/USDT", "side": 1, "quantity": 0.25, "entry_price": 45000.0},
         remote_position={"positionAmt": "0.25", "entryPrice": "45000.0"},
         unresolved_intents=[
             {"request_id": "r-filled", "client_order_id": "cid-filled", "state": "unknown"},
@@ -90,3 +93,22 @@ def test_startup_convergence_accepts_replay_terminal_fill_without_blocking_inten
         "reason": "Startup convergence found no blocking divergence",
         "metadata": {},
     }]
+
+
+def test_execution_replay_summary_is_deterministic_for_out_of_order_events():
+    summary = build_execution_replay_summary(
+        [
+            {"sequence": 10, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:02+00:00", "payload": {"client_order_id": "cid-1", "status": "partially_filled", "execution_type": "trade", "last_fill_quantity": "0.25", "filled_quantity": "0.25", "average_price": "45010.0"}, "external_sequence": "100"},
+            {"sequence": 2, "event_type": "order_new", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "cid-1", "side": "buy", "order_type": "market"}, "external_sequence": "99"},
+            {"sequence": 11, "event_type": "account_update", "timestamp": "2026-01-01T00:00:03+00:00", "payload": {"balances": [{"a": "USDT", "wb": "999.5"}], "positions": [{"s": "BTCUSDT", "pa": "0.25", "ep": "45010.0"}]}, "external_sequence": "101"},
+        ],
+        symbol="BTC/USDT",
+    )
+
+    assert summary["applied_event_count"] == 3
+    assert summary["skipped_event_count"] == 0
+    assert summary["last_applied_sequence"] == 11
+    assert summary["last_applied_external_sequence"] == "101"
+    assert summary["order_records"][0]["state"] == "partial"
+    assert summary["derived_position"]["side"] == 1
+    assert summary["derived_account"]["balances"][0]["a"] == "USDT"

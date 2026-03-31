@@ -147,3 +147,34 @@ def test_order_state_machine_quarantines_conflicting_terminal_out_of_order_event
             ),
             filled_quantity=1.0,
         )
+
+
+def test_order_state_machine_uses_numeric_remote_sequence_ordering():
+    record = OrderStateMachine.create_record(order_id="o1", quantity=1.0)
+    OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.PARTIAL.value,
+        event=OrderEvent(
+            source="remote",
+            event_type="partial_fill",
+            state="partial",
+            timestamp="2026-01-01T00:00:02+00:00",
+            payload={"external_sequence": "100", "filled": 0.25},
+        ),
+        filled_quantity=0.25,
+    )
+
+    OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.ACKED.value,
+        event=OrderEvent(
+            source="remote",
+            event_type="ack",
+            state="acked",
+            timestamp="2026-01-01T00:00:01+00:00",
+            payload={"external_sequence": "99"},
+        ),
+    )
+
+    assert record.state == CanonicalOrderState.PARTIAL.value
+    assert record.tags["last_remote_sequence"] == "100"

@@ -168,6 +168,22 @@ def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _event_sequence_sort_key(event: dict[str, Any]) -> tuple[int, int, str, str, str]:
+    try:
+        sequence = int(str(event.get("sequence")))
+        rank = 0
+    except (TypeError, ValueError):
+        sequence = 0
+        rank = 1
+    return (
+        rank,
+        sequence,
+        str(event.get("timestamp") or ""),
+        str(event.get("received_at") or ""),
+        str(event.get("event_id") or ""),
+    )
+
+
 def build_convergence_watermark(
     *,
     boundary: Optional[dict[str, Any]],
@@ -238,96 +254,150 @@ def build_position_convergence(
     )
 
 
-def summarize_replay_state(events: Optional[list[dict[str, Any]]]) -> dict[str, Any]:
-    replayable = [event for event in (events or []) if bool(event.get("replayable", True))]
-    orders_by_client: dict[str, dict[str, Any]] = {}
+def summarize_replay_state(events: Optional[list[dict[str, Any]]], *, symbol: Optional[str] = None) -> dict[str, Any]:
+    replayable = sorted(
+        [event for event in (events or []) if bool(event.get("replayable", True))],
+        key=_event_sequence_sort_key,
+    )
+    order_records: dict[str, Any] = {}
     latest_account_update: Optional[dict[str, Any]] = None
+    applied_event_count = 0
+    skipped_event_count = 0
+
+    def _record_key(payload: dict[str, Any]) -> Optional[str]:
+        client_order_id = payload.get("client_order_id")
+        order_id = payload.get("order_id")
+        exchange_order_id = payload.get("exchange_order_id")
+        if client_order_id not in (None, ""):
+            return f"client:{client_order_id}"
+        if order_id not in (None, ""):
+            return f"order:{order_id}"
+        if exchange_order_id not in (None, ""):
+            return f"exchange:{exchange_order_id}"
+        return None
+
+    def _status_from_event(event_type: str, payload: dict[str, Any]) -> str:
+        raw_status = payload.get("status")
+        if raw_status not in (None, ""):
+            raw_status = str(raw_status).strip().lower()
+            if raw_status == "partial":
+                return "partially_filled"
+            return raw_status
+        fallback = {
+            "order_new": "new",
+            "order_canceled": "canceled",
+            "order_expired": "expired",
+            "order_trade_update": "partial",
+        }.get(event_type, event_type.removeprefix("order_"))
+        return _normalize_order_state(fallback) or "new"
 
     for event in replayable:
         payload = _event_payload(event)
         event_type = str(event.get("event_type") or "")
-        client_order_id = payload.get("client_order_id")
-        order_id = payload.get("order_id")
-        state = _normalize_order_state(payload.get("status")) or _normalize_order_state(event_type.removeprefix("order_"))
-        filled_quantity = _safe_float(payload.get("filled_quantity"))
-        last_fill_quantity = _safe_float(payload.get("last_fill_quantity")) or 0.0
-        average_price = _safe_float(payload.get("average_price"))
-        target = None
-        if client_order_id:
-            target = orders_by_client.setdefault(
-                str(client_order_id),
-                {
-                    "client_order_id": str(client_order_id),
-                    "order_id": order_id,
-                    "state": None,
-                    "terminal": False,
-                    "filled_quantity": 0.0,
-                    "last_fill_quantity": 0.0,
-                    "average_price": None,
-                    "last_sequence": None,
-                    "last_timestamp": None,
-                    "event_types": [],
-                },
-            )
-        elif order_id is not None:
-            target = orders_by_client.setdefault(
-                str(order_id),
-                {
-                    "client_order_id": None,
-                    "order_id": order_id,
-                    "state": None,
-                    "terminal": False,
-                    "filled_quantity": 0.0,
-                    "last_fill_quantity": 0.0,
-                    "average_price": None,
-                    "last_sequence": None,
-                    "last_timestamp": None,
-                    "event_types": [],
-                },
-            )
-
-        if target is not None and event_type.startswith("order_"):
-            target["order_id"] = target.get("order_id") or order_id
-            target["state"] = state or target.get("state")
-            target["terminal"] = bool(target.get("state") in TERMINAL_REPLAY_ORDER_STATES)
-            target["last_sequence"] = event.get("sequence")
-            target["last_timestamp"] = event.get("timestamp")
-            target["last_fill_quantity"] = last_fill_quantity
-            if filled_quantity is not None:
-                target["filled_quantity"] = filled_quantity
-            elif event_type == "order_trade_update":
-                target["filled_quantity"] = max(float(target.get("filled_quantity") or 0.0), last_fill_quantity)
-            if average_price is not None:
-                target["average_price"] = average_price
-            target.setdefault("event_types", []).append(event_type)
-
-        if event_type == "account_update":
+        if event_type.startswith("order_"):
+            key = _record_key(payload)
+            if key is None:
+                skipped_event_count += 1
+                continue
+            record = order_records.get(key)
+            if record is None:
+                record = OrderStateMachine.create_record(
+                    order_id=str(payload.get("order_id") or payload.get("client_order_id") or key),
+                    client_order_id=(None if payload.get("client_order_id") in (None, "") else str(payload.get("client_order_id"))),
+                    exchange_order_id=(None if payload.get("exchange_order_id") in (None, "") else str(payload.get("exchange_order_id"))) or (None if payload.get("order_id") in (None, "") else str(payload.get("order_id"))),
+                    symbol=symbol,
+                    side=payload.get("side"),
+                    order_type=payload.get("order_type"),
+                    quantity=float(payload.get("filled_quantity") or payload.get("last_fill_quantity") or 0.0),
+                    submission_mode="governed_live",
+                    created_at=event.get("timestamp"),
+                )
+                order_records[key] = record
+            try:
+                apply_remote_status(
+                    record,
+                    status=_status_from_event(event_type, payload),
+                    timestamp=event.get("timestamp"),
+                    payload={
+                        **payload,
+                        "event_id": event.get("event_id"),
+                        "external_sequence": event.get("external_sequence"),
+                    },
+                    filled_quantity=_safe_float(payload.get("filled_quantity") or payload.get("last_fill_quantity")),
+                    avg_fill_price=_safe_float(payload.get("average_price") or payload.get("last_fill_price")),
+                    exchange_order_id=(payload.get("exchange_order_id") or payload.get("order_id")),
+                )
+                applied_event_count += 1
+            except Exception:
+                skipped_event_count += 1
+                continue
+        elif event_type == "account_update":
             latest_account_update = event
+            applied_event_count += 1
+        else:
+            skipped_event_count += 1
+
+    orders_by_client: dict[str, dict[str, Any]] = {}
+    for key, record in order_records.items():
+        row = record.to_dict()
+        row["terminal"] = bool(row.get("state") in TERMINAL_REPLAY_ORDER_STATES)
+        row["last_sequence"] = row.get("tags", {}).get("last_remote_sequence") or row.get("remote_events", [{}])[-1].get("payload", {}).get("external_sequence") if row.get("remote_events") else None
+        row["last_timestamp"] = row.get("tags", {}).get("last_remote_timestamp")
+        row["last_fill_quantity"] = row.get("filled_quantity")
+        client_key = row.get("client_order_id") or row.get("order_id") or key
+        orders_by_client[str(client_key)] = row
 
     position_hint = None
+    account_hint = None
     if latest_account_update is not None:
         payload = _event_payload(latest_account_update)
         positions = payload.get("positions") or []
+        balances = payload.get("balances") or []
+        account_hint = {
+            "balances": balances,
+            "positions": positions,
+            "timestamp": latest_account_update.get("timestamp"),
+            "sequence": latest_account_update.get("sequence"),
+        }
         if positions:
-            best = positions[0]
-            for position in positions:
+            normalized_symbol = str(symbol or "").replace("/", "").upper()
+            filtered = [
+                position for position in positions
+                if not normalized_symbol or str(position.get("s") or position.get("symbol") or "").upper() == normalized_symbol
+            ] or positions
+            best = filtered[0]
+            for position in filtered:
                 qty = abs(float(position.get("pa") or position.get("positionAmt") or position.get("quantity") or 0.0))
                 if qty > abs(float(best.get("pa") or best.get("positionAmt") or best.get("quantity") or 0.0)):
                     best = position
+            entry_price = _safe_float(best.get("ep") or best.get("entryPrice") or best.get("entry_price"))
             position_hint = {
+                "symbol": symbol,
                 "side": _position_side(best),
                 "quantity": _position_quantity(best),
-                "entry_price": _position_entry_price(best),
+                "entry_price": entry_price,
                 "raw": best,
                 "timestamp": latest_account_update.get("timestamp"),
                 "sequence": latest_account_update.get("sequence"),
+                "source": "account_update",
             }
 
     return {
         "orders_by_client_order_id": orders_by_client,
         "terminal_order_count": sum(1 for item in orders_by_client.values() if item.get("terminal")),
         "position_hint": position_hint,
+        "account_hint": account_hint,
         "latest_account_update_sequence": latest_account_update.get("sequence") if latest_account_update else None,
+        "applied_event_count": applied_event_count,
+        "skipped_event_count": skipped_event_count,
+        "last_applied_sequence": max(
+            [int(str(event.get("sequence"))) for event in replayable if event.get("sequence") not in (None, "")],
+            default=None,
+        ),
+        "last_applied_external_sequence": max(
+            [int(str(event.get("external_sequence"))) for event in replayable if event.get("external_sequence") not in (None, "") and str(event.get("external_sequence")).isdigit()],
+            default=None,
+        ),
     }
 
 
@@ -479,8 +549,28 @@ def recommend_recovery_actions(
     return actions
 
 
-def build_replay_hooks(events: list[dict[str, Any]]) -> dict[str, Any]:
-    replayable = [event for event in events if bool(event.get("replayable", True))]
+def build_execution_replay_summary(events: list[dict[str, Any]], *, symbol: Optional[str] = None) -> dict[str, Any]:
+    replay_state = summarize_replay_state(events, symbol=symbol)
+    return {
+        "order_records": list((replay_state.get("orders_by_client_order_id") or {}).values()),
+        "derived_position": replay_state.get("position_hint") or {},
+        "derived_account": replay_state.get("account_hint") or {},
+        "applied_event_count": replay_state.get("applied_event_count") or 0,
+        "skipped_event_count": replay_state.get("skipped_event_count") or 0,
+        "last_applied_sequence": replay_state.get("last_applied_sequence"),
+        "last_applied_external_sequence": (
+            None
+            if replay_state.get("last_applied_external_sequence") is None
+            else str(replay_state.get("last_applied_external_sequence"))
+        ),
+    }
+
+
+def build_replay_hooks(events: list[dict[str, Any]], *, symbol: Optional[str] = None) -> dict[str, Any]:
+    replayable = sorted(
+        [event for event in events if bool(event.get("replayable", True))],
+        key=_event_sequence_sort_key,
+    )
     order_events = [
         {
             "sequence": event.get("sequence"),
@@ -508,7 +598,7 @@ def build_replay_hooks(events: list[dict[str, Any]]) -> dict[str, Any]:
         if str(event.get("event_type") or "") == "order_trade_update"
         or str((_event_payload(event).get("execution_type") or "")).lower() == "trade"
     ]
-    replay_state = summarize_replay_state(replayable)
+    replay_state = summarize_replay_state(replayable, symbol=symbol)
     return {
         "order_update_events": order_events,
         "fill_events": fill_events,
@@ -517,7 +607,9 @@ def build_replay_hooks(events: list[dict[str, Any]]) -> dict[str, Any]:
         "orders_by_client_order_id": replay_state["orders_by_client_order_id"],
         "terminal_order_count": replay_state["terminal_order_count"],
         "position_hint": replay_state["position_hint"],
+        "account_hint": replay_state.get("account_hint"),
         "latest_account_update_sequence": replay_state["latest_account_update_sequence"],
+        "authoritative_replay": build_execution_replay_summary(replayable, symbol=symbol),
     }
 
 
@@ -535,7 +627,7 @@ def build_startup_convergence_report(
     events = events or []
     watermark = build_convergence_watermark(boundary=boundary, events=events)
     position = build_position_convergence(local_position=local_position, remote_position=remote_position)
-    replay_hooks = build_replay_hooks(events)
+    replay_hooks = build_replay_hooks(events, symbol=(local_position or {}).get("symbol"))
     classified = classify_unresolved_intents(
         intents=unresolved_intents,
         remote_orders=remote_only_orders,

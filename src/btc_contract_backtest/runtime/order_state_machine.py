@@ -5,6 +5,15 @@ from enum import Enum
 from typing import Optional, Any
 
 
+def _sequence_components(value: Any) -> tuple[int, Any]:
+    if value in (None, ""):
+        return (2, "")
+    try:
+        return (0, int(str(value)))
+    except (TypeError, ValueError):
+        return (1, str(value))
+
+
 class CanonicalOrderState(str, Enum):
     NEW = "new"
     ACKED = "acked"
@@ -219,7 +228,7 @@ class OrderStateMachine:
         if (
             last_sequence is not None
             and incoming_sequence is not None
-            and incoming_sequence < str(last_sequence)
+            and _sequence_components(incoming_sequence) < _sequence_components(last_sequence)
         ):
             if incoming_rank <= current_rank:
                 return True, False
