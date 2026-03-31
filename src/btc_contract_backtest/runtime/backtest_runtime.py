@@ -200,42 +200,106 @@ class BacktestRuntime(TradingRuntime):
             ):
                 should_close = "atr_stop"
         if self.core.position.break_even_armed and should_close is None:
-            if self.core.position.side == 1 and price <= self.core.position.entry_price:
+            if (
+                self.core.position.side == 1
+                and price <= self.core.position.entry_price
+            ):
                 should_close = "break_even_stop"
-            if self.core.position.side == -1 and price >= self.core.position.entry_price:
+            if (
+                self.core.position.side == -1
+                and price >= self.core.position.entry_price
+            ):
                 should_close = "break_even_stop"
-        if self.context.risk.stepped_trailing_stop_pct is not None and should_close is None:
+        if (
+            self.context.risk.stepped_trailing_stop_pct is not None
+            and should_close is None
+        ):
             if self.core.position.side == 1:
                 peak_price = self.core.position.peak_price
                 if peak_price is None:
                     anchor = self.core.position.stepped_stop_anchor or price
                 else:
-                    anchor = peak_price if self.core.position.stepped_stop_anchor is None else max(self.core.position.stepped_stop_anchor, peak_price)
+                    anchor = (
+                        peak_price
+                        if self.core.position.stepped_stop_anchor is None
+                        else max(
+                            self.core.position.stepped_stop_anchor,
+                            peak_price,
+                        )
+                    )
                 self.core.position.stepped_stop_anchor = anchor
-                if price <= anchor * (1 - self.context.risk.stepped_trailing_stop_pct):
+                if (
+                    price
+                    <= anchor
+                    * (1 - self.context.risk.stepped_trailing_stop_pct)
+                ):
                     should_close = "stepped_trailing_stop"
             if self.core.position.side == -1:
                 trough_price = self.core.position.trough_price
                 if trough_price is None:
                     anchor = self.core.position.stepped_stop_anchor or price
                 else:
-                    anchor = trough_price if self.core.position.stepped_stop_anchor is None else min(self.core.position.stepped_stop_anchor, trough_price)
+                    anchor = (
+                        trough_price
+                        if self.core.position.stepped_stop_anchor is None
+                        else min(
+                            self.core.position.stepped_stop_anchor,
+                            trough_price,
+                        )
+                    )
                 self.core.position.stepped_stop_anchor = anchor
-                if price >= anchor * (1 + self.context.risk.stepped_trailing_stop_pct):
+                if (
+                    price
+                    >= anchor
+                    * (1 + self.context.risk.stepped_trailing_stop_pct)
+                ):
                     should_close = "stepped_trailing_stop"
-        if self.context.risk.stop_loss_pct is not None and should_close is None and pnl_pct <= -self.context.risk.stop_loss_pct:
+        if (
+            self.context.risk.stop_loss_pct is not None
+            and should_close is None
+            and pnl_pct <= -self.context.risk.stop_loss_pct
+        ):
             should_close = "stop_loss"
-        if self.context.risk.take_profit_pct is not None and should_close is None and pnl_pct >= self.context.risk.take_profit_pct:
+        if (
+            self.context.risk.take_profit_pct is not None
+            and should_close is None
+            and pnl_pct >= self.context.risk.take_profit_pct
+        ):
             should_close = "take_profit"
-        if self.context.risk.trailing_stop_pct is not None and should_close is None:
-            if self.core.position.side == 1 and self.core.position.peak_price is not None and price <= self.core.position.peak_price * (1 - self.context.risk.trailing_stop_pct):
+        if (
+            self.context.risk.trailing_stop_pct is not None
+            and should_close is None
+        ):
+            if (
+                self.core.position.side == 1
+                and self.core.position.peak_price is not None
+                and price
+                <= self.core.position.peak_price
+                * (1 - self.context.risk.trailing_stop_pct)
+            ):
                 should_close = "trailing_stop"
-            if self.core.position.side == -1 and self.core.position.trough_price is not None and price >= self.core.position.trough_price * (1 + self.context.risk.trailing_stop_pct):
+            if (
+                self.core.position.side == -1
+                and self.core.position.trough_price is not None
+                and price
+                >= self.core.position.trough_price
+                * (1 + self.context.risk.trailing_stop_pct)
+            ):
                 should_close = "trailing_stop"
-        if self.context.risk.max_holding_bars is not None and should_close is None and self.core.position.bars_held >= self.context.risk.max_holding_bars:
+        if (
+            self.context.risk.max_holding_bars is not None
+            and should_close is None
+            and self.core.position.bars_held
+            >= self.context.risk.max_holding_bars
+        ):
             should_close = "time_exit"
         if should_close is not None:
-            order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, abs(self.core.position.quantity), OrderType.MARKET, reduce_only=True)
+            order = self.core.create_order(
+                OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
+                abs(self.core.position.quantity),
+                OrderType.MARKET,
+                reduce_only=True,
+            )
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
             if self.core.trades:
@@ -279,7 +343,12 @@ class BacktestRuntime(TradingRuntime):
             payload["close_reason"] = close_reason
 
         if self.core.check_daily_loss_kill(self._current_equity(snapshot.close)):
-            halted = {"event": "kill_switch", "timestamp": payload["timestamp"], "reason": "daily_loss_kill", "snapshot": payload.get("snapshot", {})}
+            halted = {
+                "event": "kill_switch",
+                "timestamp": payload["timestamp"],
+                "reason": "daily_loss_kill",
+                "snapshot": payload.get("snapshot", {}),
+            }
             self._record_equity(snapshot)
             self.persist_payload(halted, {"stage": "daily_loss"})
             return halted
@@ -291,42 +360,66 @@ class BacktestRuntime(TradingRuntime):
         atr = None if pd.isna(atr) else float(atr)
 
         if self.core.position.side == 0 and signal != 0 and qty > 0:
-            order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+            order = self.core.create_order(
+                OrderSide.BUY if signal == 1 else OrderSide.SELL,
+                qty,
+                OrderType.MARKET,
+            )
             fills = []
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
                 self.core.position.atr_at_entry = atr
                 fills.append(asdict(fill))
-                self.calibration_store.append(sample_from_execution(
-                    timestamp=fill.timestamp or payload["timestamp"],
-                    symbol=self.context.contract.symbol,
-                    mode="backtest",
-                    side=order.side.value,
-                    order_type=order.order_type.value,
-                    quantity=order.quantity,
-                    notional=order.quantity * snapshot.close,
-                    reference_price=snapshot.close,
-                    executed_price=fill.fill_price,
-                    fill_quantity=fill.fill_quantity,
-                    spread_bps=(abs((snapshot.ask or snapshot.close) - (snapshot.bid or snapshot.close)) / snapshot.close * 10000) if snapshot.close > 0 else None,
-                    depth_notional=self.context.execution.simulated_depth_notional,
-                    queue_model=self.context.execution.queue_priority_model,
-                    funding_rate=snapshot.funding_rate,
-                    funding_cost=None,
-                    volatility_bucket="normal",
-                    latency_ms=self.context.execution.latency_ms,
-                    stale=snapshot.stale,
-                    metadata={"calibration_version": "t4-v1"},
-                ))
+                self.calibration_store.append(
+                    sample_from_execution(
+                        timestamp=fill.timestamp or payload["timestamp"],
+                        symbol=self.context.contract.symbol,
+                        mode="backtest",
+                        side=order.side.value,
+                        order_type=order.order_type.value,
+                        quantity=order.quantity,
+                        notional=order.quantity * snapshot.close,
+                        reference_price=snapshot.close,
+                        executed_price=fill.fill_price,
+                        fill_quantity=fill.fill_quantity,
+                        spread_bps=(
+                            abs(
+                                (snapshot.ask or snapshot.close)
+                                - (snapshot.bid or snapshot.close)
+                            )
+                            / snapshot.close
+                            * 10000
+                            if snapshot.close > 0
+                            else None
+                        ),
+                        depth_notional=self.context.execution.simulated_depth_notional,
+                        queue_model=self.context.execution.queue_priority_model,
+                        funding_rate=snapshot.funding_rate,
+                        funding_cost=None,
+                        volatility_bucket="normal",
+                        latency_ms=self.context.execution.latency_ms,
+                        stale=snapshot.stale,
+                        metadata={"calibration_version": "t4-v1"},
+                    )
+                )
             payload["fills"] = fills
             payload["event"] = "open"
         elif self.core.position.side != 0 and signal != self.core.position.side and qty > 0:
-            close_order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, abs(self.core.position.quantity), OrderType.MARKET, reduce_only=True)
+            close_order = self.core.create_order(
+                OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
+                abs(self.core.position.quantity),
+                OrderType.MARKET,
+                reduce_only=True,
+            )
             close_fills = []
             for fill in self.core.try_fill_order(close_order, snapshot):
                 self.core.apply_fill(fill)
                 close_fills.append(asdict(fill))
-            open_order = self.core.create_order(OrderSide.BUY if signal == 1 else OrderSide.SELL, qty, OrderType.MARKET)
+            open_order = self.core.create_order(
+                OrderSide.BUY if signal == 1 else OrderSide.SELL,
+                qty,
+                OrderType.MARKET,
+            )
             open_fills = []
             for fill in self.core.try_fill_order(open_order, snapshot):
                 self.core.apply_fill(fill)

@@ -383,7 +383,15 @@ class GuardedLiveExecutor:
             "error": result.error,
         }
 
-    def governed_cancel_replace(self, cancel_order_id: str, symbol: str, new_signal: int, quantity: float, notional: float, record=None):
+    def governed_cancel_replace(
+        self,
+        cancel_order_id: str,
+        symbol: str,
+        new_signal: int,
+        quantity: float,
+        notional: float,
+        record=None,
+    ):
         side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
         new_order = Order(
             order_id=str(uuid.uuid4()),
@@ -395,25 +403,98 @@ class GuardedLiveExecutor:
         )
         if record is not None:
             try:
-                cancel_pending = apply_local_cancel(record, timestamp=datetime.now(timezone.utc).isoformat(), payload={"cancel_order_id": cancel_order_id})
-                record = apply_local_replace(cancel_pending, timestamp=datetime.now(timezone.utc).isoformat(), payload={"new_order_id": new_order.order_id})
+                cancel_pending = apply_local_cancel(
+                    record,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    payload={"cancel_order_id": cancel_order_id},
+                )
+                record = apply_local_replace(
+                    cancel_pending,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    payload={"new_order_id": new_order.order_id},
+                )
             except Exception:  # noqa: BLE001
-                from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
+                from btc_contract_backtest.runtime.order_state_machine import (
+                    CanonicalOrderState,
+                )
+
                 record.state = CanonicalOrderState.REPLACE_PENDING.value
-        self.event_source.emit("cancel_replace_requested", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "symbol": symbol, "quantity": quantity, "notional": notional})
+        self.event_source.emit(
+            "cancel_replace_requested",
+            datetime.now(timezone.utc).isoformat(),
+            {
+                "cancel_order_id": cancel_order_id,
+                "new_order_id": new_order.order_id,
+                "symbol": symbol,
+                "quantity": quantity,
+                "notional": notional,
+            },
+        )
         result = self.adapter.cancel_replace_order(cancel_order_id, new_order)
         if result.ok:
-            self.event_source.emit("cancel_replace_completed", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "response": result.payload})
-            self.audit.log("governed_cancel_replace", {"cancel_order_id": cancel_order_id, "new_signal": new_signal, "quantity": quantity, "notional": notional, "response": result.payload})
-            return {"status": "cancel_replaced", "response": result.payload, "record": record, "new_order": new_order}
-        self.event_source.emit("cancel_replace_failed", datetime.now(timezone.utc).isoformat(), {"cancel_order_id": cancel_order_id, "new_order_id": new_order.order_id, "error": result.error})
-        self.alerts.emit("governed_cancel_replace_failed", {"timestamp": datetime.now(timezone.utc).isoformat(), "cancel_order_id": cancel_order_id, "error": result.error})
-        self.audit.log("governed_cancel_replace_failed", {"cancel_order_id": cancel_order_id, "error": result.error})
-        return {"status": "cancel_replace_failed", "error": result.error, "record": record}
+            self.event_source.emit(
+                "cancel_replace_completed",
+                datetime.now(timezone.utc).isoformat(),
+                {
+                    "cancel_order_id": cancel_order_id,
+                    "new_order_id": new_order.order_id,
+                    "response": result.payload,
+                },
+            )
+            self.audit.log(
+                "governed_cancel_replace",
+                {
+                    "cancel_order_id": cancel_order_id,
+                    "new_signal": new_signal,
+                    "quantity": quantity,
+                    "notional": notional,
+                    "response": result.payload,
+                },
+            )
+            return {
+                "status": "cancel_replaced",
+                "response": result.payload,
+                "record": record,
+                "new_order": new_order,
+            }
+        self.event_source.emit(
+            "cancel_replace_failed",
+            datetime.now(timezone.utc).isoformat(),
+            {
+                "cancel_order_id": cancel_order_id,
+                "new_order_id": new_order.order_id,
+                "error": result.error,
+            },
+        )
+        self.alerts.emit(
+            "governed_cancel_replace_failed",
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cancel_order_id": cancel_order_id,
+                "error": result.error,
+            },
+        )
+        self.audit.log(
+            "governed_cancel_replace_failed",
+            {
+                "cancel_order_id": cancel_order_id,
+                "error": result.error,
+            },
+        )
+        return {
+            "status": "cancel_replace_failed",
+            "error": result.error,
+            "record": record,
+        }
 
     def process_approved_request(self, request_id: str):
         if self.approvals.is_rejected(request_id):
-            self.submit_ledger.mark_state(request_id, state="rejected", timestamp=datetime.now(timezone.utc).isoformat(), error="operator_rejected")
+            self.submit_ledger.mark_state(
+                request_id,
+                state="rejected",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                error="operator_rejected",
+            )
             self.audit.log("governance_request_rejected", {"request_id": request_id})
             return {"status": "rejected", "request_id": request_id}
         if not self.approvals.is_approved(request_id):
@@ -421,11 +502,28 @@ class GuardedLiveExecutor:
         req = self.approvals.consume_request(request_id)
         if req is None:
             return {"status": "missing_request", "request_id": request_id}
-        self.submit_ledger.mark_state(request_id, state="approved", timestamp=datetime.now(timezone.utc).isoformat())
-        self.event_source.emit("submit_intent_approved", datetime.now(timezone.utc).isoformat(), {"request_id": request_id})
+        self.submit_ledger.mark_state(
+            request_id,
+            state="approved",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        self.event_source.emit(
+            "submit_intent_approved",
+            datetime.now(timezone.utc).isoformat(),
+            {"request_id": request_id},
+        )
         existing = self.submit_ledger.get(request_id)
-        if existing and existing.get("state") in {"submitted", "acked", "partial", "filled"}:
-            return {"status": "deduped", "request_id": request_id, "existing": existing}
+        if existing and existing.get("state") in {
+            "submitted",
+            "acked",
+            "partial",
+            "filled",
+        }:
+            return {
+                "status": "deduped",
+                "request_id": request_id,
+                "existing": existing,
+            }
         return self.submit_intended_order(
             symbol=req["symbol"],
             signal=req["signal"],
