@@ -35,3 +35,38 @@ def test_cancel_replace_moves_record_into_pending_states(tmp_path):
 
     assert result["status"] == "cancel_replaced"
     assert result["record"].state == CanonicalOrderState.REPLACE_PENDING.value
+
+
+def test_cancel_replace_uses_residual_quantity_after_partial_fill(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    executor = GuardedLiveExecutor(CancelReplaceAdapter(), policy, approvals, alerts, audit)
+
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0, client_order_id="c1")
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
+    record.filled_quantity = 0.4
+    result = executor.governed_cancel_replace("o1", symbol="BTC/USDT", new_signal=1, quantity=1.0, notional=100.0, record=record)
+
+    assert result["status"] == "cancel_replaced"
+    assert result["new_order"].quantity == 0.6
+    assert result["record"].tags["replace_residual_quantity"] == 0.6
+
+
+def test_cancel_replace_blocks_quarantined_record(tmp_path):
+    policy = GovernancePolicy(RiskConfig(), LiveRiskConfig(), TradingMode.GUARDED_LIVE, contract=ContractSpec(symbol="BTC/USDT", leverage=3, lot_size=0.001))
+    approvals = OperatorApprovalQueue(str(Path(tmp_path) / "approvals.json"))
+    alerts = AlertSink(str(Path(tmp_path) / "alerts.jsonl"))
+    audit = AuditLogger(str(Path(tmp_path) / "audit.jsonl"))
+    executor = GuardedLiveExecutor(CancelReplaceAdapter(), policy, approvals, alerts, audit)
+
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0, client_order_id="c1")
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record.tags["quarantine"] = {"blocked": True, "reason": "ambiguous_terminal_transition"}
+
+    result = executor.governed_cancel_replace("o1", symbol="BTC/USDT", new_signal=1, quantity=1.0, notional=100.0, record=record)
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "ambiguous_terminal_transition"

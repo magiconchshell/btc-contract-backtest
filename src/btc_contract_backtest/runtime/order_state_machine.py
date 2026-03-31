@@ -120,6 +120,10 @@ class InvalidOrderTransition(ValueError):
     pass
 
 
+class AmbiguousOrderState(ValueError):
+    pass
+
+
 class OrderStateMachine:
     @staticmethod
     def is_terminal(state: str) -> bool:
@@ -133,6 +137,119 @@ class OrderStateMachine:
     def _dedupe_event(events: list[dict[str, Any]], event: OrderEvent) -> bool:
         encoded = asdict(event)
         return encoded in events
+
+    @staticmethod
+    def _to_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _remote_event_rank(cls, event: OrderEvent) -> int:
+        state_ranks = {
+            CanonicalOrderState.NEW.value: 10,
+            CanonicalOrderState.ACKED.value: 20,
+            CanonicalOrderState.CANCEL_PENDING.value: 25,
+            CanonicalOrderState.REPLACE_PENDING.value: 30,
+            CanonicalOrderState.PARTIAL.value: 40,
+            CanonicalOrderState.CANCELED.value: 50,
+            CanonicalOrderState.REJECTED.value: 60,
+            CanonicalOrderState.EXPIRED.value: 70,
+            CanonicalOrderState.FILLED.value: 80,
+        }
+        filled = cls._to_float(event.payload.get("filled_quantity"))
+        if filled is None:
+            filled = cls._to_float(event.payload.get("filled"))
+        bonus = 1 if filled and filled > 0 else 0
+        return state_ranks.get(event.state, 0) + bonus
+
+    @classmethod
+    def _resolve_remote_precedence(
+        cls,
+        record: CanonicalOrderRecord,
+        event: OrderEvent,
+        next_state: CanonicalOrderState,
+    ) -> tuple[bool, bool]:
+        current = CanonicalOrderState(record.state)
+        if event.source != "remote":
+            return False, False
+        tags = record.tags
+        last_event_id = tags.get("last_remote_event_id")
+        event_id = event.payload.get("event_id") or event.payload.get("external_sequence")
+        if event_id and last_event_id == event_id:
+            return True, False
+
+        last_sequence = tags.get("last_remote_sequence")
+        incoming_sequence = event.payload.get("external_sequence")
+        if incoming_sequence is not None:
+            incoming_sequence = str(incoming_sequence)
+        current_rank = cls._remote_event_rank(
+            OrderEvent(source="remote", event_type="current", state=current.value, payload={"filled": record.filled_quantity})
+        )
+        incoming_rank = cls._remote_event_rank(event)
+
+        if cls.is_terminal(record.state):
+            if next_state == current:
+                return False, False
+            if incoming_rank < current_rank:
+                return False, False
+            raise AmbiguousOrderState(
+                f"terminal order {record.order_id} received conflicting remote state {next_state.value} after {current.value}"
+            )
+
+        if current == CanonicalOrderState.REPLACE_PENDING and next_state == CanonicalOrderState.ACKED:
+            return True, False
+
+        if current == CanonicalOrderState.PARTIAL and next_state in {CanonicalOrderState.NEW, CanonicalOrderState.ACKED}:
+            return True, False
+
+        if last_sequence is not None and incoming_sequence is not None and incoming_sequence < str(last_sequence):
+            if incoming_rank <= current_rank:
+                return True, False
+            raise AmbiguousOrderState(
+                f"out-of-order remote event for {record.order_id} advanced state from {current.value} to {next_state.value}"
+            )
+        return False, False
+
+    @classmethod
+    def _update_tags(
+        cls,
+        record: CanonicalOrderRecord,
+        *,
+        event: OrderEvent,
+        target: CanonicalOrderState,
+        filled_quantity: Optional[float],
+        exchange_order_id: Optional[str],
+    ) -> None:
+        if event.source == "remote":
+            event_id = event.payload.get("event_id") or event.payload.get("external_sequence")
+            if event_id is not None:
+                record.tags["last_remote_event_id"] = event_id
+            external_sequence = event.payload.get("external_sequence")
+            if external_sequence is not None:
+                record.tags["last_remote_sequence"] = str(external_sequence)
+            if event.timestamp is not None:
+                record.tags["last_remote_timestamp"] = event.timestamp
+
+        if filled_quantity is not None:
+            residual = max(record.quantity - record.filled_quantity, 0.0)
+            record.tags["residual_quantity"] = residual
+            if residual > 0 and record.filled_quantity > 0:
+                record.tags["has_residual_open_quantity"] = True
+            else:
+                record.tags["has_residual_open_quantity"] = False
+
+        if exchange_order_id is not None:
+            record.tags.setdefault("exchange_order_ids", [])
+            if exchange_order_id not in record.tags["exchange_order_ids"]:
+                record.tags["exchange_order_ids"].append(exchange_order_id)
+
+        if target in TERMINAL_STATES:
+            record.tags["residual_quantity"] = max(record.quantity - record.filled_quantity, 0.0)
+            record.tags["has_residual_open_quantity"] = False
 
     @classmethod
     def apply_transition(
@@ -148,6 +265,10 @@ class OrderStateMachine:
     ) -> CanonicalOrderRecord:
         current = CanonicalOrderState(record.state)
         target = CanonicalOrderState(next_state)
+
+        should_ignore, _ = cls._resolve_remote_precedence(record, event, target)
+        if should_ignore:
+            return record
 
         if target not in VALID_TRANSITIONS[current]:
             raise InvalidOrderTransition(f"invalid transition {current.value} -> {target.value}")
@@ -171,6 +292,13 @@ class OrderStateMachine:
             record.acked_at = event.timestamp
         if target in TERMINAL_STATES:
             record.final_at = event.timestamp
+        cls._update_tags(
+            record,
+            event=event,
+            target=target,
+            filled_quantity=filled_quantity,
+            exchange_order_id=exchange_order_id,
+        )
         return record
 
     @classmethod

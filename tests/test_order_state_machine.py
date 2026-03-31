@@ -1,6 +1,7 @@
 import pytest
 
 from btc_contract_backtest.runtime.order_state_machine import (
+    AmbiguousOrderState,
     CanonicalOrderState,
     InvalidOrderTransition,
     OrderEvent,
@@ -85,3 +86,64 @@ def test_order_state_store_upsert_replaces_existing_order(tmp_path):
 
     assert len(store.get_state()["orders"]) == 1
     assert store.get_state()["orders"][0]["state"] == "acked"
+
+
+def test_order_state_machine_ignores_out_of_order_regression_after_partial_fill():
+    record = OrderStateMachine.create_record(order_id="o1", quantity=1.0)
+    OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.PARTIAL.value,
+        event=OrderEvent(
+            source="remote",
+            event_type="partial_fill",
+            state="partial",
+            timestamp="2026-01-01T00:00:02+00:00",
+            payload={"external_sequence": "20", "filled": 0.4},
+        ),
+        filled_quantity=0.4,
+    )
+
+    OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.ACKED.value,
+        event=OrderEvent(
+            source="remote",
+            event_type="ack",
+            state="acked",
+            timestamp="2026-01-01T00:00:01+00:00",
+            payload={"external_sequence": "10"},
+        ),
+    )
+
+    assert record.state == CanonicalOrderState.PARTIAL.value
+    assert record.filled_quantity == 0.4
+    assert record.tags["residual_quantity"] == 0.6
+
+
+def test_order_state_machine_quarantines_conflicting_terminal_out_of_order_event():
+    record = OrderStateMachine.create_record(order_id="o1", quantity=1.0)
+    OrderStateMachine.apply_transition(
+        record,
+        next_state=CanonicalOrderState.CANCELED.value,
+        event=OrderEvent(
+            source="remote",
+            event_type="canceled",
+            state="canceled",
+            timestamp="2026-01-01T00:00:03+00:00",
+            payload={"external_sequence": "30"},
+        ),
+    )
+
+    with pytest.raises(AmbiguousOrderState):
+        OrderStateMachine.apply_transition(
+            record,
+            next_state=CanonicalOrderState.FILLED.value,
+            event=OrderEvent(
+                source="remote",
+                event_type="filled",
+                state="filled",
+                timestamp="2026-01-01T00:00:02+00:00",
+                payload={"external_sequence": "20", "filled": 1.0},
+            ),
+            filled_quantity=1.0,
+        )

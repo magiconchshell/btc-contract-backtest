@@ -3,6 +3,7 @@ from typing import Optional
 
 from btc_contract_backtest.engine.execution_models import Order, OrderStatus
 from btc_contract_backtest.runtime.order_state_machine import (
+    AmbiguousOrderState,
     CanonicalOrderRecord,
     CanonicalOrderState,
     OrderEvent,
@@ -80,6 +81,16 @@ def apply_local_replace(
     timestamp: Optional[str],
     payload: Optional[dict] = None,
 ) -> CanonicalOrderRecord:
+    tags = record.tags
+    payload = payload or {}
+    root_id = tags.get("replace_chain_root_order_id") or record.order_id
+    next_order_id = payload.get("new_order_id")
+    replacements = tags.setdefault("replacement_order_ids", [])
+    if next_order_id is not None and next_order_id not in replacements:
+        replacements.append(next_order_id)
+    tags["replace_chain_root_order_id"] = root_id
+    tags["replacement_count"] = int(tags.get("replacement_count") or 0) + 1
+    tags["pending_replacement_order_id"] = next_order_id
     return OrderStateMachine.apply_transition(
         record,
         next_state=CanonicalOrderState.REPLACE_PENDING.value,
@@ -88,7 +99,7 @@ def apply_local_replace(
             event_type="replace_intent",
             state=CanonicalOrderState.REPLACE_PENDING.value,
             timestamp=timestamp,
-            payload=payload or {},
+            payload=payload,
         ),
     )
 
@@ -106,18 +117,50 @@ def apply_remote_status(
 ) -> CanonicalOrderRecord:
     mapped = STATUS_MAP.get(status, CanonicalOrderState.ACKED)
     event_type = f"remote_{mapped.value}"
-    return OrderStateMachine.apply_transition(
-        record,
-        next_state=mapped.value,
-        event=OrderEvent(
-            source="remote",
-            event_type=event_type,
-            state=mapped.value,
-            timestamp=timestamp,
-            payload=payload or {},
-        ),
-        filled_quantity=filled_quantity,
-        avg_fill_price=avg_fill_price,
-        exchange_order_id=exchange_order_id,
-        last_error=last_error,
-    )
+    event_payload = dict(payload or {})
+    if filled_quantity is not None:
+        event_payload.setdefault("filled_quantity", filled_quantity)
+    if exchange_order_id is not None:
+        event_payload.setdefault("exchange_order_id", exchange_order_id)
+    try:
+        return OrderStateMachine.apply_transition(
+            record,
+            next_state=mapped.value,
+            event=OrderEvent(
+                source="remote",
+                event_type=event_type,
+                state=mapped.value,
+                timestamp=timestamp,
+                payload=event_payload,
+            ),
+            filled_quantity=filled_quantity,
+            avg_fill_price=avg_fill_price,
+            exchange_order_id=exchange_order_id,
+            last_error=last_error,
+        )
+    except AmbiguousOrderState as exc:
+        quarantine = record.tags.setdefault("quarantine", {})
+        quarantine.update(
+            {
+                "blocked": True,
+                "reason": str(exc),
+                "at": timestamp,
+                "incoming_status": mapped.value,
+                "incoming_payload": event_payload,
+            }
+        )
+        raise
+
+
+def propagate_replace_chain(parent: CanonicalOrderRecord, child: CanonicalOrderRecord) -> CanonicalOrderRecord:
+    root_id = parent.tags.get("replace_chain_root_order_id") or parent.order_id
+    lineage = list(parent.tags.get("replace_lineage", []))
+    if parent.order_id not in lineage:
+        lineage.append(parent.order_id)
+    child.tags["replace_chain_root_order_id"] = root_id
+    child.tags["replaces_order_id"] = parent.order_id
+    child.tags["replace_lineage"] = lineage
+    child.tags["replacement_depth"] = len(lineage)
+    parent.tags["replaced_by_order_id"] = child.order_id
+    parent.tags["pending_replacement_order_id"] = child.order_id
+    return child

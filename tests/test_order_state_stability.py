@@ -1,4 +1,7 @@
-from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order
+import pytest
+
+from btc_contract_backtest.runtime.order_state_bridge import apply_local_submit, apply_remote_status, canonical_record_from_order, propagate_replace_chain
+from btc_contract_backtest.runtime.order_state_machine import AmbiguousOrderState
 from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
 from btc_contract_backtest.engine.execution_models import Order, OrderSide, OrderStatus, OrderType
 
@@ -32,3 +35,40 @@ def test_restart_after_ack_can_continue_to_fill():
     restored = apply_remote_status(restored, status=OrderStatus.FILLED.value, timestamp="2026-01-01T00:00:02+00:00", filled_quantity=1.0, avg_fill_price=101.0)
     assert restored.state == CanonicalOrderState.FILLED.value
     assert restored.final_at == "2026-01-01T00:00:02+00:00"
+
+
+def test_apply_remote_status_quarantines_unsafe_ambiguity():
+    order = Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0)
+    record = canonical_record_from_order(order, submission_mode="governed_live")
+    record = apply_local_submit(record, timestamp="2026-01-01T00:00:00+00:00")
+    record = apply_remote_status(record, status=OrderStatus.CANCELED.value, timestamp="2026-01-01T00:00:03+00:00", payload={"external_sequence": "30"})
+
+    with pytest.raises(AmbiguousOrderState):
+        apply_remote_status(
+            record,
+            status=OrderStatus.FILLED.value,
+            timestamp="2026-01-01T00:00:02+00:00",
+            payload={"external_sequence": "20", "filled": 1.0},
+            filled_quantity=1.0,
+        )
+
+    assert record.tags["quarantine"]["blocked"] is True
+    assert record.tags["quarantine"]["incoming_status"] == CanonicalOrderState.FILLED.value
+
+
+def test_propagate_replace_chain_preserves_root_and_lineage():
+    parent = canonical_record_from_order(
+        Order(order_id="o1", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=1.0),
+        submission_mode="governed_live",
+    )
+    child = canonical_record_from_order(
+        Order(order_id="o2", symbol="BTC/USDT", side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=0.6),
+        submission_mode="governed_live",
+    )
+
+    propagated = propagate_replace_chain(parent, child)
+
+    assert propagated.tags["replace_chain_root_order_id"] == "o1"
+    assert propagated.tags["replaces_order_id"] == "o1"
+    assert propagated.tags["replacement_depth"] == 1
+    assert parent.tags["replaced_by_order_id"] == "o2"

@@ -54,6 +54,7 @@ from btc_contract_backtest.runtime.order_state_bridge import (
     apply_local_submit,
     apply_remote_status,
     canonical_record_from_order,
+    propagate_replace_chain,
 )
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
@@ -142,6 +143,7 @@ class GovernedLiveSession(TradingRuntime):
             EventRecorder(str(Path(state_file).with_name("execution_events.jsonl"))),
             upstream=self.exchange_events,
         )
+        replayed_events = self.event_source.replay()
         self.policy = GovernancePolicy(
             risk,
             self.context.live_risk,
@@ -159,7 +161,17 @@ class GovernedLiveSession(TradingRuntime):
         )
         self.order_monitor = OrderLifecycleMonitor(self.adapter, self.alerts, self.audit)
         self.recovery_orchestrator = RecoveryOrchestrator(self.adapter, self.submit_ledger)
-        self._recovery_report = self.recovery_orchestrator.recover(local_orders=recovered.get("orders", []))
+        self._recovery_report = self.recovery_orchestrator.recover(
+            local_orders=recovered.get("orders", []),
+            local_position=recovered.get("position", {}),
+            events=replayed_events,
+            event_boundary=self.event_source.boundary_state(),
+            environment=(
+                "testnet"
+                if bool(getattr(contract, "exchange_profile", "").endswith("testnet"))
+                else "mainnet"
+            ),
+        )
 
     def save_state(self, payload: Optional[dict] = None):
         store = self.state_store()
@@ -176,6 +188,7 @@ class GovernedLiveSession(TradingRuntime):
             )
             store.set_state_fields(
                 recovery_report=recovery_report,
+                startup_report=(recovery_report or {}).get("startup_convergence") or {},
                 execution_events=self.event_source.replay(),
                 event_stream_boundary=self.event_source.boundary_state(),
             )
@@ -403,10 +416,13 @@ class GovernedLiveSession(TradingRuntime):
                     store.upsert_order(replace_result["record"].to_dict())
                 new_order = replace_result.get("new_order")
                 if new_order is not None:
+                    parent_record = replace_result.get("record") or monitor_result.get("record")
                     replacement_record = canonical_record_from_order(
                         new_order,
                         submission_mode="governed_live",
                     )
+                    if parent_record is not None:
+                        replacement_record = propagate_replace_chain(parent_record, replacement_record)
                     replacement_record = apply_local_submit(
                         replacement_record,
                         timestamp=new_order.created_at,

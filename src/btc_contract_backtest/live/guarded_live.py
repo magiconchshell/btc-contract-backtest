@@ -22,6 +22,7 @@ from btc_contract_backtest.runtime.order_state_bridge import (
     apply_local_cancel,
     apply_local_replace,
 )
+from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
 
 
 class GuardedLiveExecutor:
@@ -392,41 +393,101 @@ class GuardedLiveExecutor:
         notional: float,
         record=None,
     ):
+        timestamp = datetime.now(timezone.utc).isoformat()
+        residual_quantity = quantity
+        if record is not None:
+            residual_quantity = max(
+                float(record.quantity) - float(record.filled_quantity or 0.0),
+                0.0,
+            )
+            quarantine = record.tags.get("quarantine") or {}
+            if quarantine.get("blocked"):
+                reason = quarantine.get("reason") or "order_state_quarantined"
+                self.event_source.emit(
+                    "cancel_replace_blocked",
+                    timestamp,
+                    {
+                        "cancel_order_id": cancel_order_id,
+                        "reason": reason,
+                        "quarantine": quarantine,
+                    },
+                )
+                self.alerts.emit(
+                    "governed_cancel_replace_blocked",
+                    {
+                        "timestamp": timestamp,
+                        "cancel_order_id": cancel_order_id,
+                        "reason": reason,
+                    },
+                    severity="critical",
+                )
+                self.audit.log(
+                    "governed_cancel_replace_blocked",
+                    {
+                        "cancel_order_id": cancel_order_id,
+                        "reason": reason,
+                        "quarantine": quarantine,
+                    },
+                )
+                return {
+                    "status": "blocked",
+                    "reason": reason,
+                    "record": record,
+                }
+            if residual_quantity <= 0.0:
+                record.tags.setdefault("quarantine", {}).update(
+                    {
+                        "blocked": True,
+                        "reason": "replace_requested_with_no_residual_quantity",
+                        "at": timestamp,
+                    }
+                )
+                self.event_source.emit(
+                    "cancel_replace_blocked",
+                    timestamp,
+                    {
+                        "cancel_order_id": cancel_order_id,
+                        "reason": "replace_requested_with_no_residual_quantity",
+                    },
+                )
+                return {
+                    "status": "blocked",
+                    "reason": "replace_requested_with_no_residual_quantity",
+                    "record": record,
+                }
         side = OrderSide.BUY if new_signal == 1 else OrderSide.SELL
         new_order = Order(
             order_id=str(uuid.uuid4()),
             symbol=symbol,
             side=side,
             order_type=OrderType.MARKET,
-            quantity=quantity,
+            quantity=residual_quantity,
             client_order_id=str(uuid.uuid4()),
         )
         if record is not None:
             try:
                 cancel_pending = apply_local_cancel(
                     record,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    payload={"cancel_order_id": cancel_order_id},
+                    timestamp=timestamp,
+                    payload={"cancel_order_id": cancel_order_id, "residual_quantity": residual_quantity},
                 )
                 record = apply_local_replace(
                     cancel_pending,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    payload={"new_order_id": new_order.order_id},
+                    timestamp=timestamp,
+                    payload={"new_order_id": new_order.order_id, "residual_quantity": residual_quantity},
                 )
             except Exception:  # noqa: BLE001
-                from btc_contract_backtest.runtime.order_state_machine import (
-                    CanonicalOrderState,
-                )
-
                 record.state = CanonicalOrderState.REPLACE_PENDING.value
+            record.tags["replace_residual_quantity"] = residual_quantity
+            record.tags["replace_target_order_id"] = new_order.order_id
         self.event_source.emit(
             "cancel_replace_requested",
-            datetime.now(timezone.utc).isoformat(),
+            timestamp,
             {
                 "cancel_order_id": cancel_order_id,
                 "new_order_id": new_order.order_id,
                 "symbol": symbol,
-                "quantity": quantity,
+                "quantity": residual_quantity,
                 "notional": notional,
             },
         )
@@ -446,11 +507,15 @@ class GuardedLiveExecutor:
                 {
                     "cancel_order_id": cancel_order_id,
                     "new_signal": new_signal,
-                    "quantity": quantity,
+                    "quantity": residual_quantity,
                     "notional": notional,
                     "response": result.payload,
                 },
             )
+            if record is not None:
+                record.tags["replaced_by_order_id"] = new_order.order_id
+                record.tags["pending_replacement_order_id"] = new_order.order_id
+                record.tags["replace_residual_quantity"] = residual_quantity
             return {
                 "status": "cancel_replaced",
                 "response": result.payload,
