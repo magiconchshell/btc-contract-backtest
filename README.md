@@ -6,6 +6,11 @@ A futures / perpetual contract backtesting and paper-trading toolkit focused on 
 
 This project now targets **Python 3.12** for local development, testing, and packaging.
 
+## Packaging and CI
+
+- `pyproject.toml` is now the primary packaging/tooling metadata file.
+- GitHub Actions CI runs the full test suite on Python 3.12.
+
 ## What this project is for
 
 This repo is specifically designed for:

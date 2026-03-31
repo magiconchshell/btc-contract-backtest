@@ -142,6 +142,21 @@ Thumbs.db
 # Logs
 *.log
 
+# Runtime artifacts / local state
+execution_events.jsonl
+submit_ledger.json
+paper_state.json
+shadow_state.json
+pilot_incidents.json
+pilot_risk_envelope.json
+
+# Generated local outputs
+reports/**
+!reports/.gitkeep
+data/**
+!data/.gitkeep
+research/strategy_lab/output/**
+
 # Database
 *.db
 *.sqlite
