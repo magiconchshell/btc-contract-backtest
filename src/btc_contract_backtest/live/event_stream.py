@@ -31,9 +31,10 @@ def _event_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
 
 def _max_external_sequence(rows: list[dict[str, Any]]) -> Optional[str]:
     numeric_values = [
-        _coerce_int(row.get("external_sequence"))
+        value
         for row in rows
-        if _coerce_int(row.get("external_sequence")) is not None
+        for value in [_coerce_int(row.get("external_sequence"))]
+        if value is not None
     ]
     if numeric_values:
         return str(max(numeric_values))
@@ -203,9 +204,10 @@ class EventDrivenExecutionSource:
         if rows:
             last = rows[-1]
             numeric_sequences = [
-                _coerce_int(row.get("sequence"))
+                value
                 for row in rows
-                if _coerce_int(row.get("sequence")) is not None
+                for value in [_coerce_int(row.get("sequence"))]
+                if value is not None
             ]
             self.last_sequence = max(numeric_sequences) if numeric_sequences else last.get("sequence")
             self.last_event_timestamp = last.get("timestamp")

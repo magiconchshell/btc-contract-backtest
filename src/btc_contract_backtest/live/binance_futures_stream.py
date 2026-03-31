@@ -197,6 +197,9 @@ class BinanceFuturesExecutionState:
                     return False, None
             self.last_external_sequence[key] = external_seq
 
+        payload_obj = row.get("payload")
+        payload = payload_obj if isinstance(payload_obj, dict) else {}
+
         if event_type == "order_trade_update" or event_type.startswith("order_"):
             order_id = self._order_key(payload)
             if not order_id:
