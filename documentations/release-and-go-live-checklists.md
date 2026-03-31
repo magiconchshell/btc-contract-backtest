@@ -26,9 +26,9 @@ Target runtime: Python 3.12
 ### Quality gates
 - [ ] `pytest -q` passes
 - [ ] `python -m build` passes
-- [ ] `flake8` reviewed and run for scoped targets
-- [ ] `mypy` reviewed and run for scoped targets
-- [ ] CI on GitHub Actions is green
+- [ ] `flake8 src` passes
+- [ ] `mypy src` passes
+- [ ] CI on GitHub Actions hard gate is green
 
 ### Documentation
 - [ ] README matches actual install/test flow
@@ -135,8 +135,15 @@ These items are known and should be improved, but they should not block all deli
 - `pytest -q`
 - `python -m build`
 
-### Progressive quality gates
-- `flake8` on touched/critical paths first, then expand
-- `mypy` on typed/critical modules first, then expand
+### Current hard gates
+- `pytest -q`
+- `flake8 src`
+- `mypy src`
+- `python -m build`
 
-This preserves forward momentum while still turning style/type checking into a real engineering discipline instead of a permanent TODO.
+### Out of scope for the current production gate
+- `research/`
+- exploratory notebooks
+- ad-hoc analysis scripts
+
+This keeps the quality gate aligned with the current objective: a production-ready real-time trading engine paired with a reliable backtest system, not research hygiene perfection.
