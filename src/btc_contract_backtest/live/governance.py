@@ -1,13 +1,19 @@
 from __future__ import annotations
-from typing import Optional
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
-from btc_contract_backtest.config.models import ContractSpec, LiveRiskConfig, RiskConfig
-from btc_contract_backtest.live.exchange_constraints import ExchangeConstraintChecker
+from btc_contract_backtest.config.models import (
+    ContractSpec,
+    LiveRiskConfig,
+    RiskConfig,
+)
+from btc_contract_backtest.live.exchange_constraints import (
+    ExchangeConstraintChecker,
+)
 
 
 class TradingMode(str, Enum):
@@ -33,7 +39,16 @@ class OperatorApprovalQueue:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text(json.dumps({"requests": [], "approved_ids": [], "rejected_ids": []}, indent=2))
+            self.path.write_text(
+                json.dumps(
+                    {
+                        "requests": [],
+                        "approved_ids": [],
+                        "rejected_ids": [],
+                    },
+                    indent=2,
+                )
+            )
 
     def load(self) -> dict:
         return json.loads(self.path.read_text())
@@ -86,8 +101,20 @@ class AlertSink:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def emit(self, alert_type: str, payload: dict, severity: str = "info"):
+        record = {
+            "alert_type": alert_type,
+            "severity": severity,
+            **payload,
+        }
         with self.path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({"alert_type": alert_type, "severity": severity, **payload}, ensure_ascii=False, default=str) + "\n")
+            f.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\n"
+            )
 
 
 class GovernanceState:
@@ -120,7 +147,13 @@ class GovernanceState:
 
 
 class GovernancePolicy:
-    def __init__(self, risk: RiskConfig, live_risk: LiveRiskConfig, mode: TradingMode, contract: Optional[ContractSpec] = None):
+    def __init__(
+        self,
+        risk: RiskConfig,
+        live_risk: LiveRiskConfig,
+        mode: TradingMode,
+        contract: Optional[ContractSpec] = None,
+    ):
         self.risk = risk
         self.live_risk = live_risk
         self.mode = mode
@@ -149,8 +182,15 @@ class GovernancePolicy:
     ) -> GovernanceDecision:
         if emergency_stop:
             return GovernanceDecision(False, "emergency_stop", severity="critical")
-        if maintenance or self.mode in {TradingMode.DISABLED, TradingMode.MAINTENANCE}:
-            return GovernanceDecision(False, f"mode={self.mode.value}", severity="critical")
+        if maintenance or self.mode in {
+            TradingMode.DISABLED,
+            TradingMode.MAINTENANCE,
+        }:
+            return GovernanceDecision(
+                False,
+                f"mode={self.mode.value}",
+                severity="critical",
+            )
         if watchdog_halted:
             return GovernanceDecision(False, "watchdog_halted", severity="critical")
         if stale:
@@ -158,7 +198,12 @@ class GovernancePolicy:
         if not reconcile_ok:
             return GovernanceDecision(False, "reconcile_mismatch", severity="critical")
         if quantity is not None and quantity <= 0:
-            return GovernanceDecision(False, "non_positive_quantity", severity="critical", metadata={"quantity": quantity})
+            return GovernanceDecision(
+                False,
+                "non_positive_quantity",
+                severity="critical",
+                metadata={"quantity": quantity},
+            )
         if self.constraint_checker is not None and quantity is not None:
             constraint_result = self.constraint_checker.check(
                 quantity=quantity,
@@ -174,13 +219,44 @@ class GovernancePolicy:
             )
             if not constraint_result.ok:
                 first = constraint_result.violations[0]
-                return GovernanceDecision(False, first["code"], severity=first.get("severity", "critical"), metadata={"violations": constraint_result.violations, "normalized": constraint_result.normalized})
-        if self.risk.max_symbol_exposure_pct is not None and notional > self.risk.max_symbol_exposure_pct:
-            return GovernanceDecision(False, "symbol_exposure_limit", severity="critical", metadata={"notional": notional})
-        if self.risk.max_daily_loss_pct is not None and current_daily_loss_pct >= self.risk.max_daily_loss_pct:
-            return GovernanceDecision(False, "daily_loss_limit", severity="critical", metadata={"current_daily_loss_pct": current_daily_loss_pct})
+                return GovernanceDecision(
+                    False,
+                    first["code"],
+                    severity=first.get("severity", "critical"),
+                    metadata={
+                        "violations": constraint_result.violations,
+                        "normalized": constraint_result.normalized,
+                    },
+                )
+        if (
+            self.risk.max_symbol_exposure_pct is not None
+            and notional > self.risk.max_symbol_exposure_pct
+        ):
+            return GovernanceDecision(
+                False,
+                "symbol_exposure_limit",
+                severity="critical",
+                metadata={"notional": notional},
+            )
+        if (
+            self.risk.max_daily_loss_pct is not None
+            and current_daily_loss_pct >= self.risk.max_daily_loss_pct
+        ):
+            return GovernanceDecision(
+                False,
+                "daily_loss_limit",
+                severity="critical",
+                metadata={
+                    "current_daily_loss_pct": current_daily_loss_pct,
+                },
+            )
         if self.mode == TradingMode.APPROVAL_REQUIRED:
-            return GovernanceDecision(False, "operator_approval_required", severity="warning", requires_approval=True)
+            return GovernanceDecision(
+                False,
+                "operator_approval_required",
+                severity="warning",
+                requires_approval=True,
+            )
         if self.mode == TradingMode.GUARDED_LIVE:
             return GovernanceDecision(True, "guarded_live_allowed", severity="info")
         return GovernanceDecision(False, f"mode={self.mode.value}_non_live", severity="info")

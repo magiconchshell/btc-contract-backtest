@@ -1,11 +1,17 @@
 from __future__ import annotations
-from typing import Optional
 
 from dataclasses import asdict
+from typing import Optional
 
 import pandas as pd
 
-from btc_contract_backtest.config.models import AccountConfig, ContractSpec, ExecutionConfig, LiveRiskConfig, RiskConfig
+from btc_contract_backtest.config.models import (
+    AccountConfig,
+    ContractSpec,
+    ExecutionConfig,
+    LiveRiskConfig,
+    RiskConfig,
+)
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
@@ -54,8 +60,20 @@ class BacktestRuntime(TradingRuntime):
 
     def _current_equity(self, price: float) -> float:
         unrealized = 0.0
-        if self.core.position.side != 0 and self.core.position.entry_price is not None and self.core.position.quantity != 0:
-            unrealized = ((price - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.notional * self.context.contract.leverage * self.core.position.side
+        if (
+            self.core.position.side != 0
+            and self.core.position.entry_price is not None
+            and self.core.position.quantity != 0
+        ):
+            unrealized = (
+                (
+                    (price - self.core.position.entry_price)
+                    / self.core.position.entry_price
+                )
+                * self.core.position.notional
+                * self.context.contract.leverage
+                * self.core.position.side
+            )
         return self.core.capital + unrealized
 
     def _record_equity(self, snapshot):
@@ -74,18 +92,34 @@ class BacktestRuntime(TradingRuntime):
         self.core.position.bars_held += 1
         peak_price = self.core.position.peak_price
         trough_price = self.core.position.trough_price
-        self.core.position.peak_price = snapshot.close if peak_price is None else max(peak_price, snapshot.close)
-        self.core.position.trough_price = snapshot.close if trough_price is None else min(trough_price, snapshot.close)
+        self.core.position.peak_price = (
+            snapshot.close
+            if peak_price is None
+            else max(peak_price, snapshot.close)
+        )
+        self.core.position.trough_price = (
+            snapshot.close
+            if trough_price is None
+            else min(trough_price, snapshot.close)
+        )
         self.core.apply_periodic_funding(snapshot)
 
     def _check_liquidation(self, snapshot) -> bool:
-        if self.core.position.side == 0 or self.core.position.entry_price is None or self.core.position.quantity == 0:
+        if (
+            self.core.position.side == 0
+            or self.core.position.entry_price is None
+            or self.core.position.quantity == 0
+        ):
             return False
         unrealized = self._current_equity(snapshot.close) - self.core.capital
         maintenance = self.core.position.notional * self.context.risk.maintenance_margin_ratio
         if self.core.capital + unrealized > maintenance:
             return False
-        self.core.emit_risk_event("liquidation", "Maintenance margin breached", severity="critical")
+        self.core.emit_risk_event(
+            "liquidation",
+            "Maintenance margin breached",
+            severity="critical",
+        )
         self.core.trades.append(
             {
                 "entry_time": self.core.position.entry_time,
@@ -116,18 +150,54 @@ class BacktestRuntime(TradingRuntime):
         price = snapshot.close
         pnl_pct = ((price - self.core.position.entry_price) / self.core.position.entry_price) * self.core.position.side
         should_close = None
-        if self.context.risk.partial_take_profit_pct is not None and not self.core.position.partial_taken and pnl_pct >= self.context.risk.partial_take_profit_pct:
-            close_qty = abs(self.core.position.quantity) * self.context.risk.partial_close_ratio
-            order = self.core.create_order(OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY, close_qty, OrderType.MARKET, reduce_only=True)
+        if (
+            self.context.risk.partial_take_profit_pct is not None
+            and not self.core.position.partial_taken
+            and pnl_pct >= self.context.risk.partial_take_profit_pct
+        ):
+            close_qty = (
+                abs(self.core.position.quantity)
+                * self.context.risk.partial_close_ratio
+            )
+            order = self.core.create_order(
+                OrderSide.SELL
+                if self.core.position.side == 1
+                else OrderSide.BUY,
+                close_qty,
+                OrderType.MARKET,
+                reduce_only=True,
+            )
             for fill in self.core.try_fill_order(order, snapshot):
                 self.core.apply_fill(fill)
             self.core.position.partial_taken = True
-        if self.context.risk.break_even_trigger_pct is not None and pnl_pct >= self.context.risk.break_even_trigger_pct:
+        if (
+            self.context.risk.break_even_trigger_pct is not None
+            and pnl_pct >= self.context.risk.break_even_trigger_pct
+        ):
             self.core.position.break_even_armed = True
-        if self.context.risk.atr_stop_mult is not None and self.core.position.atr_at_entry is not None:
-            if self.core.position.side == 1 and price <= self.core.position.entry_price - (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult):
+        if (
+            self.context.risk.atr_stop_mult is not None
+            and self.core.position.atr_at_entry is not None
+        ):
+            if (
+                self.core.position.side == 1
+                and price
+                <= self.core.position.entry_price
+                - (
+                    self.core.position.atr_at_entry
+                    * self.context.risk.atr_stop_mult
+                )
+            ):
                 should_close = "atr_stop"
-            if self.core.position.side == -1 and price >= self.core.position.entry_price + (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult):
+            if (
+                self.core.position.side == -1
+                and price
+                >= self.core.position.entry_price
+                + (
+                    self.core.position.atr_at_entry
+                    * self.context.risk.atr_stop_mult
+                )
+            ):
                 should_close = "atr_stop"
         if self.core.position.break_even_armed and should_close is None:
             if self.core.position.side == 1 and price <= self.core.position.entry_price:

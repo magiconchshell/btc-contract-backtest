@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Any, Optional
 
 
 OPEN_STATES = {"new", "open", "acked", "partially_filled", "partial", "working"}
@@ -61,7 +61,13 @@ def _is_open_status(status: str) -> bool:
 
 
 def _contracts(raw: dict[str, Any]) -> float:
-    return float(raw.get("contracts") or raw.get("positionAmt") or raw.get("quantity") or raw.get("qty") or 0.0)
+    return float(
+        raw.get("contracts")
+        or raw.get("positionAmt")
+        or raw.get("quantity")
+        or raw.get("qty")
+        or 0.0
+    )
 
 
 def _optional_float(value: Any) -> Optional[float]:
@@ -85,7 +91,13 @@ def _position_entry(raw: dict[str, Any]) -> Optional[float]:
 
 
 def _order_key(raw: dict[str, Any]) -> Optional[str]:
-    return raw.get("client_order_id") or raw.get("clientOrderId") or raw.get("exchange_order_id") or raw.get("id") or raw.get("order_id")
+    return (
+        raw.get("client_order_id")
+        or raw.get("clientOrderId")
+        or raw.get("exchange_order_id")
+        or raw.get("id")
+        or raw.get("order_id")
+    )
 
 
 def _normalize_local_order(raw: dict[str, Any]) -> dict[str, Any]:
@@ -116,11 +128,22 @@ def _normalize_remote_order(raw: dict[str, Any]) -> dict[str, Any]:
     avg = raw.get("average")
     if avg is None:
         avg = raw.get("avg_fill_price")
-    reduce_only = bool((raw.get("info") or {}).get("reduceOnly")) if isinstance(raw.get("info"), dict) else bool(raw.get("reduceOnly", False))
+    if isinstance(raw.get("info"), dict):
+        reduce_only = bool((raw.get("info") or {}).get("reduceOnly"))
+    else:
+        reduce_only = bool(raw.get("reduceOnly", False))
     return {
         "key": _order_key(raw),
         "order_id": raw.get("order_id") or raw.get("id"),
-        "client_order_id": raw.get("client_order_id") or raw.get("clientOrderId") or (raw.get("info") or {}).get("clientOrderId") if isinstance(raw.get("info"), dict) else raw.get("clientOrderId"),
+        "client_order_id": (
+            raw.get("client_order_id")
+            or raw.get("clientOrderId")
+            or (
+                (raw.get("info") or {}).get("clientOrderId")
+                if isinstance(raw.get("info"), dict)
+                else raw.get("clientOrderId")
+            )
+        ),
         "exchange_order_id": raw.get("exchange_order_id") or raw.get("id"),
         "side": side,
         "type": order_type,
@@ -146,7 +169,10 @@ def build_detailed_reconcile_report(
     local_orders = local_orders or []
     remote_orders = remote_orders or []
 
-    remote_position_raw = next((p for p in remote_positions if _position_side(p) != 0), remote_positions[0] if remote_positions else {})
+    remote_position_raw = next(
+        (p for p in remote_positions if _position_side(p) != 0),
+        remote_positions[0] if remote_positions else {},
+    )
     local_side = int(local_position.get("side", 0) or 0)
     local_quantity = float(local_position.get("quantity") or 0.0)
     local_entry_price = _position_entry(local_position)
@@ -179,7 +205,12 @@ def build_detailed_reconcile_report(
             mismatch_types=position_mismatch_types,
             local=normalized_local_position,
             remote=normalized_remote_position,
-            severity="critical" if "side" in position_mismatch_types or "quantity" in position_mismatch_types else "warning",
+            severity=(
+                "critical"
+                if "side" in position_mismatch_types
+                or "quantity" in position_mismatch_types
+                else "warning"
+            ),
         ).to_dict()
 
     local_index = {}
@@ -209,21 +240,54 @@ def build_detailed_reconcile_report(
             mismatch_types.append("side")
         if str(local.get("type") or "") != str(remote.get("type") or ""):
             mismatch_types.append("type")
-        if abs(float(local.get("quantity") or 0.0) - float(remote.get("quantity") or 0.0)) > quantity_tolerance:
+        if (
+            abs(
+                float(local.get("quantity") or 0.0)
+                - float(remote.get("quantity") or 0.0)
+            )
+            > quantity_tolerance
+        ):
             mismatch_types.append("quantity")
-        if abs(float(local.get("filled_quantity") or 0.0) - float(remote.get("filled_quantity") or 0.0)) > quantity_tolerance:
+        if (
+            abs(
+                float(local.get("filled_quantity") or 0.0)
+                - float(remote.get("filled_quantity") or 0.0)
+            )
+            > quantity_tolerance
+        ):
             mismatch_types.append("filled_quantity")
         local_avg = _optional_float(local.get("avg_fill_price"))
         remote_avg = _optional_float(remote.get("avg_fill_price"))
-        if local_avg is not None and remote_avg is not None and abs(local_avg - remote_avg) > price_tolerance:
+        if (
+            local_avg is not None
+            and remote_avg is not None
+            and abs(local_avg - remote_avg) > price_tolerance
+        ):
             mismatch_types.append("avg_fill_price")
         if bool(local.get("reduce_only")) != bool(remote.get("reduce_only")):
             mismatch_types.append("reduce_only")
-        if _normalize_status(local.get("status")) != _normalize_status(remote.get("status")):
+        if _normalize_status(local.get("status")) != _normalize_status(
+            remote.get("status")
+        ):
             mismatch_types.append("status")
         if mismatch_types:
-            severity = "critical" if any(item in {"quantity", "filled_quantity", "side", "reduce_only"} for item in mismatch_types) else "warning"
-            order_mismatches.append(OrderMismatch(key=key, mismatch_types=mismatch_types, local=local, remote=remote, severity=severity).to_dict())
+            severity = (
+                "critical"
+                if any(
+                    item in {"quantity", "filled_quantity", "side", "reduce_only"}
+                    for item in mismatch_types
+                )
+                else "warning"
+            )
+            order_mismatches.append(
+                OrderMismatch(
+                    key=key,
+                    mismatch_types=mismatch_types,
+                    local=local,
+                    remote=remote,
+                    severity=severity,
+                ).to_dict()
+            )
 
     for key, remote in remote_index.items():
         if key not in local_index and _is_open_status(remote["status"]):
