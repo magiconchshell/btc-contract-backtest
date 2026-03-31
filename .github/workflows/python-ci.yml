@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,3 +26,12 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Run flake8
+        run: python -m flake8 src tests
+
+      - name: Run mypy
+        run: python -m mypy src
+
+      - name: Build package
+        run: python -m build

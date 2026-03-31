@@ -8,7 +8,7 @@ version = "5.0.0"
 description = "BTC perpetual/futures backtesting, paper trading, and governed live-trading engine"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "OpenClaw Workspace" }
 ]
@@ -50,3 +50,15 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+exclude = [".git", ".venv", "__pycache__", "build", "dist", "src/btc_contract_backtest.egg-info"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+ignore_missing_imports = true
+warn_unused_configs = true
+exclude = "(?x)(^build/|^dist/|^src/btc_contract_backtest\\.egg-info/)"

@@ -9,7 +9,8 @@ This project now targets **Python 3.12** for local development, testing, and pac
 ## Packaging and CI
 
 - `pyproject.toml` is now the primary packaging/tooling metadata file.
-- GitHub Actions CI runs the full test suite on Python 3.12.
+- GitHub Actions CI runs a quality pipeline on Python 3.12: pytest, flake8, mypy, and package build.
+- `setup.py` has been removed in favor of modern `pyproject.toml` packaging metadata.
 
 ## What this project is for
 
