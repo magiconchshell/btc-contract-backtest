@@ -12,6 +12,9 @@ class RecoveryAdapter:
             {"id": "ex-2", "clientOrderId": "c-remote-only", "status": "open"},
         ])
 
+    def fetch_positions(self):
+        return AdapterResult(ok=True, payload=[{"symbol": "BTC/USDT", "positionAmt": "1", "entryPrice": "45000"}])
+
     def fetch_open_orders_by_client_order_id(self, client_order_id):
         if client_order_id == "c1":
             return AdapterResult(ok=True, payload=[{"id": "ex-1", "clientOrderId": "c1", "status": "open"}])
@@ -23,8 +26,21 @@ def test_recovery_orchestrator_recovers_pending_intent_and_flags_orphans(tmp_pat
     ledger.upsert(SubmitIntent(request_id="r1", client_order_id="c1", symbol="BTC/USDT", signal=1, quantity=1.0, notional=100.0, state="unknown"))
     orchestrator = RecoveryOrchestrator(RecoveryAdapter(), ledger)
 
-    report = orchestrator.recover(local_orders=[{"order_id": "o-local", "client_order_id": "c-local-only", "state": "new"}]).to_dict()
-    assert report["ok"] is True
+    report = orchestrator.recover(
+        local_orders=[{"order_id": "o-local", "client_order_id": "c-local-only", "state": "new"}],
+        local_position={"side": 1, "quantity": 1.0, "entry_price": 45000.0},
+        events=[
+            {"sequence": 1, "event_type": "order_new", "timestamp": "2026-01-01T00:00:00+00:00", "payload": {"client_order_id": "c1"}},
+            {"sequence": 2, "event_type": "order_trade_update", "timestamp": "2026-01-01T00:00:01+00:00", "payload": {"client_order_id": "c1", "execution_type": "trade", "last_fill_quantity": "1", "last_fill_price": "45000"}},
+        ],
+        event_boundary={"last_sequence": 2, "poll_fallback_required": True, "upstream": {"connected": False, "listen_key_present": False}},
+        environment="testnet",
+    ).to_dict()
+    assert report["ok"] is False
     assert len(report["recovered_intents"]) == 1
     assert len(report["remote_only_orders"]) == 2
     assert len(report["local_only_orders"]) == 1
+    assert report["startup_convergence"]["environment"] == "testnet"
+    assert report["startup_convergence"]["watermark"]["replay_fill_event_count"] == 1
+    assert report["startup_convergence"]["summary"]["critical_action_count"] >= 1
+    assert "startup_convergence_blocked" in report["notes"]
