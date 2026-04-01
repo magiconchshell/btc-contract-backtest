@@ -28,10 +28,16 @@ class HighFrequencyTestStrategy(BaseStrategy):
         # We compare the current tick 'close' to the current 'open' or immediate micro-MA
         # to guarantee the signal flips wildly as the live price fluctuates within the candle.
         
-        # If the live incomplete candle is currently Green (Price > Open), go LONG
-        df.loc[df['close'] > df['open'], 'signal'] = 1
+        # EXTREME AGGRESSIVE TICK LOGIC:
+        # Designed to force position flips constantly during Live Paper Trading.
+        # We use a combination of price and volume. Binance updates the running 1m 
+        # candle's volume every microsecond, so combining it guarantees a constantly 
+        # flickering pseudo-random walk that evaluates to 1 or -1.
         
-        # If the live incomplete candle is currently Red (Price < Open), go SHORT
-        df.loc[df['close'] <= df['open'], 'signal'] = -1
+        seed_value = (df['close'] * 10 + df.get('volume', 0) * 1000).fillna(0).astype(int)
+        seed_is_even = seed_value % 2 == 0
+        
+        df.loc[seed_is_even, 'signal'] = 1
+        df.loc[~seed_is_even, 'signal'] = -1
         
         return df

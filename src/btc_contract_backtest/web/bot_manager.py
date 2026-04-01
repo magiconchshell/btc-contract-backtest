@@ -284,8 +284,7 @@ class BotManager:
             max_drawdown_pct = self._max_realtime_drawdown
 
         # 3. Performance Stats
-        core = self.session.core
-        perf = core.get_performance_summary() if hasattr(core, 'get_performance_summary') else {}
+        perf = self.get_performance()
         perf['max_drawdown_pct'] = round(max_drawdown_pct, 2)
         
         # 4. Final Payload
