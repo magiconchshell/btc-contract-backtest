@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Antigravity Trade Engine',
+  title: 'Magic Conch Shell Trade Engine',
   description: 'Production-ready Web UI for Binance Futures algorithmic trading',
 };
 

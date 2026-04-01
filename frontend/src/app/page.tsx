@@ -23,7 +23,7 @@ function DashboardContent() {
     return (
       <div className="empty-state-view">
         <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-          <h2 style={{ marginBottom: '1rem', color: 'var(--accent-base)' }}>Welcome to Antigravity</h2>
+          <h2 style={{ marginBottom: '1rem', color: 'var(--accent-base)' }}>Welcome to Magic Conch Shell</h2>
           <p className="text-muted">Select an active session from the sidebar or create a new one to begin monitoring.</p>
         </div>
       </div>
@@ -54,10 +54,10 @@ export default function Home() {
 
   return (
     <div className={`dashboard-grid ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
-      
+
       <header className="dashboard-header glass-panel">
         <div className="flex-row items-center gap-md">
-          <h1 className="header-logo">⚡ Antigravity</h1>
+          <h1 className="header-logo">⚡ Magic Conch Shell</h1>
           {activeSession && (
             <>
               <div className="header-divider" />
@@ -74,8 +74,8 @@ export default function Home() {
         </div>
 
         <div className="header-controls">
-          <button 
-            className="sidebar-toggle-btn" 
+          <button
+            className="sidebar-toggle-btn"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           >
             {isSidebarOpen ? '⏹ Hide Panel' : '⚙️ Sessions'}
