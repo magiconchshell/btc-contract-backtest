@@ -18,6 +18,8 @@ from btc_contract_backtest.config.models import (
 )
 from btc_contract_backtest.engine.execution_models import (
     MarketSnapshot,
+    OrderSide,
+    OrderType,
 )
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.binance_futures import (
@@ -147,6 +149,8 @@ class GovernedLiveSession(TradingRuntime):
         self.incidents = IncidentStore()
         self.recovery = LiveSessionRecovery(state_file)
         self.calibration_store = CalibrationSampleStore()
+        self._last_df: Optional[pd.DataFrame] = None
+        self.last_decision: Dict[str, Any] = {"event": "initializing", "signal": 0}
         loader = getattr(self.persistence, "load_normalized_state", None)
         recovered = loader() if callable(loader) else self.recovery.load()
         wd = recovered.get("watchdog") or {}
@@ -764,6 +768,29 @@ class GovernedLiveSession(TradingRuntime):
             payload["reconcile_report"] = {"ok": True, "note": "reconciliation skipped in paper mode"}
 
         local_position = canonical_state.derived_position()
+        
+        # --- Instant Execution for PAPER Mode ---
+        if self.policy.mode == TradingMode.PAPER:
+            # Check if we need to open or switch position
+            if payload["signal"] != local_position.get("side", self.core.position.side):
+                qty = float(intended.get("quantity", 0.0))
+                if qty > 0:
+                    side = OrderSide.BUY if payload["signal"] == 1 else OrderSide.SELL
+                    # If reversing a position, we might need 2 orders or one large order
+                    # Simplified: just create the order on Core
+                    order = self.core.create_order(side, qty, OrderType.MARKET)
+                    
+                    # Simulation: try to fill immediately using the actual last snapshot known to core
+                    snapshot_obj = self.core.last_snapshot
+                    if not snapshot_obj:
+                        snapshot_obj = self.core.snapshot_from_bar(payload["timestamp"], payload["snapshot"])
+                    
+                    fills = self.core.try_fill_order(order, snapshot_obj)
+                    for f in fills:
+                        self.core.apply_fill(f)
+                    payload["live_fills"] = [f.__dict__ for f in fills]
+                    self.audit.log("paper_instant_fill", {"side": side.value, "qty": qty})
+        
         result = self.executor.submit_intended_order(
             symbol=self.context.contract.symbol,
             signal=payload["signal"],
@@ -903,7 +930,7 @@ class GovernedLiveSession(TradingRuntime):
         self.save_state(payload)
         return payload
 
-    def step(self):
+    def step(self) -> dict:
         state = self.gov_state.load()
         if state.get("emergency_stop"):
             payload = {
@@ -913,8 +940,9 @@ class GovernedLiveSession(TradingRuntime):
             }
             self.audit.log("live_session_halt", payload)
             self.save_state(payload)
+            self.last_decision = payload
             return payload
-        if state.get("maintenance"):
+        if self.policy.mode == TradingMode.MAINTENANCE:
             payload = {
                 "event": "halted",
                 "reason": "maintenance_mode",
@@ -922,8 +950,17 @@ class GovernedLiveSession(TradingRuntime):
             }
             self.audit.log("live_session_halt", payload)
             self.save_state(payload)
+            self.last_decision = payload
             return payload
-        return super().step()
+        
+        decision = super().step()
+        self.last_decision = decision
+        return decision
+
+    def ingest_snapshot(self, limit: int = 300):
+        signal_df, latest, snapshot = super().ingest_snapshot(limit=limit)
+        self._last_df = signal_df
+        return signal_df, latest, snapshot
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
         # Register signal handlers for graceful shutdown (Main thread only)

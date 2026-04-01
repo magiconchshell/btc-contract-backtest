@@ -9,7 +9,7 @@
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Lightweight Charts for Crypto visualization -->
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 
 <body>
@@ -67,6 +67,7 @@
                                 <option value="regime_switcher">Regime Switcher Strategy</option>
                                 <option value="strong_bull_long">Strong Bull Long Strategy</option>
                                 <option value="buy_and_hold_long">Buy and Hold Long Strategy</option>
+                                <option value="high_frequency_test" style="color: var(--warning); font-weight: bold;">[DEBUG] High Frequency Test</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -182,27 +183,62 @@
                     </div>
                 </header>
 
-                <div class="stats-grid">
-                    <div class="glass stat-card glow-blue">
-                        <span class="stat-label">Current Equity</span>
-                        <span id="stat-equity" class="stat-value">$1,000.00</span>
+                <div class="stats-bar" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-label">ACCOUNT EQUITY</div>
+                        <div id="stat-equity" class="stat-value">$1,000.00</div>
                     </div>
-                    <div class="glass stat-card">
-                        <span class="stat-label">Total PnL</span>
-                        <span id="stat-pnl" class="stat-value" style="color: var(--success);">+$0.00</span>
+                    <div class="stat-card">
+                        <div class="stat-label">TOTAL PNL</div>
+                        <div id="stat-pnl" class="stat-value">$0.00 (0.00%)</div>
                     </div>
-                    <div class="glass stat-card">
-                        <span class="stat-label">Drawdown</span>
-                        <span id="stat-dd" class="stat-value">0.00%</span>
+                    <div class="stat-card">
+                        <div class="stat-label">MAX DRAWDOWN</div>
+                        <div id="stat-drawdown" class="stat-value">0.00%</div>
                     </div>
-                    <div class="glass stat-card">
-                        <span class="stat-label">Open Position</span>
-                        <span id="stat-pos" class="stat-value">FLAT</span>
+                    <div class="stat-card">
+                        <div class="stat-label">CURRENT POSITION</div>
+                        <div id="stat-pos" class="stat-value">FLAT</div>
                     </div>
                 </div>
 
-                <div class="glass chart-container" id="equity-chart">
-                    <!-- Chart goes here -->
+                <!-- Strategy Insights Panel -->
+                <div class="insights-bar" style="margin-top: 16px;">
+                    <div class="insight-card">
+                        <div class="stat-label">STRATEGY SIGNAL</div>
+                        <div class="signal-wrapper">
+                            <span id="signal-indicator" class="signal-dot neutral"></span>
+                            <span id="signal-text" class="stat-value">NEUTRAL</span>
+                        </div>
+                    </div>
+                    <div class="insight-card flex-grow">
+                        <div class="stat-label">LATEST DECISION LOGIC</div>
+                        <div id="decision-text" class="stat-value" style="font-size: 0.9rem; font-weight: 400; color: var(--text-secondary);">Waiting for data...</div>
+                    </div>
+                </div>
+
+                <!-- Dual Charts Section -->
+                <div class="glass chart-container-wrapper">
+                    <div class="chart-header">
+                        <h3><i class="fa-solid fa-chart-line"></i> Real-time Price Chart (BTC/USDT)</h3>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">LIVE</span>
+                            <span style="font-size: 0.75rem; color: var(--primary);">OHLCV 1M</span>
+                        </div>
+                    </div>
+                    <div id="price-chart" class="chart-container">
+                        <!-- Price chart goes here -->
+                    </div>
+                </div>
+
+                <div class="glass chart-container-wrapper">
+                    <div class="chart-header">
+                        <h3><i class="fa-solid fa-chart-area"></i> Account Equity (USDT)</h3>
+                        <span id="chart-last-update" style="font-size: 0.75rem; color: var(--text-secondary);">Updating real-time...</span>
+                    </div>
+                    <div id="equity-chart" class="chart-container" style="height: 250px;">
+                        <!-- Equity chart goes here -->
+                    </div>
                 </div>
 
                 <div class="dashboard-bottom-grid">
@@ -216,7 +252,7 @@
                         </div>
                     </div>
                     <div class="glass" style="padding: 24px;">
-                        <h3 style="margin-bottom: 16px;">Decision Log</h3>
+                        <h3 style="margin-bottom: 16px;">Strategy Decisions</h3>
                         <div id="decision-panel" style="font-size: 0.9rem; line-height: 1.6;">
                             <p style="color: var(--text-secondary); font-style: italic;">Waiting for strategy
                                 decisions...</p>

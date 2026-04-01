@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import threading
+import pandas as pd
 from typing import Any, Optional, Dict
 from datetime import datetime, timezone
 
@@ -48,19 +49,25 @@ class BotManager:
     def _init_manager(self):
         self.session: Optional[GovernedLiveSession] = None
         self.thread: Optional[threading.Thread] = None
-        self.log_queue = asyncio.Queue(maxsize=1000)
+        self.log_queue: Optional[asyncio.Queue] = None
         self.is_running = False
-        
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self._handler_attached = False
 
-        root_logger = logging.getLogger("btc_contract_backtest")
-        handler = QueueHandler(self.log_queue, loop)
-        handler.setFormatter(logging.Formatter('%(message)s'))
-        root_logger.addHandler(handler)
+    def ensure_loop(self, loop: asyncio.AbstractEventLoop):
+        """Ensures the manager is bound to the correct running event loop."""
+        with self._lock:
+            if self.loop is None:
+                self.loop = loop
+                self.log_queue = asyncio.Queue(maxsize=2000)
+                
+                # Attach log handler to the package logger
+                root_logger = logging.getLogger("btc_contract_backtest")
+                handler = QueueHandler(self.log_queue, self.loop)
+                handler.setFormatter(logging.Formatter('%(message)s'))
+                root_logger.addHandler(handler)
+                self._handler_attached = True
+                logger.info("BotManager bound to event loop and log handler attached.")
 
     def _run_bot_thread(self, interval: int):
         """Wrapper for the bot loop to ensure state cleanup on exit."""
@@ -72,7 +79,6 @@ class BotManager:
         finally:
             with self._lock:
                 self.is_running = False
-                # Keep session/thread for status lookup until a new one starts
             logger.info("Bot thread exited.")
 
     def start_bot(self, config: Dict[str, Any]):
@@ -139,18 +145,56 @@ class BotManager:
             logger.info(f"Bot started via Web UI | Symbol: {symbol} | Mode: {mode_str}")
 
     def stop_bot(self):
-        # Don't use self._lock here to avoid blocking if the thread is joining
         if not self.is_running or not self.session:
             return
         
         logger.info("Stopping bot via Web UI...")
         self.session._shutdown_event.set()
-        # The _run_bot_thread finally block will set is_running = False
 
     def get_trades(self):
         if not self.session:
             return []
         return self.session.core.trades
+
+    def get_markers(self):
+        if not self.session:
+            return []
+        
+        core = self.session.core
+        markers = []
+        
+        # 1. Add markers from completed trades
+        for t in core.trades:
+            # Entry
+            markers.append({
+                "time": t["entry_time"],
+                "price": t["entry_price"],
+                "type": "BUY" if t["position"] == 1 else "SELL",
+                "side": t["position"],
+                "is_entry": True
+            })
+            # Exit
+            markers.append({
+                "time": t["exit_time"],
+                "price": t["exit_price"],
+                "type": "SELL" if t["position"] == 1 else "BUY",
+                "side": t["position"],
+                "is_entry": False,
+                "pnl": t.get("pnl_after_costs")
+            })
+            
+        # 2. Add marker for current open position entry
+        pos = core.position
+        if pos.side != 0 and pos.entry_time:
+            markers.append({
+                "time": pos.entry_time,
+                "price": pos.entry_price,
+                "type": "BUY" if pos.side == 1 else "SELL",
+                "side": pos.side,
+                "is_entry": True
+            })
+            
+        return markers
 
     def get_performance(self):
         if not self.session:
@@ -185,28 +229,108 @@ class BotManager:
             "avg_bars_held": round(sum(t.get("bars_held", 0) for t in trades) / len(trades), 1)
         }
 
-    def get_status(self):
+    def get_status(self) -> Dict[str, Any]:
         if not self.session:
             return {"status": "stopped"}
         
+        # 1. Calculate Mark-to-Market (MTM) Equity for Paper Trading
         pos = self.session.core.position
-        perf = self.get_performance()
+        capital = float(self.session.core.capital)
+        unrealized_pnl = 0.0
+        
+        # Get latest price from the last snapshot
+        current_price = 0.0
+        if self.session.core.last_snapshot:
+            current_price = float(self.session.core.last_snapshot.close)
+        
+        if pos.side != 0 and pos.entry_price and current_price > 0:
+            # Unrealized PnL = Side * (Current - Entry) / Entry * (Qty * Entry) * Leverage
+            # Simplified: Side * (Current - Entry) * Qty * Leverage
+            price_diff_pct = (current_price - pos.entry_price) / pos.entry_price
+            unrealized_pnl = pos.side * price_diff_pct * (abs(pos.quantity) * pos.entry_price) * pos.leverage
+
+        mtm_equity = capital + unrealized_pnl
+
+        # 2. Update Peak Equity and Calculate Real-time Max Drawdown
+        core = self.session.core
+        core.peak_equity = max(getattr(core, 'peak_equity', mtm_equity), mtm_equity)
+        max_drawdown_pct = 0.0
+        if core.peak_equity > 0:
+            current_drawdown = (core.peak_equity - mtm_equity) / core.peak_equity * 100
+            # Track the max observed real-time drawdown
+            if not hasattr(core, 'max_realtime_drawdown'):
+                core.max_realtime_drawdown = 0.0
+            core.max_realtime_drawdown = max(core.max_realtime_drawdown, current_drawdown)
+            max_drawdown_pct = core.max_realtime_drawdown
+
+        # 3. Performance Stats
+        perf = core.get_performance_summary() if hasattr(core, 'get_performance_summary') else {}
+        perf['max_drawdown_pct'] = round(max_drawdown_pct, 2)
+        
         return {
             "status": "running" if self.is_running and not self.session._shutdown_event.is_set() else "stopped",
-            "capital": round(self.session.core.capital, 2),
+            "capital": round(mtm_equity, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
             "position": {
                 "side": pos.side,
-                "quantity": round(pos.quantity, 6),
-                "entry_price": round(pos.entry_price or 0, 2),
-                "pnl": round((pos.notional - (pos.quantity * (pos.entry_price or 0))) if pos.side != 0 else 0, 2)
+                "quantity": abs(pos.quantity),
+                "entry_price": pos.entry_price,
+                "notional": round(abs(pos.quantity) * current_price, 2),
+                "pnl": round(unrealized_pnl, 2)
             },
             "performance": perf,
+            "latest_decision": self.session.last_decision if hasattr(self.session, 'last_decision') else {},
             "config": {
                 "symbol": self.session.context.contract.symbol,
                 "mode": self.session.policy.mode.value,
                 "leverage": self.session.context.contract.leverage,
                 "strategy": self.session.strategy.name() if hasattr(self.session.strategy, 'name') else "Unknown"
-            }
+            },
+            "ohlcv": self._get_ohlcv_data()
         }
+
+    def _get_ohlcv_data(self):
+        if not self.session or self.session._last_df is None:
+            return []
+        
+        df = self.session._last_df
+        # Ensure we are not sending more than 500 bars to keep payload reasonable
+        if len(df) > 500:
+            df = df.iloc[-500:]
+            
+        # Lightweight Charts expected format: {time, open, high, low, close}
+        ohlcv = []
+        for timestamp, row in df.iterrows():
+            # Robust timestamp conversion
+            if hasattr(timestamp, 'timestamp'):
+                t = int(timestamp.timestamp())
+            elif isinstance(timestamp, (int, float)):
+                t = int(timestamp) if timestamp > 1e10 else int(timestamp / 1000)
+            else:
+                try:
+                    t = int(pd.to_datetime(timestamp).timestamp())
+                except:
+                    continue
+                    
+            ohlcv.append({
+                "time": t,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"])
+            })
+        
+        # Sort to ensure strictly increasing time
+        ohlcv.sort(key=lambda x: x["time"])
+        
+        # De-duplicate timestamps (Lightweight Charts requirement)
+        unique_ohlcv = []
+        last_t = -1
+        for bar in ohlcv:
+            if bar["time"] > last_t:
+                unique_ohlcv.append(bar)
+                last_t = bar["time"]
+                
+        return unique_ohlcv
 
 bot_manager = BotManager()

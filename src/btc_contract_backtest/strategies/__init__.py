@@ -14,6 +14,7 @@ from .regime_switcher import RegimeSwitcherStrategy
 from .short_overlay_switcher import ShortOverlaySwitcherStrategy
 from .strong_bull_long import StrongBullLongStrategy
 from .sparse_portfolio import SparseMetaPortfolioStrategy
+from .high_frequency_test import HighFrequencyTestStrategy
 
 
 def build_strategy(name: str, config: Optional[dict] = None):
@@ -50,4 +51,6 @@ def build_strategy(name: str, config: Optional[dict] = None):
         return StrongBullLongStrategy(**config)
     if name == "sparse_meta_portfolio":
         return SparseMetaPortfolioStrategy(**config)
+    if name == "high_frequency_test":
+        return HighFrequencyTestStrategy(**config)
     raise ValueError(f"Unknown strategy: {name}")

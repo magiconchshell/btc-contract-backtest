@@ -76,6 +76,10 @@ async def get_status():
 async def get_trades():
     return bot_manager.get_trades()
 
+@app.get("/api/bot/markers")
+async def get_markers():
+    return bot_manager.get_markers()
+
 @app.get("/api/bot/performance")
 async def get_performance():
     return bot_manager.get_performance()
@@ -107,6 +111,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established")
     
+    # Ensure bot_manager is bound to the current running event loop
+    bot_manager.ensure_loop(asyncio.get_running_loop())
+    
     # We'll send live data and logs through this channel
     try:
         # Start a broadcaster task for this websocket
@@ -114,23 +121,23 @@ async def websocket_endpoint(websocket: WebSocket):
             # Check for bot status updates
             status = bot_manager.get_status()
             
-            # Try to get logs from the queue
-            try:
-                log_entries = []
-                while not bot_manager.log_queue.empty():
-                    log_entries.append(await bot_manager.log_queue.get())
-                
-                if log_entries or status:
-                    payload = {
-                        "type": "update",
-                        "status": status,
-                        "logs": log_entries
-                    }
-                    await websocket.send_json(payload)
-            except Exception as e:
-                # If we get a "send" error, the socket is likely gone
-                logger.error(f"WS error: {e}")
-                break
+            # Try to get logs from the queue if it's initialized
+            log_entries = []
+            if bot_manager.log_queue:
+                try:
+                    while not bot_manager.log_queue.empty():
+                        log_entries.append(bot_manager.log_queue.get_nowait())
+                except Exception as e:
+                    logger.error(f"Error draining log queue: {e}")
+            
+            # Always send status if it exists, or if there are logs
+            if status or log_entries:
+                payload = {
+                    "type": "update",
+                    "status": status,
+                    "logs": log_entries
+                }
+                await websocket.send_json(payload)
                 
             await asyncio.sleep(1) # Frequency of updates
             
