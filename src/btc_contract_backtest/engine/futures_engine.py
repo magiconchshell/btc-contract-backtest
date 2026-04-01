@@ -161,11 +161,28 @@ class FuturesBacktestEngine:
             if closed.empty
             else (len(closed[closed["pnl_after_costs"] > 0]) / len(closed)) * 100
         )
+        profits = (
+            closed[closed["pnl_after_costs"] > 0]["pnl_after_costs"].sum()
+            if not closed.empty
+            else 0.0
+        )
+        losses = (
+            abs(closed[closed["pnl_after_costs"] < 0]["pnl_after_costs"].sum())
+            if not closed.empty
+            else 0.0
+        )
+        profit_factor = (
+            float(profits / losses)
+            if losses > 0
+            else (float(profits) if profits > 0 else 0.0)
+        )
+
         return {
             "total_return": total_return,
             "sharpe_ratio": float(sharpe),
             "max_drawdown": float(dd),
             "win_rate": float(win_rate),
+            "profit_factor": float(profit_factor),
             "total_trades": int(len(trades)),
             "final_capital": float(results["final_capital"]),
             "liquidation_events": int(results["liquidation_events"]),
