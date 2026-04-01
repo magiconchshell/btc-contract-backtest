@@ -109,4 +109,18 @@ New strategies can be added to `src/btc_contract_backtest/strategies/`. Simply d
 - Automatic CI `release_gate.py` prohibits structurally broken releases.
 - Native `pytest` suite enforcing testing coverage over execution flows and WebSocket transports.
 
+### Release Gate
+Before every release, we run a unified release gate to ensure all quality checks pass.
+
+To inspect the gate definition:
+```bash
+python scripts/release_gate.py --report --json
+```
+
+To run the full suite of checks locally:
+```bash
+python scripts/release_gate.py --run --check-clean
+```
+
+
 © 2026 Magic Conch Shell Engine | Multi-Session Architecture v2.0
