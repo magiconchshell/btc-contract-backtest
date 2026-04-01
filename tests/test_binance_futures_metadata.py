@@ -6,7 +6,6 @@ import pytest
 from btc_contract_backtest.config.models import ContractSpec
 from btc_contract_backtest.live.binance_futures import (
     BINANCE_FUTURES_MAINNET,
-    BINANCE_FUTURES_TESTNET,
     BinanceExchangeMetadataSnapshot,
     BinanceFuturesMetadataSync,
     build_binance_futures_runtime_paths,
@@ -95,19 +94,19 @@ def test_contract_spec_is_enriched_from_binance_rules(tmp_path):
 
     contract = with_binance_symbol_rules(
         ContractSpec(
-            symbol="BTC/USDT", leverage=7, exchange_profile="binance_futures_testnet"
+            symbol="BTC/USDT", leverage=7, exchange_profile="binance_futures_mainnet"
         ),
         rules,
     )
     assert contract.symbol == "BTC/USDT"
-    assert contract.exchange_profile == "binance_futures_testnet"
+    assert contract.exchange_profile == "binance_futures_mainnet"
     assert contract.leverage == 7
     assert contract.tick_size == 0.1
     assert contract.lot_size == 0.001
     assert contract.min_notional == 100.0
     assert len(contract.leverage_brackets) == 2
     assert contract.quantity_precision == 3
-    assert contract.metadata_source == "binance_futures_testnet"
+    assert contract.metadata_source == "binance_futures_mainnet"
     assert contract.metadata_as_of is not None
 
 
@@ -119,7 +118,7 @@ def test_metadata_sync_prefers_cached_rules_for_constraint_validation(tmp_path):
 
     contract = with_binance_symbol_rules(
         ContractSpec(
-            symbol="BTC/USDT", leverage=15, exchange_profile="binance_futures_testnet"
+            symbol="BTC/USDT", leverage=15, exchange_profile="binance_futures_mainnet"
         ),
         sync.get_symbol_rules("BTCUSDT"),
     )
@@ -127,32 +126,28 @@ def test_metadata_sync_prefers_cached_rules_for_constraint_validation(tmp_path):
 
 
 def test_exchange_factory_uses_profile_specific_endpoints():
-    testnet = create_binance_futures_exchange(BINANCE_FUTURES_TESTNET.key)
     mainnet = create_binance_futures_exchange(
         BINANCE_FUTURES_MAINNET.key, allow_mainnet=True
     )
 
     try:
-        assert testnet.options["defaultType"] == "future"
-        assert testnet.urls["api"]["fapiPublic"].startswith(
-            BINANCE_FUTURES_TESTNET.rest_base_url
-        )
+        assert mainnet.options["defaultType"] == "future"
         assert mainnet.urls["api"]["fapiPublic"].startswith(
             BINANCE_FUTURES_MAINNET.rest_base_url
         )
-        assert testnet.urls["api"]["fapiPublic"] != mainnet.urls["api"]["fapiPublic"]
     finally:
-        for exchange in (testnet, mainnet):
-            close = getattr(exchange, "close", None)
-            if callable(close):
-                close()
+        close = getattr(mainnet, "close", None)
+        if callable(close):
+            close()
 
 
 def test_mainnet_requires_explicit_opt_in():
-    assert is_binance_mainnet_enabled(BINANCE_FUTURES_TESTNET.key) is True
+    # Explicitly test with empty environment to verify guard logic
     assert is_binance_mainnet_enabled(BINANCE_FUTURES_MAINNET.key, environ={}) is False
     with pytest.raises(PermissionError):
         require_binance_profile_enabled(BINANCE_FUTURES_MAINNET.key, environ={})
+    
+    # Verify opt-in works
     require_binance_profile_enabled(
         BINANCE_FUTURES_MAINNET.key,
         environ={"BINANCE_FUTURES_ENABLE_MAINNET": "true"},
@@ -161,10 +156,10 @@ def test_mainnet_requires_explicit_opt_in():
 
 def test_credentials_loader_prefers_profile_specific_environment():
     creds = load_binance_futures_credentials(
-        BINANCE_FUTURES_TESTNET.key,
+        BINANCE_FUTURES_MAINNET.key,
         environ={
-            "BINANCE_FUTURES_TESTNET_API_KEY": "test-key",
-            "BINANCE_FUTURES_TESTNET_API_SECRET": "test-secret",
+            "BINANCE_FUTURES_MAINNET_API_KEY": "test-key",
+            "BINANCE_FUTURES_MAINNET_API_SECRET": "test-secret",
             "BINANCE_API_KEY": "fallback-key",
             "BINANCE_API_SECRET": "fallback-secret",
         },
@@ -177,22 +172,22 @@ def test_credentials_loader_prefers_profile_specific_environment():
 
 def test_runtime_paths_are_profile_and_symbol_scoped():
     paths = build_binance_futures_runtime_paths(
-        BINANCE_FUTURES_TESTNET.key,
+        BINANCE_FUTURES_MAINNET.key,
         "BTC/USDT",
         root_dir="var/test-runtime",
     )
     assert (
         paths.metadata_cache_file
-        == "var/test-runtime/binance_futures_testnet/exchange_info.json"
+        == "var/test-runtime/binance_futures_mainnet/exchange_info.json"
     )
     assert paths.paper_state_file.endswith(
-        "binance_futures_testnet/btcusdt/paper_state.json"
+        "binance_futures_mainnet/btcusdt/paper_state.json"
     )
     assert paths.shadow_audit_log.endswith(
-        "binance_futures_testnet/btcusdt/shadow_audit.jsonl"
+        "binance_futures_mainnet/btcusdt/shadow_audit.jsonl"
     )
     assert paths.execution_events_file.endswith(
-        "binance_futures_testnet/btcusdt/execution_events.jsonl"
+        "binance_futures_mainnet/btcusdt/execution_events.jsonl"
     )
 
 
@@ -200,7 +195,7 @@ def test_metadata_sync_marks_old_snapshots_stale(tmp_path):
     cache = tmp_path / "exchange_info.json"
     sync = BinanceFuturesMetadataSync(cache_path=str(cache), max_age_seconds=60)
     snapshot = BinanceExchangeMetadataSnapshot(
-        profile=BINANCE_FUTURES_TESTNET.key,
+        profile=BINANCE_FUTURES_MAINNET.key,
         fetched_at=(datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
         exchange_timezone="UTC",
         server_time=1710000000000,
@@ -221,7 +216,7 @@ def test_metadata_sync_marks_old_snapshots_stale(tmp_path):
                 "base_asset": "BTC",
                 "quote_asset": "USDT",
                 "margin_asset": "USDT",
-                "metadata_source": BINANCE_FUTURES_TESTNET.key,
+                "metadata_source": BINANCE_FUTURES_MAINNET.key,
                 "metadata_as_of": datetime.now(timezone.utc).isoformat(),
             }
         },

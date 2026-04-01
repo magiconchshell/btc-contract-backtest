@@ -16,17 +16,17 @@ from btc_contract_backtest.strategies import build_strategy
 logger = logging.getLogger("btc_contract_backtest.web.bot_manager")
 
 class QueueHandler(logging.Handler):
-    def __init__(self, queue: asyncio.Queue):
+    def __init__(self, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         super().__init__()
         self.queue = queue
+        self.loop = loop
 
     def emit(self, record):
         try:
             msg = self.format(record)
-            # Use call_soon_threadsafe because loggers can be called from any thread
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.call_soon_threadsafe(self.queue.put_nowait, {
+            # Use call_soon_threadsafe with the stored loop
+            if self.loop.is_running():
+                self.loop.call_soon_threadsafe(self.queue.put_nowait, {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "level": record.levelname,
                     "message": msg,
@@ -52,9 +52,16 @@ class BotManager:
         self.log_queue = asyncio.Queue(maxsize=1000)
         self.is_running = False
         
+        # Capture the current event loop for use in the logging handler
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         # Attach log handler to the root or package logger
         root_logger = logging.getLogger("btc_contract_backtest")
-        handler = QueueHandler(self.log_queue)
+        handler = QueueHandler(self.log_queue, loop)
         handler.setFormatter(logging.Formatter('%(message)s'))
         root_logger.addHandler(handler)
 
@@ -72,22 +79,9 @@ class BotManager:
         interval = int(config.get("interval_seconds", 15))
 
         # Build objects
-        # Dynamically select profile based on environment variables
-        has_mainnet = bool(os.getenv("BINANCE_FUTURES_MAINNET_API_KEY"))
-        has_testnet = bool(os.getenv("BINANCE_FUTURES_TESTNET_API_KEY"))
-        
-        # Default to mainnet if available (as users usually want high-quality data)
-        # but fall back to testnet if only testnet keys are provided.
-        if has_mainnet:
-            profile = "binance_futures_mainnet"
-        elif has_testnet:
-            profile = "binance_futures_testnet"
-        else:
-            # If no keys, use mainnet by default (will be read-only if no keys)
-            # though ccxt might error later, this is consistent with user's previous hardcode
-            profile = "binance_futures_mainnet" if mode == TradingMode.PAPER else "binance_futures_mainnet"
-
-        logger.info(f"Selected exchange profile: {profile} (based on env keys)")
+        # Default to mainnet for all live operations (Binance Testnet is discontinued)
+        profile = "binance_futures_mainnet"
+        logger.info(f"Selected exchange profile: {profile}")
 
         contract = ContractSpec(
             symbol=symbol,

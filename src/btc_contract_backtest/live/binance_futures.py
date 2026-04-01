@@ -34,26 +34,17 @@ class BinanceFuturesProfile:
     rest_base_url: str
     ccxt_id: str = "binance"
     default_type: str = "future"
-    testnet: bool = False
+    # Mainnet only
     api_key_env: str = ""
     secret_env: str = ""
     mainnet_opt_in_env: Optional[str] = None
 
 
-BINANCE_FUTURES_TESTNET = BinanceFuturesProfile(
-    key="binance_futures_testnet",
-    label="Binance USDⓈ-M Futures Testnet",
-    rest_base_url="https://testnet.binancefuture.com",
-    testnet=True,
-    api_key_env="BINANCE_FUTURES_TESTNET_API_KEY",
-    secret_env="BINANCE_FUTURES_TESTNET_API_SECRET",
-)
-
 BINANCE_FUTURES_MAINNET = BinanceFuturesProfile(
     key="binance_futures_mainnet",
     label="Binance USDⓈ-M Futures Mainnet",
     rest_base_url="https://fapi.binance.com",
-    testnet=False,
+    # Mainnet
     api_key_env="BINANCE_FUTURES_MAINNET_API_KEY",
     secret_env="BINANCE_FUTURES_MAINNET_API_SECRET",
     mainnet_opt_in_env="BINANCE_FUTURES_ENABLE_MAINNET",
@@ -61,7 +52,6 @@ BINANCE_FUTURES_MAINNET = BinanceFuturesProfile(
 
 
 BINANCE_FUTURES_PROFILES = {
-    BINANCE_FUTURES_TESTNET.key: BINANCE_FUTURES_TESTNET,
     BINANCE_FUTURES_MAINNET.key: BINANCE_FUTURES_MAINNET,
 }
 
@@ -134,7 +124,7 @@ class BinanceSymbolRules:
         self.leverage_brackets = normalized
 
     def to_contract_spec(
-        self, leverage: int = 5, profile: str = BINANCE_FUTURES_TESTNET.key
+        self, leverage: int = 5, profile: str = BINANCE_FUTURES_MAINNET.key
     ) -> ContractSpec:
         return ContractSpec(
             symbol=self.symbol,
@@ -234,7 +224,7 @@ def load_binance_futures_credentials(
     secret: Optional[str] = None,
     environ: Optional[Mapping[str, str]] = None,
 ) -> BinanceFuturesCredentials:
-    env = environ or os.environ
+    env = environ if environ is not None else os.environ
     selected = get_binance_futures_profile(profile)
     direct_key = api_key or env.get(selected.api_key_env) or env.get("BINANCE_API_KEY")
     direct_secret = (
@@ -258,11 +248,9 @@ def is_binance_mainnet_enabled(
     environ: Optional[Mapping[str, str]] = None,
 ) -> bool:
     selected = get_binance_futures_profile(profile)
-    if selected.testnet:
-        return True
     if allow_mainnet:
         return True
-    env = environ or os.environ
+    env = environ if environ is not None else os.environ
     token = str(env.get(selected.mainnet_opt_in_env or "", "")).strip().lower()
     return token in {"1", "true", "yes", "on", "enable", "enabled"}
 
@@ -352,7 +340,7 @@ def create_binance_futures_exchange(
 class BinanceFuturesMetadataSync:
     def __init__(
         self,
-        profile: str = BINANCE_FUTURES_TESTNET.key,
+        profile: str = BINANCE_FUTURES_MAINNET.key,
         cache_path: str = "var/binance_futures_exchange_info.json",
         max_age_seconds: int = DEFAULT_METADATA_MAX_AGE_SECONDS,
     ):

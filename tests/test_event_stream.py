@@ -130,7 +130,7 @@ def test_event_stream_boundary_requires_polling_without_live_upstream(tmp_path):
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     upstream = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT"),
     )
     source = EventDrivenExecutionSource(
         EventRecorder(str(tmp_path / "events.jsonl")), upstream=upstream
@@ -139,7 +139,6 @@ def test_event_stream_boundary_requires_polling_without_live_upstream(tmp_path):
     boundary = source.boundary_state()
 
     assert boundary["poll_fallback_required"] is True
-    assert boundary["upstream"]["testnet"] is True
     assert boundary["upstream"]["listen_key_present"] is False
 
     upstream.acquire_listen_key()
@@ -149,7 +148,6 @@ def test_event_stream_boundary_requires_polling_without_live_upstream(tmp_path):
     assert boundary["poll_fallback_required"] is False
     assert boundary["upstream"]["listen_key_present"] is True
     assert boundary["upstream"]["transport"]["connected"] is True
-    assert exchange.sandbox is True
 
 
 def test_binance_user_data_source_manages_listen_key_lifecycle():
@@ -157,7 +155,7 @@ def test_binance_user_data_source_manages_listen_key_lifecycle():
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT"),
     )
 
     assert source.acquire_listen_key() == "lk-test"
@@ -191,7 +189,7 @@ def test_binance_event_normalizer_maps_order_trade_update():
                 "t": 99,
             },
         },
-        source="binance_futures_user_data:testnet",
+        source="binance_futures_user_data:mainnet",
         received_at="2026-01-01T00:00:05+00:00",
     )
 
@@ -218,7 +216,7 @@ def test_binance_event_normalizer_maps_account_and_mark_price_updates():
                 "P": [{"s": "BTCUSDT", "pa": "0.001"}],
             },
         },
-        source="binance_futures_user_data:testnet",
+        source="binance_futures_user_data:mainnet",
     )
     mark_events = normalizer.normalize(
         {
@@ -230,7 +228,7 @@ def test_binance_event_normalizer_maps_account_and_mark_price_updates():
             "r": "0.0001",
             "T": 1735718400000,
         },
-        source="binance_futures_user_data:testnet",
+        source="binance_futures_user_data:mainnet",
     )
 
     assert account_events[0].event_type == "account_update"
@@ -272,7 +270,7 @@ def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive
     source = BinanceFuturesUserDataEventSource(
         adapter,
         BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", use_testnet=True, listen_key_keepalive_seconds=1
+            symbol="BTC/USDT", listen_key_keepalive_seconds=1
         ),
         transport_factory=transport_factory,
         clock=clock,
@@ -323,7 +321,7 @@ def test_user_data_run_loop_reconnects_with_backoff_and_continues_ingest(tmp_pat
 
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT"),
         reconnect_policy=ReconnectPolicy(
             initial_delay_seconds=2, max_delay_seconds=10, multiplier=2.0
         ),
@@ -347,20 +345,30 @@ def test_user_data_run_loop_reconnects_with_backoff_and_continues_ingest(tmp_pat
 
 
 def test_mainnet_requires_explicit_opt_in():
-    exchange = FakeListenKeyExchange()
-    adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
-    source = BinanceFuturesUserDataEventSource(
-        adapter,
-        BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", use_testnet=False, allow_mainnet=False
-        ),
-    )
-
+    import os
+    # Temporarily clear to test guard
+    orig = os.environ.get("BINANCE_FUTURES_ENABLE_MAINNET")
+    if orig:
+        del os.environ["BINANCE_FUTURES_ENABLE_MAINNET"]
+    
     try:
-        source.acquire_listen_key()
-    except ValueError as exc:
-        assert "explicit opt-in" in str(exc)
-    else:
-        raise AssertionError(
-            "expected mainnet opt-in guard to reject unapproved websocket mode"
+        exchange = FakeListenKeyExchange()
+        adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
+        source = BinanceFuturesUserDataEventSource(
+            adapter,
+            BinanceFuturesStreamConfig(
+                symbol="BTC/USDT", allow_mainnet=False
+            ),
         )
+
+        try:
+            source.acquire_listen_key()
+        except ValueError as exc:
+            assert "explicit opt-in" in str(exc)
+        else:
+            raise AssertionError(
+                "expected mainnet opt-in guard to reject unapproved websocket mode"
+            )
+    finally:
+        if orig:
+            os.environ["BINANCE_FUTURES_ENABLE_MAINNET"] = orig

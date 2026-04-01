@@ -3,12 +3,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DOC = REPO_ROOT / "documentations" / "gate-c-supervised-testnet-pilot-plan.md"
+DOC = REPO_ROOT / "documentations" / "gate-c-supervised-mainnet-pilot-plan.md"
 FAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_fault_injection_matrix.json"
 SOAK_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_soak_requirements.json"
 DRILL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_restart_recovery_drills.json"
 PILOT_FIXTURE = (
-    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_mainnet_pilot.json"
 )
 
 
@@ -21,9 +21,9 @@ def test_gate_c_plan_references_versioned_acceptance_fixtures():
     assert "tests/fixtures/gate_c_fault_injection_matrix.json" in text
     assert "tests/fixtures/gate_c_soak_requirements.json" in text
     assert "tests/fixtures/gate_c_restart_recovery_drills.json" in text
-    assert "tests/fixtures/gate_c_supervised_testnet_pilot.json" in text
+    assert "tests/fixtures/gate_c_supervised_mainnet_pilot.json" in text
     assert "partial fill" in text.lower()
-    assert "supervised testnet pilot" in text.lower()
+    assert "supervised mainnet pilot" in text.lower()
 
 
 def test_gate_c_fault_matrix_covers_races_and_partial_fill_continuity():

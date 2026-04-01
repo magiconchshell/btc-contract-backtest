@@ -15,7 +15,7 @@ class ContractSpec:
     market_type: str = "perpetual"
     quote_currency: str = "USDT"
     exchange_id: str = "binance"
-    exchange_profile: str = "binance_futures_testnet"
+    exchange_profile: str = "binance_futures_mainnet"
     leverage: int = 5
     tick_size: float = 0.1
     lot_size: float = 0.001

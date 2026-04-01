@@ -101,8 +101,6 @@ class LiveExitManager:
         core: SimulatorCore,
         current_price: float,
         symbol: str,
-        *,
-        use_testnet: bool = True,
     ) -> Optional[dict[str, Any]]:
         """Evaluate exit conditions and submit close order if warranted.
 

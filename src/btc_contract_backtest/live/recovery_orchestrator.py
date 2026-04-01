@@ -77,7 +77,7 @@ class RecoveryOrchestrator:
         local_position: Optional[dict[str, Any]] = None,
         events: Optional[list[dict[str, Any]]] = None,
         event_boundary: Optional[dict[str, Any]] = None,
-        environment: str = "testnet",
+        environment: str = "mainnet",
     ) -> RecoveryReport:
         local_orders = local_orders or []
         local_position = local_position or {}

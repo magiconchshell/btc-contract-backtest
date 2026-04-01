@@ -1,12 +1,9 @@
-from __future__ import annotations
+import os
+import pytest
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+@pytest.fixture(autouse=True)
+def enable_mainnet_for_tests():
+    """Globally enable Binance Mainnet profile for the test suite."""
+    os.environ["BINANCE_FUTURES_ENABLE_MAINNET"] = "true"
+    yield
+    # We could delete it, but better stay enabled during test session

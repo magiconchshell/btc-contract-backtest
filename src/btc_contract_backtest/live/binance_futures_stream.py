@@ -58,19 +58,15 @@ def _to_int(value: Any) -> Optional[int]:
 @dataclass
 class BinanceFuturesStreamConfig:
     symbol: str
-    use_testnet: bool = True
     market: str = "usdm"
-    stream_base_testnet: str = "wss://stream.binancefuture.com/ws"
-    stream_base_mainnet: str = "wss://fstream.binance.com/ws"
+    stream_base: str = "wss://fstream.binance.com/ws"
     user_stream_path_template: str = "{listen_key}"
     mark_price_path_template: str = "{symbol_lower}@markPrice@1s"
     allow_mainnet: bool = False
     listen_key_keepalive_seconds: int = DEFAULT_LISTEN_KEY_KEEPALIVE_SECONDS
 
     def base_url(self) -> str:
-        return (
-            self.stream_base_testnet if self.use_testnet else self.stream_base_mainnet
-        )
+        return self.stream_base
 
     def normalized_symbol(self) -> str:
         return self.symbol.replace("/", "").replace(":", "").lower()
@@ -440,7 +436,7 @@ class BinanceFuturesEventNormalizer:
 
 
 class BinanceFuturesUserDataEventSource:
-    """Testnet-first websocket/user-data stream foundation.
+    """Mainnet websocket/user-data stream foundation.
 
     The focus here is transport lifecycle, listen-key keepalive rotation, bounded
     reconnect policy, and normalized ingest into the existing execution-event
@@ -471,8 +467,7 @@ class BinanceFuturesUserDataEventSource:
         self.execution_state = BinanceFuturesExecutionState(config.symbol)
 
     def source_name(self) -> str:
-        mode = "testnet" if self.config.use_testnet else "mainnet"
-        return f"binance_futures_user_data:{mode}"
+        return f"binance_futures_user_data:mainnet"
 
     def source_kind(self) -> str:
         return "websocket"
@@ -481,8 +476,6 @@ class BinanceFuturesUserDataEventSource:
         return self.transport_state.connected and bool(self.listen_key_state.current)
 
     def _assert_mode_allowed(self) -> None:
-        if self.config.use_testnet:
-            return
         if not is_binance_mainnet_enabled(
             "binance_futures_mainnet",
             allow_mainnet=self.config.allow_mainnet,
@@ -496,7 +489,6 @@ class BinanceFuturesUserDataEventSource:
             "source": self.source_name(),
             "kind": self.source_kind(),
             "symbol": self.config.symbol,
-            "testnet": self.config.use_testnet,
             "connected": self.transport_state.connected,
             "listen_key_present": bool(self.listen_key_state.current),
             "listen_key": asdict(self.listen_key_state),
@@ -510,9 +502,7 @@ class BinanceFuturesUserDataEventSource:
 
     def acquire_listen_key(self) -> Optional[str]:
         self._assert_mode_allowed()
-        listen_key = self.adapter.create_user_data_stream_listen_key(
-            use_testnet=self.config.use_testnet
-        )
+        listen_key = self.adapter.create_user_data_stream_listen_key()
         now = self.clock()
         if listen_key:
             if (
@@ -535,9 +525,7 @@ class BinanceFuturesUserDataEventSource:
         if not listen_key:
             self.listen_key_state.last_error = "listen_key_missing"
             return False
-        ok = self.adapter.keepalive_user_data_stream_listen_key(
-            listen_key, use_testnet=self.config.use_testnet
-        )
+        ok = self.adapter.keepalive_user_data_stream_listen_key(listen_key)
         now = self.clock()
         self.listen_key_state.last_keepalive_at = _iso(now)
         self.listen_key_state.last_keepalive_ok = ok
@@ -554,9 +542,7 @@ class BinanceFuturesUserDataEventSource:
         listen_key = self.listen_key_state.current
         if not listen_key:
             return False
-        ok = self.adapter.close_user_data_stream_listen_key(
-            listen_key, use_testnet=self.config.use_testnet
-        )
+        ok = self.adapter.close_user_data_stream_listen_key(listen_key)
         if ok:
             self.listen_key_state.current = None
             self.transport_state.connected = False

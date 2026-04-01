@@ -83,7 +83,7 @@ class RecoveryAction:
 class StartupConvergenceReport:
     ok: bool
     timestamp: str
-    environment: str = "testnet"
+    environment: str = "mainnet"
     watermark: dict[str, Any] = field(default_factory=dict)
     position: dict[str, Any] = field(default_factory=dict)
     unresolved_intents: list[dict[str, Any]] = field(default_factory=list)

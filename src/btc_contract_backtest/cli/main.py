@@ -26,8 +26,8 @@ def parse_args():
     p.add_argument("--symbol", default="BTC/USDT")
     p.add_argument(
         "--exchange-profile",
-        default="binance_futures_testnet",
-        choices=["binance_futures_testnet", "binance_futures_mainnet"],
+        default="binance_futures_mainnet",
+        choices=["binance_futures_mainnet"],
     )
     p.add_argument("--runtime-root", default="var/exchanges/binance_futures")
     p.add_argument("--metadata-cache-file", default=None)

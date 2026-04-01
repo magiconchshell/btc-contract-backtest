@@ -34,17 +34,17 @@ class MockAdapter:
         self.keepalive_count = 0
         self.fail_lk = False
     
-    def create_user_data_stream_listen_key(self, use_testnet: bool) -> Optional[str]:
+    def create_user_data_stream_listen_key(self) -> Optional[str]:
         if self.fail_lk:
             return None
         self.listen_key_count += 1
         return f"mock_lk_{self.listen_key_count}"
         
-    def keepalive_user_data_stream_listen_key(self, listen_key: str, use_testnet: bool) -> bool:
+    def keepalive_user_data_stream_listen_key(self, listen_key: str) -> bool:
         self.keepalive_count += 1
         return True
         
-    def close_user_data_stream_listen_key(self, listen_key: str, use_testnet: bool) -> bool:
+    def close_user_data_stream_listen_key(self, listen_key: str) -> bool:
         return True
 
 def mock_transport_factory(url: str) -> WebsocketTransport:

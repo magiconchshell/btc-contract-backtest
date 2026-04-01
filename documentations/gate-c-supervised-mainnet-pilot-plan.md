@@ -1,4 +1,4 @@
-# Gate C Supervised Testnet Pilot Plan
+# Gate C Supervised Mainnet Pilot Plan
 
 Date: 2026-03-30
 Project: `github-btc-backtest`
@@ -8,7 +8,7 @@ Depends on: race-hardening landing, partial-fill merge landing, Gate B replay/ev
 
 ## Current Status
 
-Gate C is the first supervised testnet pilot gate, but it is still **blocked**
+Gate C is the first supervised mainnet pilot gate, but it is still **blocked**
 until Gate B stays green and the supervised evidence package is reviewed.
 
 In practice, that means the operator needs three things before calling a Gate C
@@ -22,7 +22,7 @@ run ready:
 
 ## Purpose
 
-Gate C should be the **first supervised testnet pilot gate**, not a paper-only quality gate.
+Gate C should be the **first supervised mainnet pilot gate**, not a paper-only quality gate.
 
 By the time this gate is evaluated, the engine should already have:
 
@@ -31,7 +31,7 @@ By the time this gate is evaluated, the engine should already have:
 - partial-fill state merge behavior wired through restart/recovery paths,
 - and race-hardening for out-of-order remote lifecycle events.
 
-Gate C is where the repo proves that those primitives survive **multi-step operator drills** and a **small supervised testnet runbook**, not just isolated unit tests.
+Gate C is where the repo proves that those primitives survive **multi-step operator drills** and a **small supervised mainnet runbook**, not just isolated unit tests.
 
 ---
 
@@ -49,7 +49,7 @@ The following versioned fixtures should exist and be treated as acceptance input
 - `tests/fixtures/gate_c_fault_injection_matrix.json`
 - `tests/fixtures/gate_c_soak_requirements.json`
 - `tests/fixtures/gate_c_restart_recovery_drills.json`
-- `tests/fixtures/gate_c_supervised_testnet_pilot.json`
+- `tests/fixtures/gate_c_supervised_mainnet_pilot.json`
 
 These fixtures should define the required scenarios, thresholds, and pass/fail semantics so the gate is reproducible.
 
@@ -90,7 +90,7 @@ Each drill should record:
 - reconcile/recovery outcome
 - whether live enablement remained blocked or was allowed to resume
 
-### 6. Supervised testnet pilot preflight must be explicit
+### 6. Supervised mainnet pilot preflight must be explicit
 Before any Gate C pilot run, operator preflight should verify:
 - governance mode is `approval_required`
 - emergency stop is off and maintenance is off intentionally
@@ -100,7 +100,7 @@ Before any Gate C pilot run, operator preflight should verify:
 - reconcile, submit-ledger, and recovery report paths are known to the operator
 - restart drill evidence has been reviewed recently
 
-### 7. Supervised testnet pilot exit criteria must be explicit
+### 7. Supervised mainnet pilot exit criteria must be explicit
 A Gate C supervised pilot should only be considered passed when all of the following are true:
 - every live intent was operator-approved
 - no duplicate submit was observed
@@ -124,7 +124,7 @@ Use this sequence when preparing a supervised Gate C pilot:
    - maintenance off
    - tiny-size, single-symbol limits
 4. Start in shadow or dry-run mode first if anything about the exchange state is uncertain.
-5. Run the supervised testnet pilot with one operator watching reconcile, recovery, and incident output in real time.
+5. Run the supervised mainnet pilot with one operator watching reconcile, recovery, and incident output in real time.
 6. Stop immediately on any critical reconcile mismatch, duplicate submit, or unresolved ambiguous intent.
 7. Save the pilot dossier and post-run notes before any resume or retry.
 
@@ -170,6 +170,6 @@ The repo looks close to a credible Gate C planning state, but not yet to a true 
 - merged race-hardening coverage for out-of-order cancel/fill/replace paths
 - merged partial-fill continuity assertions across restart/recovery boundaries
 - operator-reviewed soak evidence, not just CI-sized synthetic runs
-- explicit supervised testnet pilot evidence package with pass/fail thresholds
+- explicit supervised mainnet pilot evidence package with pass/fail thresholds
 
-In short: **Gate C should become the first evidence-backed supervised testnet gate, not merely another unit-test milestone.**
+In short: **Gate C should become the first evidence-backed supervised mainnet gate, not merely another unit-test milestone.**

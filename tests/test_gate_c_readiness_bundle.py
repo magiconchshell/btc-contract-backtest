@@ -8,7 +8,7 @@ FAULT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_fault_injection_matri
 SOAK_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_soak_requirements.json"
 DRILL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "gate_c_restart_recovery_drills.json"
 PILOT_FIXTURE = (
-    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_testnet_pilot.json"
+    REPO_ROOT / "tests" / "fixtures" / "gate_c_supervised_mainnet_pilot.json"
 )
 
 
@@ -56,5 +56,5 @@ def test_gate_c_readiness_bundle_references_operator_artifacts(tmp_path):
         "gate_c_restart_recovery_drills.json"
     )
     assert payload["inputs"]["pilot_fixture"].endswith(
-        "gate_c_supervised_testnet_pilot.json"
+        "gate_c_supervised_mainnet_pilot.json"
     )

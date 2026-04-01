@@ -139,11 +139,7 @@ class GovernedLiveSession(TradingRuntime):
             contract.symbol,
             max_retries=self.context.live_risk.max_consecutive_failures,
         )
-        self.adapter.configure_binance_futures_mode(
-            use_testnet=bool(
-                getattr(contract, "exchange_profile", "").endswith("testnet")
-            )
-        )
+        self.adapter.configure_binance_futures_mode()
         self.audit = AuditLogger(audit_log)
         self.alerts = AlertSink(alerts_file)
         self.approvals = OperatorApprovalQueue(approval_file)
@@ -165,9 +161,6 @@ class GovernedLiveSession(TradingRuntime):
             self.adapter,
             BinanceFuturesStreamConfig(
                 symbol=contract.symbol,
-                use_testnet=bool(
-                    getattr(contract, "exchange_profile", "").endswith("testnet")
-                ),
             ),
             transport_factory=websocket_transport_factory,
         )
@@ -202,11 +195,7 @@ class GovernedLiveSession(TradingRuntime):
             local_position=recovered.get("position", {}),
             events=replayed_events,
             event_boundary=self.event_source.boundary_state(),
-            environment=(
-                "testnet"
-                if bool(getattr(contract, "exchange_profile", "").endswith("testnet"))
-                else "mainnet"
-            ),
+            environment="mainnet",
         )
 
         # --- Phase 1 additions ---
@@ -232,9 +221,6 @@ class GovernedLiveSession(TradingRuntime):
         self._ws_thread: Optional[threading.Thread] = None
         self._ws_lock = threading.Lock()
         self._pending_fills: list[dict[str, Any]] = []
-        self._use_testnet = bool(
-            getattr(contract, "exchange_profile", "").endswith("testnet")
-        )
 
     def save_state(self, payload: Optional[dict] = None):
         store = self.state_store()
@@ -631,7 +617,6 @@ class GovernedLiveSession(TradingRuntime):
                     self.core,
                     current_price,
                     self.context.contract.symbol,
-                    use_testnet=self._use_testnet,
                 )
                 if exit_result is not None:
                     payload["exit_action"] = exit_result
@@ -657,7 +642,6 @@ class GovernedLiveSession(TradingRuntime):
                     self.core,
                     snapshot_close,
                     self.context.contract.symbol,
-                    use_testnet=self._use_testnet,
                 )
                 if exit_result is not None:
                     payload["exit_action"] = exit_result
@@ -936,6 +920,8 @@ class GovernedLiveSession(TradingRuntime):
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
         # Register signal handlers for graceful shutdown (Main thread only)
         # Avoids: "ValueError: signal only works in main thread"
+        original_sigint = None
+        original_sigterm = None
         if threading.current_thread() is threading.main_thread():
             try:
                 original_sigint = signal.getsignal(signal.SIGINT)
@@ -1049,6 +1035,8 @@ class GovernedLiveSession(TradingRuntime):
         finally:
             self.shutdown()
             # Restore original signal handlers
-            signal.signal(signal.SIGINT, original_sigint)
-            signal.signal(signal.SIGTERM, original_sigterm)
+            if original_sigint is not None:
+                signal.signal(signal.SIGINT, original_sigint)
+            if original_sigterm is not None:
+                signal.signal(signal.SIGTERM, original_sigterm)
             logger.info("Live trading loop exited")
