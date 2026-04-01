@@ -8,8 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from btc_contract_backtest.web.bot_manager import bot_manager
@@ -20,10 +19,13 @@ logger = logging.getLogger("btc_contract_backtest.web.server")
 
 app = FastAPI(title="BTC Trading Engine Dashboard")
 
-# Define the root of our web static files
-# We'll put them in src/btc_contract_backtest/web/static
-STATIC_DIR = Path(__file__).parent / "static"
-STATIC_DIR.mkdir(exist_ok=True)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class BotStartConfig(BaseModel):
     capital: float = 1000.0
@@ -43,10 +45,7 @@ class BotStartConfig(BaseModel):
 
 @app.get("/")
 async def get_index():
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return HTMLResponse("<h1>Dashboard Static Files Not Found</h1><p>Please ensure index.html exists in src/btc_contract_backtest/web/static/</p>")
+    return {"status": "BTC Trading Engine API is running"}
 
 @app.post("/api/bot/start")
 async def start_bot(config: BotStartConfig):
@@ -147,8 +146,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WS error: {e}")
 
-# Mount static files (ensure this is last so it doesn't override other routes)
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Static file serving removed as frontend is now hosted via Next.js
 
 if __name__ == "__main__":
     import uvicorn
