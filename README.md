@@ -107,5 +107,6 @@ The `live_session.py` architecture exports telemetry continuously via a backgrou
 
 ## Code Quality & CI
 - Validated under stringent static checks using `ruff` and `mypy`.
-- Automatic CI `release_gate.py` prohibits structurally broken releases.
+- Automatic CI `release_gate.py` prohibits structurally broken releases. You can inspect the pipeline locally running `python scripts/release_gate.py --report --json`.
+- Developers must execute the release validation gate locally using `python scripts/release_gate.py --run --check-clean` prior to merging logic. 
 - Native `pytest` suite enforcing testing coverage specifically over the `ws_transport` retry architectures and mock `SimulatorCore` execution loops.
