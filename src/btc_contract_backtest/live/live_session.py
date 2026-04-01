@@ -155,7 +155,15 @@ class GovernedLiveSession(TradingRuntime):
         self.watchdog.state.halted = wd.get("halted", False)
         self.watchdog.state.halt_reason = wd.get("halt_reason")
         state = self.gov_state.load()
-        current_mode = TradingMode(state.get("mode", mode.value))
+        # If a specific mode was passed to the constructor (e.g. from the UI), 
+        # use it unless it's the default and the state file has something else.
+        if mode != TradingMode.APPROVAL_REQUIRED:
+            current_mode = mode
+            # Sync back to governance state
+            state["mode"] = mode.value
+            self.gov_state.save(state)
+        else:
+            current_mode = TradingMode(state.get("mode", mode.value))
         self.submit_ledger = SubmitLedger(runtime_paths.submit_ledger_file)
         self.exchange_events = BinanceFuturesUserDataEventSource(
             self.adapter,
@@ -953,6 +961,9 @@ class GovernedLiveSession(TradingRuntime):
             self.context.contract.symbol,
             self.policy.mode.value,
         )
+
+        # Ensure heartbeat starts fresh for the current session
+        self.watchdog.beat()
 
         count = 0
         try:

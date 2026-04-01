@@ -11,9 +11,7 @@ class BuyAndHoldLongStrategy(BaseStrategy):
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df["signal"] = 0
-        if not df.empty:
-            df.iloc[0, df.columns.get_loc("signal")] = 1
+        df["signal"] = 1
         return df
 
 

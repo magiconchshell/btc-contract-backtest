@@ -24,7 +24,6 @@ class QueueHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            # Use call_soon_threadsafe with the stored loop
             if self.loop.is_running():
                 self.loop.call_soon_threadsafe(self.queue.put_nowait, {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -52,100 +51,101 @@ class BotManager:
         self.log_queue = asyncio.Queue(maxsize=1000)
         self.is_running = False
         
-        # Capture the current event loop for use in the logging handler
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        # Attach log handler to the root or package logger
         root_logger = logging.getLogger("btc_contract_backtest")
         handler = QueueHandler(self.log_queue, loop)
         handler.setFormatter(logging.Formatter('%(message)s'))
         root_logger.addHandler(handler)
 
+    def _run_bot_thread(self, interval: int):
+        """Wrapper for the bot loop to ensure state cleanup on exit."""
+        try:
+            if self.session:
+                self.session.run_loop(interval_seconds=interval)
+        except Exception as e:
+            logger.error(f"Bot loop exception: {e}", exc_info=True)
+        finally:
+            with self._lock:
+                self.is_running = False
+                # Keep session/thread for status lookup until a new one starts
+            logger.info("Bot thread exited.")
+
     def start_bot(self, config: Dict[str, Any]):
-        if self.is_running:
-            raise ValueError("Bot is already running")
+        with self._lock:
+            if self.is_running:
+                raise ValueError("Bot is already running")
 
-        # Extract configs from payload or use defaults
-        capital = float(config.get("capital", 1000.0))
-        leverage = int(config.get("leverage", 5))
-        mode_str = config.get("mode", "PAPER").upper()
-        mode = TradingMode[mode_str] if mode_str in TradingMode.__members__ else TradingMode.PAPER
-        symbol = config.get("symbol", "BTC/USDT")
-        timeframe = config.get("timeframe", "1h")
-        interval = int(config.get("interval_seconds", 15))
+            capital = float(config.get("capital", 1000.0))
+            leverage = int(config.get("leverage", 5))
+            mode_str = config.get("mode", "PAPER").upper()
+            mode = TradingMode[mode_str] if mode_str in TradingMode.__members__ else TradingMode.PAPER
+            symbol = config.get("symbol", "BTC/USDT")
+            timeframe = config.get("timeframe", "1h")
+            interval = int(config.get("interval_seconds", 15))
 
-        # Build objects
-        # Default to mainnet for all live operations (Binance Testnet is discontinued)
-        profile = "binance_futures_mainnet"
-        logger.info(f"Selected exchange profile: {profile}")
+            profile = "binance_futures_mainnet"
+            logger.info(f"Selected exchange profile: {profile}")
 
-        contract = ContractSpec(
-            symbol=symbol,
-            leverage=leverage,
-            exchange_profile=profile,
-        )
-        account = AccountConfig(initial_capital=capital)
-        
-        # Risk Config
-        risk = RiskConfig(
-            max_position_notional_pct=float(config.get("max_pos_pct", 0.95)),
-            risk_per_trade_pct=float(config.get("risk_per_trade_pct", 0.02)),
-            stop_loss_pct=float(config.get("stop_loss_pct", 0.04)),
-            take_profit_pct=float(config.get("take_profit_pct", 0.10)),
-            atr_stop_mult=float(config.get("atr_stop_mult", 2.5)),
-            break_even_trigger_pct=float(config.get("break_even_trigger_pct", 0.03)),
-        )
-        
-        execution = ExecutionConfig(default_order_type="market", enforce_exchange_constraints=True)
-        live_risk = LiveRiskConfig(
-            max_consecutive_failures=int(config.get("max_retries", 5)), 
-            cancel_open_orders_on_shutdown=True
-        )
-        
-        # Strategy
-        strategy_name = config.get("strategy", "sparse_meta_portfolio")
-        strategy = build_strategy(strategy_name)
+            contract = ContractSpec(
+                symbol=symbol,
+                leverage=leverage,
+                exchange_profile=profile,
+            )
+            account = AccountConfig(initial_capital=capital)
+            
+            risk = RiskConfig(
+                max_position_notional_pct=float(config.get("max_pos_pct", 0.95)),
+                risk_per_trade_pct=float(config.get("risk_per_trade_pct", 0.02)),
+                stop_loss_pct=float(config.get("stop_loss_pct", 0.04)),
+                take_profit_pct=float(config.get("take_profit_pct", 0.10)),
+                atr_stop_mult=float(config.get("atr_stop_mult", 2.5)),
+                break_even_trigger_pct=float(config.get("break_even_trigger_pct", 0.03)),
+            )
+            
+            execution = ExecutionConfig(default_order_type="market", enforce_exchange_constraints=True)
+            live_risk = LiveRiskConfig(
+                max_consecutive_failures=int(config.get("max_retries", 5)), 
+                cancel_open_orders_on_shutdown=True
+            )
+            
+            strategy_name = config.get("strategy", "sparse_meta_portfolio")
+            strategy = build_strategy(strategy_name)
 
-        # Instantiate session
-        self.session = GovernedLiveSession(
-            contract=contract,
-            account=account,
-            risk=risk,
-            strategy=strategy,
-            timeframe=timeframe,
-            execution=execution,
-            live_risk=live_risk,
-            mode=mode,
-            allow_mainnet=True,
-        )
+            self.session = GovernedLiveSession(
+                contract=contract,
+                account=account,
+                risk=risk,
+                strategy=strategy,
+                timeframe=timeframe,
+                execution=execution,
+                live_risk=live_risk,
+                mode=mode,
+                allow_mainnet=True,
+            )
 
-        # Run in thread
-        self.is_running = True
-        self.thread = threading.Thread(
-            target=self.session.run_loop,
-            kwargs={"interval_seconds": interval},
-            daemon=True
-        )
-        self.thread.start()
-        logger.info(f"Bot started via Web UI | Symbol: {symbol} | Mode: {mode_str}")
+            self.is_running = True
+            self.thread = threading.Thread(
+                target=self._run_bot_thread,
+                args=(interval,),
+                name="bot-thread",
+                daemon=True
+            )
+            self.thread.start()
+            logger.info(f"Bot started via Web UI | Symbol: {symbol} | Mode: {mode_str}")
 
     def stop_bot(self):
+        # Don't use self._lock here to avoid blocking if the thread is joining
         if not self.is_running or not self.session:
             return
         
         logger.info("Stopping bot via Web UI...")
         self.session._shutdown_event.set()
-        if self.thread:
-            self.thread.join(timeout=10)
-        
-        self.is_running = False
-        self.session = None
-        self.thread = None
-        logger.info("Bot stopped.")
+        # The _run_bot_thread finally block will set is_running = False
 
     def get_trades(self):
         if not self.session:
@@ -189,12 +189,10 @@ class BotManager:
         if not self.session:
             return {"status": "stopped"}
         
-        # We can leverage the logic from status_server if we want, 
-        # but for now let's return basic info or the whole session object if possible
         pos = self.session.core.position
         perf = self.get_performance()
         return {
-            "status": "running" if not self.session._shutdown_event.is_set() else "stopping",
+            "status": "running" if self.is_running and not self.session._shutdown_event.is_set() else "stopped",
             "capital": round(self.session.core.capital, 2),
             "position": {
                 "side": pos.side,

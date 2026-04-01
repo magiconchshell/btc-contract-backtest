@@ -22,6 +22,8 @@ class HeartbeatWatchdog:
     def beat(self):
         self.state.last_heartbeat_at = datetime.now(timezone.utc).isoformat()
         self.state.consecutive_failures = 0
+        self.state.halted = False
+        self.state.halt_reason = None
 
     def record_failure(self, reason: str):
         self.state.consecutive_failures += 1

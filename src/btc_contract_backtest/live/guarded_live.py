@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -23,6 +24,8 @@ from btc_contract_backtest.runtime.order_state_bridge import (
     apply_local_replace,
 )
 from btc_contract_backtest.runtime.order_state_machine import CanonicalOrderState
+
+logger = logging.getLogger(__name__)
 
 
 class GuardedLiveExecutor:
@@ -67,6 +70,15 @@ class GuardedLiveExecutor:
     ):
         request_id = request_id or str(uuid.uuid4())
         client_order_id = client_order_id or request_id
+
+        # De-duplication: Skip if already in the desired position side
+        if signal != 0 and signal == position_side:
+            logger.info("Already in position matching signal %d, skipping submission.", signal)
+            return {
+                "status": "already_in_position",
+                "request_id": request_id,
+                "client_order_id": client_order_id,
+            }
         existing = self.submit_ledger.get_by_client_order_id(client_order_id)
         if existing is not None and self.submit_ledger.is_pending(existing):
             self.audit.log(
