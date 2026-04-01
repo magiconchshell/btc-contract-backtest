@@ -69,6 +69,9 @@ function initTabs() {
             const targetEl = document.getElementById(target);
             if (targetEl) targetEl.classList.add('active');
             
+            if (target === 'reports-view') {
+                refreshTradeHistory();
+            }
             if (target === 'dashboard-view') {
                 setTimeout(() => {
                     if (priceChart) priceChart.resize(document.getElementById('price-chart').clientWidth, 400);
@@ -264,8 +267,9 @@ function updateDashboard(data) {
         // Check if position or trades changed to trigger marker refresh
     const currentSide = status.position ? status.position.side : 0;
     if (typeof lastPositionSide !== 'undefined' && lastPositionSide !== currentSide) {
-        console.log("Position changed, refreshing markers...");
+        console.log("Position changed, refreshing markers and history...");
         refreshTradeMarkers();
+        refreshTradeHistory(); // Real-time reporting fix
     }
     lastPositionSide = currentSide;
 
@@ -508,6 +512,23 @@ async function refreshTradeHistory() {
             `;
             tbody.appendChild(row);
         });
+        // 2. Update Summary Stats from the trades we just fetched
+        if (trades.length > 0) {
+            const wins = trades.filter(t => (t.pnl_after_costs || 0) > 0);
+            const grossProfit = wins.reduce((sum, t) => sum + (t.pnl_after_costs || 0), 0);
+            const losses = trades.filter(t => (t.pnl_after_costs || 0) <= 0);
+            const grossLoss = Math.abs(losses.reduce((sum, t) => sum + (t.pnl_after_costs || 0), 0));
+            
+            const winRate = (wins.length / trades.length * 100).toFixed(1);
+            const pf = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : grossProfit.toFixed(2);
+            const totalPnl = trades.reduce((sum, t) => sum + (t.pnl_after_costs || 0), 0);
+            const avgBars = (trades.reduce((sum, t) => sum + (t.bars_held || 0), 0) / trades.length).toFixed(1);
+
+            if (document.getElementById('rep-winrate')) document.getElementById('rep-winrate').innerText = `${winRate}%`;
+            if (document.getElementById('rep-pf')) document.getElementById('rep-pf').innerText = pf;
+            if (document.getElementById('rep-trades')) document.getElementById('rep-trades').innerText = trades.length;
+            if (document.getElementById('rep-avg-bars')) document.getElementById('rep-avg-bars').innerText = avgBars;
+        }
     } catch (e) { console.error("History refresh error:", e); }
 }
 
