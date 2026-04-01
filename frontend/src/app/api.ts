@@ -44,6 +44,11 @@ export const getPerformance = async (sessionId: string) => {
   return data;
 };
 
+export const getStatus = async (sessionId: string) => {
+  const { data } = await api.get(`/sessions/${sessionId}/status`);
+  return data;
+};
+
 export const getMarkers = async (sessionId: string) => {
   const { data } = await api.get(`/sessions/${sessionId}/markers`);
   return data;

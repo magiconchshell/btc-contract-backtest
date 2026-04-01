@@ -7,6 +7,7 @@ import StatusCard from '@/components/StatusCard';
 import TradingChart from '@/components/TradingChart';
 import LogViewer from '@/components/LogViewer';
 import Sidebar from '@/components/Sidebar';
+import ReportView from '@/components/ReportView';
 
 function DashboardContent() {
   const { activeSessionId, activeSession } = useBotContext();
@@ -47,7 +48,8 @@ function DashboardContent() {
 
 export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const { activeSession, connected } = useBotContext();
+  const [viewMode, setViewMode] = useState<'monitor' | 'report'>('monitor');
+  const { activeSession, activeSessionId, connected } = useBotContext();
 
   const isRunning = activeSession?.status === 'running';
   const mode = activeSession?.config?.mode || 'OFFLINE';
@@ -74,6 +76,15 @@ export default function Home() {
         </div>
 
         <div className="header-controls">
+          {activeSession && activeSessionId !== 'new' && (
+            <button
+              className={`sidebar-toggle-btn ${viewMode === 'report' ? 'active-report' : ''}`}
+              style={{ marginRight: '0.5rem', border: '1px solid var(--border-color)', background: viewMode === 'report' ? 'rgba(56, 189, 248, 0.2)' : 'transparent', color: viewMode === 'report' ? 'var(--primary-color)' : 'inherit' }}
+              onClick={() => setViewMode(viewMode === 'report' ? 'monitor' : 'report')}
+            >
+              {viewMode === 'report' ? '👁 Monitoring' : '📄 Report Mode'}
+            </button>
+          )}
           <button
             className="sidebar-toggle-btn"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -92,7 +103,11 @@ export default function Home() {
       </aside>
 
       <main className="dashboard-content-area">
-        <DashboardContent />
+        {viewMode === 'report' && activeSessionId !== 'new' && activeSession ? (
+          <ReportView />
+        ) : (
+          <DashboardContent />
+        )}
       </main>
     </div>
   );
