@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import threading
 from typing import Any, Optional, Dict
 from datetime import datetime, timezone
@@ -71,10 +72,27 @@ class BotManager:
         interval = int(config.get("interval_seconds", 15))
 
         # Build objects
+        # Dynamically select profile based on environment variables
+        has_mainnet = bool(os.getenv("BINANCE_FUTURES_MAINNET_API_KEY"))
+        has_testnet = bool(os.getenv("BINANCE_FUTURES_TESTNET_API_KEY"))
+        
+        # Default to mainnet if available (as users usually want high-quality data)
+        # but fall back to testnet if only testnet keys are provided.
+        if has_mainnet:
+            profile = "binance_futures_mainnet"
+        elif has_testnet:
+            profile = "binance_futures_testnet"
+        else:
+            # If no keys, use mainnet by default (will be read-only if no keys)
+            # though ccxt might error later, this is consistent with user's previous hardcode
+            profile = "binance_futures_mainnet" if mode == TradingMode.PAPER else "binance_futures_mainnet"
+
+        logger.info(f"Selected exchange profile: {profile} (based on env keys)")
+
         contract = ContractSpec(
             symbol=symbol,
             leverage=leverage,
-            exchange_profile="binance_futures_mainnet",
+            exchange_profile=profile,
         )
         account = AccountConfig(initial_capital=capital)
         

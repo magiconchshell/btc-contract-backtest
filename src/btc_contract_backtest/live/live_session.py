@@ -934,11 +934,18 @@ class GovernedLiveSession(TradingRuntime):
         return super().step()
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
-        # Register signal handlers for graceful shutdown
-        original_sigint = signal.getsignal(signal.SIGINT)
-        original_sigterm = signal.getsignal(signal.SIGTERM)
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Register signal handlers for graceful shutdown (Main thread only)
+        # Avoids: "ValueError: signal only works in main thread"
+        if threading.current_thread() is threading.main_thread():
+            try:
+                original_sigint = signal.getsignal(signal.SIGINT)
+                original_sigterm = signal.getsignal(signal.SIGTERM)
+                signal.signal(signal.SIGINT, self._signal_handler)
+                signal.signal(signal.SIGTERM, self._signal_handler)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not register signal handlers: %s", exc)
+        else:
+            logger.info("Running in background thread: skipping signal registration")
 
         # Start WebSocket consumer thread if transport factory available
         if self.exchange_events.transport_factory is not None:
