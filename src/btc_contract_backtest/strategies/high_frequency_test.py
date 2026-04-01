@@ -19,24 +19,19 @@ class HighFrequencyTestStrategy(BaseStrategy):
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        if len(df) < self.rsi_period + 1:
+        if len(df) < 2:
             df['signal'] = 0
             return df
 
-        # Calculate ultra-fast RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=self.rsi_period).mean()
+        # EXTREME AGGRESSIVE TICK LOGIC:
+        # Designed to force position flips constantly during Live Paper Trading.
+        # We compare the current tick 'close' to the current 'open' or immediate micro-MA
+        # to guarantee the signal flips wildly as the live price fluctuates within the candle.
         
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        rsi = rsi.fillna(50)
+        # If the live incomplete candle is currently Green (Price > Open), go LONG
+        df.loc[df['close'] > df['open'], 'signal'] = 1
         
-        # AGGRESSIVE LOGIC:
-        # We don't use ffill here. We want it to exit (0) as soon as it's not overbought/oversold.
-        # This will create much more 'IN' and 'OUT' markers on the chart.
-        df['signal'] = 0
-        df.loc[rsi < self.oversold, 'signal'] = 1   # Long if slightly oversold
-        df.loc[rsi > self.overbought, 'signal'] = -1 # Short if slightly overbought
+        # If the live incomplete candle is currently Red (Price < Open), go SHORT
+        df.loc[df['close'] <= df['open'], 'signal'] = -1
         
         return df
