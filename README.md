@@ -1,112 +1,112 @@
-# BTC Contract Backtest (Production Live Engine)
+# 🐚 Magic Conch Shell Trading Engine v2.0
 
-A professional-grade framework for **backtesting, paper trading, and executing live quantitative strategies** on **Binance Futures** (Perpetual contracts). 
+A professional-grade, multi-session framework for **backtesting, paper trading, and executing live quantitative strategies** on **Binance Futures** (Perpetual contracts). 
 
-This project bridges the historical gap between backtesting environments and live execution architectures. By implementing a **100% shared logical simulation layer**, it ensures that a strategy yielding specific executions, partial fills, or trailing stops in backtesting will perform *identically* in production under the same market constraints.
-
----
-
-## 🎯 What This Project Is For
-
-- **Leveraged Quantitative Trading**: Focused explicitly on Perpetual/Futures contracts (Long/Short), integrating real-world fee/funding structures and isolated margin simulations.
-- **Production Event-Driven Execution**: Connects to Binance via real-time WebSocket feeds with robust disconnected-state handling, rate-limit backoffs, and strict `kill_switch` protections.
-- **Flawless Strategy Simulation**: Strategies are coded once. The exact same PnL evaluations, exchange constraints (Lot/Tick precision), and stop-loss logic evaluate identically in both the fastest vectorized backtests and the live tick-by-tick websocket feeds.
-- **Gradual Go-Live Workflow**: Transition seamlessly through operating modes:
-  - `BACKTEST`: Validate theories over historical data.
-  - `PAPER`: Connect to live data feeds, simulating executions.
-  - `APPROVAL_REQUIRED`: Evaluate signals entirely via live data, but hold for manual operator confirmation before executing on Binance.
-  - `GUARDED_LIVE`: Execute on Binance Mainnet but with strict architectural maximum position limits.
-  - `MAINTENANCE`: Suspend logic without killing background connectivity.
-
-This is **not** a basic daily-spot portfolio tracker—it is a robust event-driven futures engine designed to sit on remote servers unharmed for months.
+Magic Conch Shell bridges the gap between historical simulation and live execution with a **100% shared logical simulation layer**, ensuring that strategies validated in backtesting perform identically in production under the same market constraints.
 
 ---
 
-## 🛠 Core Technical Features
+## 🎯 Architecture & Mission
 
-### 1. Unified Exit Logic Environment
-Instead of duplicated logic mapping strategies to live execution versus historical runs, this engine utilizes a pure, shared functional layer (`exit_logic.py`). PnL mapping, Trailing Stop calculation, Break-Even triggers, and ATR Stop computations execute deterministically exactly the same in both the Backtest Engine and the Live Session.
+The **Architecture v2.0** introduces a complete separation between the core trading engine and the real-time monitoring dashboard, managed by a robust **Multi-Session Manager**.
 
-### 2. Native WebSocket Tolerance & Reconnection
-The `BinanceFuturesUserDataEventSource` continuously ingests streams via `websocket-client`. It integrates directly into the runtime `RunLoop` with native Exponential Backoff policies. If Binance connections drop, rate limits trigger, or ListenKeys expire:
-- The `ws_transport` spins down cleanly.
-- Exponential backoff is calculated avoiding rate bans.
-- Connection reinstates seamlessly in the background without throwing exceptions into the trading logic loop.
-- **REST State Reconciliation** is immediately triggered to ensure blind-spots during the downtime didn't miss partial fills or exchange liquidations.
-
-### 3. Strict Risk Governance Watchdogs
-Live Trading is wrapped in a `HeartbeatWatchdog` & `ExchangeConstraintChecker`.
-- **Pre-execution Filtering:** Before your strategy's signal ever touches the Exchange Adapter (via `ccxt`), the constraints engine evaluates tick sizes, lot boundaries, and precision filters ensuring rejecting logic is handled locally.
-- **Emergency Stop Protocol:** The `LiveRiskConfig` manages API failures. If continuous network errors block logic loops from completing their steps out-of-bounds of the predefined consecutive failure policy, the system triggers `emergency_stop`—pausing execution and triggering an immediate `cancel_all_orders` command to protect liquid capital.
+- **Multi-Session Architecture**: Run multiple independent bots or historical backtests concurrently. Each session is isolated with its own UUID, state mapping, and dedicated execution thread.
+- **Unified Logic Environment**: Strategies are defined once. The exact same PnL evaluations, exchange constraints, and risk governance triggers evaluate identically across all modes (`BACKTEST`, `PAPER`, `LIVE`).
+- **Real-Time Visualization**: A modern, glassmorphism-inspired web dashboard built with Next.js and high-performance charting libraries.
 
 ---
 
-## 🚀 Environment Setup
+## ✨ Key Features
 
-This project uses modern `pyproject.toml` specs and utilizes `uv` for ultra-fast deterministic dependencies. 
-Requires **Python 3.12**.
+### 1. Concurrent Strategy Execution
+Run diverse alpha models simultaneously. Monitor a high-frequency scalper alongside a trend-following macro strategy without cross-talk or performance degradation.
+
+### 2. Interactive Dashboard
+- **Sidebar Session Manager**: Switch between active sessions, view historical results, or launch new ones in seconds.
+- **Dynamic Charting**: Real-time price candlesticks and account equity curves with precise trade markers (Buy/Sell dots).
+- **Latest Decision Panel**: Full transparency into the bot's current price polling, signal generation, and intended order quantity.
+- **Performance Metrics**: Live tracking of Win Rate, Profit Factor, Total Trades, and Drawdown.
+
+### 3. Session-Aware Logging
+The integrated log viewer uses **Thread-Local Storage (TLS)** to tag every system event with the originating `session_id`. This allows the dashboard to filter and display only relevant logs for the strategy you are currently inspecting.
+
+### 4. Strict Risk Governance
+- **Built-in Watchdogs**: Pre-execution filters for lot/tick precision and tick boundaries.
+- **Emergency Stop Protocol**: Automatic circuit breakers triggered by consecutive API failures or critical drawdown thresholds.
+- **Exchange Reconciliation**: Native state-syncing to align local virtual positions with exchange truth.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- **Python 3.12**
+- **Node.js 18+**
+- **Binance API Keys** (with Futures permissions enabled)
+
+### 1. Backend Setup
+We recommend using `uv` for ultra-fast, deterministic dependency management.
 
 ```bash
-# 1. Setup python environment
+# 1. Setup virtual environment
 uv venv --python 3.12 .venv
 source .venv/bin/activate
 
-# 2. Install dependencies (Production & Runtime)
+# 2. Install dependencies
 uv pip install -r requirements-runtime.txt
 
-# 3. Setup Secrets
-# Create a .env file and add your keys
-export BINANCE_FUTURES_TESTNET_API_KEY="your_api_key_here"
-export BINANCE_FUTURES_TESTNET_API_SECRET="your_secret_here"
+# 3. Configure Environment
+# Create a .env file with your credentials:
+# BINANCE_API_KEY=your_key
+# BINANCE_API_SECRET=your_secret
 ```
 
-*For Development/CI builds, see `requirements-dev.txt` for `ruff`, `pytest`, and `mypy` integrations.*
+### 2. Starting the Engine (Backend)
+The backend manages the strategy loops and provides a REST/WebSocket API for the dashboard.
+
+```bash
+./run_dashboard.sh
+```
+*Backend is now accessible at http://localhost:8000*
+
+### 3. Starting the Dashboard (Frontend)
+The frontend provides the user interface for management and monitoring.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*Frontend is now live at http://localhost:3000*
 
 ---
 
-## 💻 Operations & Example Usage
+## 🔬 Trading Modes
 
-### 1. Robust Engine Backtesting
-Run historical tests directly via the CLI against binance market models.
+- **`BACKTEST`**: Validate theories against historical Binance market models. Results are instantly visualized on the dashboard.
+- **`PAPER`**: Connect to live market data feeds to simulate executions without risk.
+- **`LIVE` (GUARDS_ACTIVE)**: Execute on Binance Mainnet with strict architectural position limits and trade-once safety protocols.
 
-```bash
-python -m btc_contract_backtest.cli.main \
-  --symbol BTC/USDT \
-  --timeframe 1h \
-  --days 180 \
-  --leverage 3 \
-  --capital 1000 \
-  --strategy sparse_portfolio \
-  --risk-config \
-    max_position_notional_pct=0.8 \
-    stop_loss_pct=0.04 \
-    take_profit_pct=0.1
-```
+---
 
-### 2. Connecting To Testnet / Test Environments
-Easily run Live Socket Testing without executing true orders. Start an event-soak test to monitor connection elasticity, runtime step iterations, and API health metrics without financial risk.
-*Note: Binance Futures Testnet data synchronization is officially deprecated in `ccxt`. To validate actual trades, execute in `TradingMode.GUARDED_LIVE` utilizing Mainnet with micro-capital ($15 sizes).*
+## 📂 Project Layout
 
-```bash
-python scripts/run_soak_test.py
-```
+- `src/btc_contract_backtest`: Core strategy engine, risk modules, and indicators.
+- `src/btc_contract_backtest/web`: FastAPI backend including the `BotManager` and WebSocket server.
+- `frontend/`: Next.js 16 application with custom charting components and session context.
+- `scripts/`: Operational utilities and release validation tools.
 
-### 3. Real-Time Status Monitoring
-The `live_session.py` architecture exports telemetry continuously via a background API. Start your live bot, and simply query its metrics externally for dashboard mapping:
-```json
-{
-  "trading_mode": "approval_required",
-  "symbol": "BTC/USDT",
-  "heartbeat": "2026-03-31T17:35:49.3331Z",
-  "watchdog": {
-     "halted": false,
-     "consecutive_failures": 0 
-  }
-}
-```
+---
 
-## Code Quality & CI
+## 📈 Strategy Development
+
+New strategies can be added to `src/btc_contract_backtest/strategies/`. Simply define the signal logic once, and it becomes available for both backtests and live sessions via the "Create New Session" view in the dashboard.
+
+---
+
+## Code Quality
 - Validated under stringent static checks using `ruff` and `mypy`.
-- Automatic CI `release_gate.py` prohibits structurally broken releases. You can inspect the pipeline locally running `python scripts/release_gate.py --report --json`.
-- Developers must execute the release validation gate locally using `python scripts/release_gate.py --run --check-clean` prior to merging logic. 
-- Native `pytest` suite enforcing testing coverage specifically over the `ws_transport` retry architectures and mock `SimulatorCore` execution loops.
+- Automatic CI `release_gate.py` prohibits structurally broken releases.
+- Native `pytest` suite enforcing testing coverage over execution flows and WebSocket transports.
+
+© 2026 Magic Conch Shell Engine | Multi-Session Architecture v2.0
