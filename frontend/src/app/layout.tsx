@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: 'Production-ready Web UI for Binance Futures algorithmic trading',
 };
 
+import { BotProvider } from './context/BotContext';
+
 export default function RootLayout({
   children,
 }: {
@@ -14,9 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <main className="app-container">
-          {children}
-        </main>
+        <BotProvider>
+          <main className="app-container">
+            {children}
+          </main>
+        </BotProvider>
       </body>
     </html>
   );

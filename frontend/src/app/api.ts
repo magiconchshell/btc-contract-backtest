@@ -48,3 +48,8 @@ export const getMarkers = async (sessionId: string) => {
   const { data } = await api.get(`/sessions/${sessionId}/markers`);
   return data;
 };
+
+export const deleteSession = async (sessionId: string) => {
+  const { data } = await api.delete(`/sessions/${sessionId}`);
+  return data;
+};

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BotProvider, useBotContext } from './context/BotContext';
+import { useBotContext } from './context/BotContext';
 import ControlPanel from '@/components/ControlPanel';
 import StatusCard from '@/components/StatusCard';
 import TradingChart from '@/components/TradingChart';
@@ -53,49 +53,47 @@ export default function Home() {
   const mode = activeSession?.config?.mode || 'OFFLINE';
 
   return (
-    <BotProvider>
-      <div className={`dashboard-grid ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
-        
-        <header className="dashboard-header glass-panel">
-          <div className="flex-row items-center gap-md">
-            <h1 className="header-logo">⚡ Antigravity</h1>
-            {activeSession && (
-              <>
-                <div className="header-divider" />
-                <div className="header-session-info">
-                  <span className="session-strat-name">
-                    {activeSession.config?.strategy?.replace(/_/g, ' ')}
-                  </span>
-                  <span className="session-symbol-name">
-                    {activeSession.config?.symbol}
-                  </span>
-                </div>
-              </>
-            )}
+    <div className={`dashboard-grid ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
+      
+      <header className="dashboard-header glass-panel">
+        <div className="flex-row items-center gap-md">
+          <h1 className="header-logo">⚡ Antigravity</h1>
+          {activeSession && (
+            <>
+              <div className="header-divider" />
+              <div className="header-session-info">
+                <span className="session-strat-name">
+                  {activeSession.config?.strategy?.replace(/_/g, ' ')}
+                </span>
+                <span className="session-symbol-name">
+                  {activeSession.config?.symbol}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="header-controls">
+          <button 
+            className="sidebar-toggle-btn" 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          >
+            {isSidebarOpen ? '⏹ Hide Panel' : '⚙️ Sessions'}
+          </button>
+          <div className={`status-badge ${isRunning ? 'running' : 'stopped'}`}>
+            <span className="dot" />
+            <span>{isRunning ? `${mode} ACTIVE` : `ENGINE ${connected ? 'READY' : 'OFFLINE'}`}</span>
           </div>
+        </div>
+      </header>
 
-          <div className="header-controls">
-            <button 
-              className="sidebar-toggle-btn" 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            >
-              {isSidebarOpen ? '⏹ Hide Panel' : '⚙️ Sessions'}
-            </button>
-            <div className={`status-badge ${isRunning ? 'running' : 'stopped'}`}>
-              <span className="dot" />
-              <span>{isRunning ? `${mode} ACTIVE` : `ENGINE ${connected ? 'READY' : 'OFFLINE'}`}</span>
-            </div>
-          </div>
-        </header>
+      <aside className="dashboard-sidebar glass-panel">
+        <Sidebar />
+      </aside>
 
-        <aside className="dashboard-sidebar glass-panel">
-          <Sidebar />
-        </aside>
-
-        <main className="dashboard-content-area">
-          <DashboardContent />
-        </main>
-      </div>
-    </BotProvider>
+      <main className="dashboard-content-area">
+        <DashboardContent />
+      </main>
+    </div>
   );
 }

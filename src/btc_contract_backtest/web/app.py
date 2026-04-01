@@ -117,6 +117,21 @@ async def stop_session(session_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to stop bot: {str(e)}")
 
 
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str):
+    try:
+        bot_manager.delete_session(session_id)
+        return {
+            "message": "Session deleted successfully",
+            "session_id": session_id,
+        }
+    except Exception as e:
+        logger.error(f"Error deleting session: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete session: {str(e)}"
+        )
+
+
 @app.get("/api/sessions/{session_id}/status")
 async def get_status(session_id: str):
     res = bot_manager.get_status(session_id)

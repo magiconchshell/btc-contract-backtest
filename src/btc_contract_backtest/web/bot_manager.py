@@ -198,6 +198,20 @@ class BotManager:
             else:
                 session_obj._shutdown_event.set()
 
+    def delete_session(self, session_id: str):
+        with self._lock:
+            session_state = self.sessions.get(session_id)
+            if not session_state:
+                return
+
+            # Stop the bot if it's running
+            if session_state.get("is_running"):
+                self.stop_bot(session_id)
+
+            # Remove from registry
+            del self.sessions[session_id]
+            logger.info(f"Session deleted: {session_id[:8]}")
+
     def get_trades(self, session_id: str):
         session_state = self.sessions.get(session_id)
         if not session_state:
