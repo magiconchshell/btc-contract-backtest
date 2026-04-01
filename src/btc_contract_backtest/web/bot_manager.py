@@ -117,7 +117,11 @@ class BotManager:
                 break_even_trigger_pct=float(config.get("break_even_trigger_pct", 0.03)),
             )
             
-            execution = ExecutionConfig(default_order_type="market", enforce_exchange_constraints=True)
+            execution = ExecutionConfig(
+                default_order_type="market", 
+                enforce_exchange_constraints=True,
+                allow_partial_fills=False
+            )
             live_risk = LiveRiskConfig(
                 max_consecutive_failures=int(config.get("max_retries", 5)), 
                 cancel_open_orders_on_shutdown=True

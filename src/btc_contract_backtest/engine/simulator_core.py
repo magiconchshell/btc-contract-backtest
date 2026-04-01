@@ -545,6 +545,10 @@ class SimulatorCore:
                 self.position.stepped_stop_anchor = None
                 self.position.atr_at_entry = None
 
+        # Clear dust that is too small to be tradable
+        if abs(new_qty) < 1e-10:
+            new_qty = 0.0
+
         self.position.quantity = new_qty
         self.position.side = 0 if new_qty == 0 else (1 if new_qty > 0 else -1)
         self.position.notional = abs(new_qty) * fill.fill_price
