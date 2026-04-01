@@ -1,6 +1,11 @@
 from typing import Optional
 
-from .indicators import RSIReversalStrategy, SMACrossStrategy, MACDCrossStrategy
+from .indicators import (
+    RSIReversalStrategy,
+    SMACrossStrategy,
+    MACDCrossStrategy,
+    KDJCrossStrategy,
+)
 from .hybrid import VotingHybridStrategy
 from .regime_filtered import RegimeFilteredStrategy
 from .regime_asymmetric import RegimeAsymmetricStrategy
@@ -25,6 +30,8 @@ def build_strategy(name: str, config: Optional[dict] = None):
         return SMACrossStrategy(**config)
     if name == "macd":
         return MACDCrossStrategy(**config)
+    if name == "kdj_cross":
+        return KDJCrossStrategy(**config)
     if name == "hybrid":
         return VotingHybridStrategy(
             [build_strategy("rsi"), build_strategy("macd")], required_votes=1

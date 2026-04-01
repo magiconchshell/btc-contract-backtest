@@ -161,6 +161,7 @@ async def get_strategies():
         "sparse_meta_portfolio",
         "sma_cross",
         "macd",
+        "kdj_cross",
         "rsi",
         "regime_filtered",
         "regime_asymmetric",
