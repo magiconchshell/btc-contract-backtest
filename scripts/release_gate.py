@@ -25,8 +25,8 @@ HARD_GATE_STEPS: tuple[GateStep, ...] = (
         name="pytest", command=(sys.executable, "-m", "pytest", "-q"), scope="repo"
     ),
     GateStep(
-        name="flake8",
-        command=(sys.executable, "-m", "flake8", "src"),
+        name="ruff",
+        command=(sys.executable, "-m", "ruff", "check", "src"),
         scope="production-code",
     ),
     GateStep(

@@ -1,6 +1,5 @@
 import time
 import threading
-import json
 import logging
 from typing import Any, Union
 import websocket

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import signal
 import threading
@@ -18,10 +17,7 @@ from btc_contract_backtest.config.models import (
     RiskConfig,
 )
 from btc_contract_backtest.engine.execution_models import (
-    FillEvent,
     MarketSnapshot,
-    OrderSide,
-    OrderType,
 )
 from btc_contract_backtest.live.audit_logger import AuditLogger
 from btc_contract_backtest.live.binance_futures import (
@@ -67,12 +63,6 @@ from btc_contract_backtest.runtime.order_state_bridge import (
 )
 from btc_contract_backtest.runtime.runtime_state_store import JsonRuntimeStateStore
 from btc_contract_backtest.live.live_exit_manager import LiveExitManager
-from btc_contract_backtest.live.log_config import configure_logging
-from btc_contract_backtest.runtime.exit_logic import (
-    ExitEvalContext,
-    evaluate_exit,
-    update_position_tracking,
-)
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -984,9 +974,16 @@ class GovernedLiveSession(TradingRuntime):
                         logger.critical("Error Recovery Policy: Max failures exceeded. Triggering emergency_stop.")
                         state["emergency_stop"] = True
                         self.gov_state.save(state)
-                        # Try to cancel open orders to protect capital
-                        self.adapter.cancel_all_orders(self.context.contract.symbol)
-                    
+                        try:
+                            logger.info("Emergency Stop: cancelling open orders...")
+                            open_orders = self.adapter.fetch_open_orders()
+                            if open_orders.ok and isinstance(open_orders.payload, list):
+                                for order in open_orders.payload:
+                                    order_id = order.get("id")
+                                    if order_id:
+                                        self.adapter.cancel_order(order_id)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.error("Failed to cancel open orders on emergency stop", exc_info=exc)
                     # Stay halted until user intervention
                     self._shutdown_event.wait(timeout=interval_seconds)
                     continue

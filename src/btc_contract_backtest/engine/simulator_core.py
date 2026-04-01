@@ -580,7 +580,7 @@ class SimulatorCore:
                 last_ts = self._last_funding_timestamp
                 current_ts = str(snapshot.timestamp)
                 # Parse timestamps to compare
-                from datetime import datetime as _dt, timezone as _tz
+                from datetime import datetime as _dt
                 last_dt = _dt.fromisoformat(last_ts.replace('Z', '+00:00'))
                 curr_dt = _dt.fromisoformat(current_ts.replace('Z', '+00:00'))
                 hours_elapsed = (curr_dt - last_dt).total_seconds() / 3600

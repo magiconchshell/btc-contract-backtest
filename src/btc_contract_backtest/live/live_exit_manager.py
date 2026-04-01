@@ -12,7 +12,6 @@ from typing import Any, Optional
 
 from btc_contract_backtest.config.models import RiskConfig
 from btc_contract_backtest.engine.execution_models import (
-    MarketSnapshot,
     Order,
     OrderSide,
     OrderType,
@@ -25,7 +24,6 @@ from btc_contract_backtest.live.governance import AlertSink
 from btc_contract_backtest.live.submit_ledger import SubmitLedger
 from btc_contract_backtest.runtime.exit_logic import (
     ExitEvalContext,
-    ExitSignal,
     PositionStateUpdate,
     evaluate_exit,
     update_position_tracking,
@@ -134,8 +132,8 @@ class LiveExitManager:
 
         now = datetime.now(timezone.utc).isoformat()
 
-        # Build and submit the close order
         order = Order(
+            order_id="exit",
             symbol=symbol,
             side=OrderSide.SELL if core.position.side == 1 else OrderSide.BUY,
             quantity=close_qty,

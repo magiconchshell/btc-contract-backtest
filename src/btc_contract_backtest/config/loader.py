@@ -70,7 +70,7 @@ def load_config_from_json(path: str | Path) -> EngineConfig:
 def load_config_from_yaml(path: str | Path) -> EngineConfig:
     """Load EngineConfig from a YAML file."""
     try:
-        import yaml
+        import yaml  # type: ignore
     except ImportError:
         raise ImportError(
             "PyYAML is required for YAML config loading. "

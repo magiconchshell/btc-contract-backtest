@@ -58,6 +58,7 @@ def configure_logging(
     # Clear existing handlers
     root.handlers.clear()
 
+    formatter: logging.Formatter
     if json_format:
         formatter = JSONFormatter()
     else:

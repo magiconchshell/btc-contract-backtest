@@ -654,6 +654,8 @@ class BinanceFuturesUserDataEventSource:
 
         self.maybe_keepalive()
         
+        if self.transport is None:
+            return []
         try:
             raw = self.transport.recv()
         except Exception as exc:  # noqa: BLE001
