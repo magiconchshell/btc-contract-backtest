@@ -636,9 +636,30 @@ class BinanceFuturesUserDataEventSource:
 
     def read_once(self) -> list[ExecutionEvent]:
         if self.transport is None:
-            self._connect_transport()
+            try:
+                self._connect_transport()
+                if self.transport_state.reconnect_attempts > 0:
+                    self.execution_state.needs_rest_reconciliation = True
+                self.transport_state.reconnect_attempts = 0
+                self.transport_state.last_backoff_seconds = None
+            except Exception as exc:  # noqa: BLE001
+                self.transport_state.reconnect_attempts += 1
+                max_att = self.reconnect_policy.max_attempts
+                if max_att is not None and self.transport_state.reconnect_attempts > max_att:
+                    raise RuntimeError(f"Reconnect failed after {max_att} attempts") from exc
+                delay = self.reconnect_policy.delay_for_attempt(self.transport_state.reconnect_attempts)
+                self.transport_state.last_backoff_seconds = delay
+                self.sleep_fn(delay)
+                return []
+
         self.maybe_keepalive()
-        raw = self.transport.recv() if self.transport is not None else None
+        
+        try:
+            raw = self.transport.recv()
+        except Exception as exc:  # noqa: BLE001
+            self.detach_transport(error=str(exc))
+            return []
+
         message = self._decode_message(raw)
         if message is None:
             return []

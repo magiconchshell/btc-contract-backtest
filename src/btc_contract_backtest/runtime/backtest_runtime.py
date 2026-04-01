@@ -15,6 +15,11 @@ from btc_contract_backtest.config.models import (
 from btc_contract_backtest.engine.execution_models import OrderSide, OrderType
 from btc_contract_backtest.runtime.calibration_engine import sample_from_execution
 from btc_contract_backtest.runtime.calibration_store import CalibrationSampleStore
+from btc_contract_backtest.runtime.exit_logic import (
+    ExitEvalContext,
+    evaluate_exit,
+    update_position_tracking,
+)
 from btc_contract_backtest.runtime.trading_runtime import TradingRuntime
 from btc_contract_backtest.strategies.base import BaseStrategy
 
@@ -92,16 +97,18 @@ class BacktestRuntime(TradingRuntime):
         if self.core.position.side == 0:
             return
         self.core.position.bars_held += 1
-        peak_price = self.core.position.peak_price
-        trough_price = self.core.position.trough_price
-        self.core.position.peak_price = (
-            snapshot.close if peak_price is None else max(peak_price, snapshot.close)
+        
+        ctx = ExitEvalContext(
+            position_side=self.core.position.side,
+            peak_price=self.core.position.peak_price,
+            trough_price=self.core.position.trough_price,
         )
-        self.core.position.trough_price = (
-            snapshot.close
-            if trough_price is None
-            else min(trough_price, snapshot.close)
-        )
+        update = update_position_tracking(ctx, snapshot.close)
+        if update.peak_price is not None:
+            self.core.position.peak_price = update.peak_price
+        if update.trough_price is not None:
+            self.core.position.trough_price = update.trough_price
+            
         self.core.apply_periodic_funding(snapshot)
 
     def _check_liquidation(self, snapshot) -> bool:
@@ -149,142 +156,48 @@ class BacktestRuntime(TradingRuntime):
     def _maybe_close_position(self, snapshot) -> Optional[str]:
         if self.core.position.side == 0 or self.core.position.entry_price is None:
             return None
-        price = snapshot.close
-        pnl_pct = (
-            (price - self.core.position.entry_price) / self.core.position.entry_price
-        ) * self.core.position.side
-        should_close = None
-        if (
-            self.context.risk.partial_take_profit_pct is not None
-            and not self.core.position.partial_taken
-            and pnl_pct >= self.context.risk.partial_take_profit_pct
-        ):
-            close_qty = (
-                abs(self.core.position.quantity) * self.context.risk.partial_close_ratio
-            )
-            order = self.core.create_order(
-                OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
-                close_qty,
-                OrderType.MARKET,
-                reduce_only=True,
-            )
-            for fill in self.core.try_fill_order(order, snapshot):
-                self.core.apply_fill(fill)
-            self.core.position.partial_taken = True
-        if (
-            self.context.risk.break_even_trigger_pct is not None
-            and pnl_pct >= self.context.risk.break_even_trigger_pct
-        ):
-            self.core.position.break_even_armed = True
-        if (
-            self.context.risk.atr_stop_mult is not None
-            and self.core.position.atr_at_entry is not None
-        ):
-            if (
-                self.core.position.side == 1
-                and price
-                <= self.core.position.entry_price
-                - (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult)
-            ):
-                should_close = "atr_stop"
-            if (
-                self.core.position.side == -1
-                and price
-                >= self.core.position.entry_price
-                + (self.core.position.atr_at_entry * self.context.risk.atr_stop_mult)
-            ):
-                should_close = "atr_stop"
-        if self.core.position.break_even_armed and should_close is None:
-            if self.core.position.side == 1 and price <= self.core.position.entry_price:
-                should_close = "break_even_stop"
-            if (
-                self.core.position.side == -1
-                and price >= self.core.position.entry_price
-            ):
-                should_close = "break_even_stop"
-        if (
-            self.context.risk.stepped_trailing_stop_pct is not None
-            and should_close is None
-        ):
-            if self.core.position.side == 1:
-                peak_price = self.core.position.peak_price
-                if peak_price is None:
-                    anchor = self.core.position.stepped_stop_anchor or price
-                else:
-                    anchor = (
-                        peak_price
-                        if self.core.position.stepped_stop_anchor is None
-                        else max(
-                            self.core.position.stepped_stop_anchor,
-                            peak_price,
-                        )
-                    )
-                self.core.position.stepped_stop_anchor = anchor
-                if price <= anchor * (1 - self.context.risk.stepped_trailing_stop_pct):
-                    should_close = "stepped_trailing_stop"
-            if self.core.position.side == -1:
-                trough_price = self.core.position.trough_price
-                if trough_price is None:
-                    anchor = self.core.position.stepped_stop_anchor or price
-                else:
-                    anchor = (
-                        trough_price
-                        if self.core.position.stepped_stop_anchor is None
-                        else min(
-                            self.core.position.stepped_stop_anchor,
-                            trough_price,
-                        )
-                    )
-                self.core.position.stepped_stop_anchor = anchor
-                if price >= anchor * (1 + self.context.risk.stepped_trailing_stop_pct):
-                    should_close = "stepped_trailing_stop"
-        if (
-            self.context.risk.stop_loss_pct is not None
-            and should_close is None
-            and pnl_pct <= -self.context.risk.stop_loss_pct
-        ):
-            should_close = "stop_loss"
-        if (
-            self.context.risk.take_profit_pct is not None
-            and should_close is None
-            and pnl_pct >= self.context.risk.take_profit_pct
-        ):
-            should_close = "take_profit"
-        if self.context.risk.trailing_stop_pct is not None and should_close is None:
-            if (
-                self.core.position.side == 1
-                and self.core.position.peak_price is not None
-                and price
-                <= self.core.position.peak_price
-                * (1 - self.context.risk.trailing_stop_pct)
-            ):
-                should_close = "trailing_stop"
-            if (
-                self.core.position.side == -1
-                and self.core.position.trough_price is not None
-                and price
-                >= self.core.position.trough_price
-                * (1 + self.context.risk.trailing_stop_pct)
-            ):
-                should_close = "trailing_stop"
-        if (
-            self.context.risk.max_holding_bars is not None
-            and should_close is None
-            and self.core.position.bars_held >= self.context.risk.max_holding_bars
-        ):
-            should_close = "time_exit"
-        if should_close is not None:
-            order = self.core.create_order(
-                OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
-                abs(self.core.position.quantity),
-                OrderType.MARKET,
-                reduce_only=True,
-            )
-            for fill in self.core.try_fill_order(order, snapshot):
-                self.core.apply_fill(fill)
-            if self.core.trades:
-                self.core.trades[-1]["reason"] = should_close
-        return should_close
+            
+        ctx = ExitEvalContext(
+            position_side=self.core.position.side,
+            entry_price=self.core.position.entry_price,
+            quantity=self.core.position.quantity,
+            bars_held=self.core.position.bars_held,
+            peak_price=self.core.position.peak_price,
+            trough_price=self.core.position.trough_price,
+            break_even_armed=self.core.position.break_even_armed,
+            partial_taken=self.core.position.partial_taken,
+            stepped_stop_anchor=self.core.position.stepped_stop_anchor,
+            atr_at_entry=self.core.position.atr_at_entry,
+        )
+        
+        signal, update = evaluate_exit(self.context.risk, ctx, snapshot.close)
+        
+        # Apply tracking updates (break-even arming, partial taken, stepped anchor)
+        if update.break_even_armed is not None:
+            self.core.position.break_even_armed = update.break_even_armed
+        if update.partial_taken is not None:
+            self.core.position.partial_taken = update.partial_taken
+        if update.stepped_stop_anchor is not None:
+            self.core.position.stepped_stop_anchor = update.stepped_stop_anchor
+            
+        if signal is None or not signal.should_close:
+            return None
+            
+        close_qty = abs(self.core.position.quantity) * signal.close_ratio
+        order = self.core.create_order(
+            OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
+            close_qty,
+            OrderType.MARKET,
+            reduce_only=True,
+        )
+        for fill in self.core.try_fill_order(order, snapshot):
+            self.core.apply_fill(fill)
+            
+        if self.core.trades:
+            self.core.trades[-1]["reason"] = signal.reason
+            self.core.trades[-1]["is_partial"] = signal.is_partial
+            
+        return signal.reason
 
     def on_hold(self, payload: dict):
         snapshot = self.core.last_snapshot

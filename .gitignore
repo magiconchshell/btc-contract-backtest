@@ -149,6 +149,11 @@ paper_state.json
 shadow_state.json
 pilot_incidents.json
 pilot_risk_envelope.json
+governance_state.json
+live_governance_audit.jsonl
+live_session_state.json
+operator_approvals.json
+live_alerts.jsonl
 
 # Generated local outputs
 reports/**

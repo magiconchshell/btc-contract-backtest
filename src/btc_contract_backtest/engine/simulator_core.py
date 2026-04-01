@@ -13,6 +13,9 @@ from btc_contract_backtest.config.models import (
     LiveRiskConfig,
     RiskConfig,
 )
+from btc_contract_backtest.live.exchange_constraints import (
+    ExchangeConstraintChecker,
+)
 from btc_contract_backtest.engine.execution_models import (
     FillEvent,
     MarketSnapshot,
@@ -64,6 +67,12 @@ class SimulatorCore:
         self.calibration_config = CalibrationConfig(mode="calibrated")
         self.calibration_store = CalibrationSampleStore()
         self.funding_store = FundingSnapshotStore()
+
+        # Constraint checker for order rejection simulation in backtest
+        self.constraint_checker = ExchangeConstraintChecker(contract)
+
+        # Funding interval tracking — only charge at 8h boundaries
+        self._last_funding_timestamp: Optional[str] = None
 
     def now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -194,6 +203,12 @@ class SimulatorCore:
         client_order_id: Optional[str] = None,
     ) -> Order:
         oid = str(uuid.uuid4())
+        
+        # Round quantity and price using constraint checker methods
+        quantity = self.constraint_checker._round_to_lot(quantity)
+        price = self.constraint_checker._round_to_tick(price)
+        stop_price = self.constraint_checker._round_to_tick(stop_price)
+
         order = Order(
             order_id=oid,
             symbol=self.contract.symbol,
@@ -335,6 +350,48 @@ class SimulatorCore:
         if remaining <= 0:
             order.status = OrderStatus.FILLED
             return fills
+
+        # Pre-fill constraint validation (simulates exchange rejection)
+        # Only enforced when explicitly enabled via ExecutionConfig
+        if self.execution.enforce_exchange_constraints:
+            price_estimate = self._fill_price(
+                snapshot, order.side, order.order_type, remaining
+            )
+            # Market orders don't have a price to validate against tick_size
+            is_market = order.order_type in {OrderType.MARKET, OrderType.STOP_MARKET}
+            check = self.constraint_checker.validate_order(
+                quantity=remaining,
+                price=None if is_market else price_estimate,
+                side=order.side.value if hasattr(order.side, 'value') else str(order.side),
+                order_type=(
+                    order.order_type.value
+                    if hasattr(order.order_type, 'value')
+                    else str(order.order_type)
+                ),
+                notional=remaining * price_estimate,
+                reduce_only=getattr(order, 'reduce_only', False),
+                position_side=self.position.side,
+                current_position_notional=self.position.notional,
+                current_position_side=self.position.side,
+            )
+            if not check.ok:
+                order.status = OrderStatus.REJECTED
+                order.updated_at = self.now_iso()
+                violation_codes = [
+                    v.get('code', 'unknown') for v in check.violations
+                ]
+                self.emit_risk_event(
+                    "order_rejected",
+                    f"Backtest constraint violation: {', '.join(violation_codes)}",
+                    severity="warning",
+                    metadata={
+                        "violations": check.violations,
+                        "order_id": order.order_id,
+                        "quantity": remaining,
+                        "price": price_estimate,
+                    },
+                )
+                return fills
 
         fill_ratio = self._fill_ratio(order)
         fill_qty = min(remaining, order.quantity * fill_ratio)
@@ -509,9 +566,35 @@ class SimulatorCore:
             )
 
     def apply_periodic_funding(self, snapshot: MarketSnapshot):
+        """Apply funding costs at correct intervals (default: every 8 hours).
+
+        Real exchanges charge funding every 8 hours at 00:00, 08:00, 16:00 UTC.
+        In backtest, we approximate by checking if enough time has passed since
+        the last funding charge based on the funding_interval_hours setting.
+        """
+        interval_hours = max(self.execution.funding_interval_hours, 1)
+
+        # Check if we should apply funding based on interval
+        if self._last_funding_timestamp is not None and snapshot.timestamp:
+            try:
+                last_ts = self._last_funding_timestamp
+                current_ts = str(snapshot.timestamp)
+                # Parse timestamps to compare
+                from datetime import datetime as _dt, timezone as _tz
+                last_dt = _dt.fromisoformat(last_ts.replace('Z', '+00:00'))
+                curr_dt = _dt.fromisoformat(current_ts.replace('Z', '+00:00'))
+                hours_elapsed = (curr_dt - last_dt).total_seconds() / 3600
+                if hours_elapsed < interval_hours:
+                    return 0.0
+            except (ValueError, TypeError):
+                pass  # If parsing fails, apply funding (conservative)
+
         cost = self.funding_cost(snapshot)
         if cost == 0.0:
             return 0.0
+
+        # Record funding timestamp
+        self._last_funding_timestamp = str(snapshot.timestamp) if snapshot.timestamp else None
         sample = sample_from_execution(
             timestamp=snapshot.timestamp,
             symbol=snapshot.symbol,

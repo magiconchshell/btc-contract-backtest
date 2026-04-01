@@ -86,6 +86,7 @@ class ExecutionConfig:
     stale_mark_deviation_bps: float = 15.0
     calibration_mode: str = "calibrated"
     calibration_version: str = "t4-v1"
+    enforce_exchange_constraints: bool = False
 
 
 @dataclass
