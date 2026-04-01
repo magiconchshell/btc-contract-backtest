@@ -98,7 +98,7 @@ class DefaultWebsocketTransport:
             if self._is_closed and not self._message_queue:
                 raise ConnectionError("Websocket transport is closed")
 
-            return self._message_queue.pop(0)
+            return self._message_queue.popleft()
 
     def close(self) -> None:
         self._is_closed = True

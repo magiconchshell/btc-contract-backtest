@@ -161,6 +161,7 @@ class GovernedLiveSession(TradingRuntime):
         state = self.gov_state.load()
         # If a specific mode was passed to the constructor (e.g. from the UI),
         # use it unless it's the default and the state file has something else.
+        current_mode: TradingMode
         if mode != TradingMode.APPROVAL_REQUIRED:
             current_mode = mode
             # Sync back to governance state
@@ -827,10 +828,12 @@ class GovernedLiveSession(TradingRuntime):
                     OrderType.MARKET,
                     reduce_only=True,
                 )
-                fills = self.core.try_fill_order(close_order, snapshot_obj)
-                for f in fills:
+                instant_fills = self.core.try_fill_order(close_order, snapshot_obj)
+                for f in instant_fills:
                     self.core.apply_fill(f)
-                payload.setdefault("live_fills", []).extend([f.__dict__ for f in fills])
+                payload.setdefault("live_fills", []).extend(
+                    [f.__dict__ for f in instant_fills]
+                )
                 self.audit.log(
                     "paper_instant_close",
                     {"side": close_order.side.value, "qty": close_order.quantity},
@@ -843,11 +846,11 @@ class GovernedLiveSession(TradingRuntime):
                 if qty > 0:
                     open_side = OrderSide.BUY if target_signal == 1 else OrderSide.SELL
                     order = self.core.create_order(open_side, qty, OrderType.MARKET)
-                    fills = self.core.try_fill_order(order, snapshot_obj)
-                    for f in fills:
+                    instant_fills = self.core.try_fill_order(order, snapshot_obj)
+                    for f in instant_fills:
                         self.core.apply_fill(f)
                     payload.setdefault("live_fills", []).extend(
-                        [f.__dict__ for f in fills]
+                        [f.__dict__ for f in instant_fills]
                     )
                     self.audit.log(
                         "paper_instant_fill",
@@ -885,12 +888,14 @@ class GovernedLiveSession(TradingRuntime):
                     "result": result.get("status"),
                 }
             )
-        order = result.get("order") if isinstance(result, dict) else None
-        if order is not None and hasattr(store, "upsert_order"):
-            record = canonical_record_from_order(order, submission_mode="governed_live")
+        new_order = result.get("order") if isinstance(result, dict) else None
+        if new_order is not None and hasattr(store, "upsert_order"):
+            record = canonical_record_from_order(
+                new_order, submission_mode="governed_live"
+            )
             record = apply_local_submit(
                 record,
-                timestamp=order.created_at,
+                timestamp=new_order.created_at,
                 payload={
                     "signal": payload["signal"],
                     "quantity": float(intended.get("quantity", 0.0)),
