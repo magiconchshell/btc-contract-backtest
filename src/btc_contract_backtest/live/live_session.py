@@ -221,8 +221,11 @@ class GovernedLiveSession(TradingRuntime):
             event_source=self.event_source,
         )
 
-        # Sync position from exchange on startup
-        self._sync_position_from_exchange()
+        # Sync position from exchange on startup (unless PAPER mode)
+        if self.policy.mode != TradingMode.PAPER:
+            self._sync_position_from_exchange()
+        else:
+            logger.info("Paper Trading active (independent): skipping exchange position sync.")
 
         # Threading and shutdown state
         self._shutdown_event = threading.Event()
@@ -735,29 +738,40 @@ class GovernedLiveSession(TradingRuntime):
         store = self.state_store()
         canonical_state = self.exchange_events.execution_state
         local_orders = canonical_state.active_orders() or []
-        balance = self.adapter.fetch_balance()
+        
         available_margin = None
-        if balance.ok and isinstance(balance.payload, dict):
-            usdt_raw = balance.payload.get("USDT")
-            usdt = usdt_raw if isinstance(usdt_raw, dict) else {}
-            available_margin = usdt.get("free")
+        reconcile_ok = True
+        
+        if self.policy.mode != TradingMode.PAPER:
+            balance = self.adapter.fetch_balance()
+            if balance.ok and isinstance(balance.payload, dict):
+                usdt_raw = balance.payload.get("USDT")
+                usdt = usdt_raw if isinstance(usdt_raw, dict) else {}
+                available_margin = usdt.get("free")
+                
+            local_position = canonical_state.derived_position()
+            open_local_orders = len(local_orders)
+            reconcile = self.adapter.reconcile_state(
+                local_position.get("side", self.core.position.side),
+                open_local_orders,
+                local_position=local_position,
+                local_orders=local_orders,
+            )
+            reconcile_payload = (
+                reconcile.payload if isinstance(reconcile.payload, dict) else {}
+            )
+            reconcile_ok = bool(reconcile.ok and reconcile_payload.get("ok", False))
+            payload["reconcile_report"] = (
+                reconcile.payload
+                if reconcile.ok
+                else {"ok": False, "error": reconcile.error}
+            )
+        else:
+            # In paper mode, we use local core capital as margin "truth"
+            available_margin = self.core.capital
+            payload["reconcile_report"] = {"ok": True, "note": "reconciliation skipped in paper mode"}
+
         local_position = canonical_state.derived_position()
-        open_local_orders = len(local_orders)
-        reconcile = self.adapter.reconcile_state(
-            local_position.get("side", self.core.position.side),
-            open_local_orders,
-            local_position=local_position,
-            local_orders=local_orders,
-        )
-        reconcile_payload = (
-            reconcile.payload if isinstance(reconcile.payload, dict) else {}
-        )
-        reconcile_ok = bool(reconcile.ok and reconcile_payload.get("ok", False))
-        payload["reconcile_report"] = (
-            reconcile.payload
-            if reconcile.ok
-            else {"ok": False, "error": reconcile.error}
-        )
         result = self.executor.submit_intended_order(
             symbol=self.context.contract.symbol,
             signal=payload["signal"],
@@ -962,8 +976,9 @@ class GovernedLiveSession(TradingRuntime):
                     break
                 # Check for WebSocket reconnects requiring sync
                 if self.exchange_events.execution_state.needs_rest_reconciliation:
-                    logger.info("WebSocket reconnected: triggering REST position sync")
-                    self._sync_position_from_exchange()
+                    if self.policy.mode != TradingMode.PAPER:
+                        logger.info("WebSocket reconnected: triggering REST position sync")
+                        self._sync_position_from_exchange()
                     self.exchange_events.execution_state.needs_rest_reconciliation = False
 
                 # Handle watchdog halts (Error Recovery Policy)

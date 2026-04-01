@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Conch Shell | BTC Trading Engine Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Lightweight Charts for Crypto visualization -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar glass">
+            <div class="logo">
+                <i class="fa-solid fa-conch"></i>
+                <span>MCS</span>
+            </div>
+
+            <ul class="nav-links">
+                <li class="nav-item active" data-view="setup-view">
+                    <i class="fa-solid fa-sliders"></i> System Setup
+                </li>
+                <li class="nav-item" data-view="dashboard-view">
+                    <i class="fa-solid fa-chart-line"></i> Live Dashboard
+                </li>
+                <li class="nav-item" data-view="reports-view">
+                    <i class="fa-solid fa-file-invoice-dollar"></i> Detailed Reports
+                </li>
+            </ul>
+
+            <div style="flex: 1;"></div>
+
+            <div class="status-indicator">
+                <div id="service-dot" class="dot dot-offline"></div>
+                <span id="service-text">DISCONNECTED</span>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+
+            <!-- Setup View -->
+            <section id="setup-view" class="view active">
+                <h1 style="margin-bottom: 32px; font-size: 2.5rem;">Engine Configuration</h1>
+                <div class="config-grid">
+                    <div class="glass glass-card" style="padding: 32px;">
+                        <h3 style="margin-bottom: 24px;"><i class="fa-solid fa-gear"></i> Trading Parameters</h3>
+                        <div class="form-group">
+                            <label>Active Strategy</label>
+                            <select id="cfg-strategy" class="input-styled">
+                                <option value="sparse_meta_portfolio" selected>Sparse Meta Portfolio (Default)</option>
+                                <option value="long_only_regime">Long Only Regime Strategy</option>
+                                <option value="short_lite_regime">Short Lite Regime Strategy</option>
+                                <option value="short_overlay_switcher">Short Overlay Switcher Strategy</option>
+                                <option value="extreme_downtrend_short">Extreme Downtrend Short Strategy</option>
+                                <option value="ema_trend">EMA Trend Strategy</option>
+                                <option value="macd">MACD Cross Strategy</option>
+                                <option value="rsi">RSI Reversal Strategy</option>
+                                <option value="sma_cross">SMA Cross Strategy</option>
+                                <option value="regime_filtered">Regime Filtered Strategy</option>
+                                <option value="regime_asymmetric">Regime Asymmetric Strategy</option>
+                                <option value="regime_switcher">Regime Switcher Strategy</option>
+                                <option value="strong_bull_long">Strong Bull Long Strategy</option>
+                                <option value="buy_and_hold_long">Buy and Hold Long Strategy</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Initial Capital (USDT)</label>
+                            <input type="number" id="cfg-capital" class="input-styled" value="1000">
+                        </div>
+                        <div class="form-group">
+                            <label>Leverage</label>
+                            <select id="cfg-leverage" class="input-styled">
+                                <option value="1">1x</option>
+                                <option value="3">3x</option>
+                                <option value="5" selected>5x</option>
+                                <option value="10">10x</option>
+                                <option value="20">20x</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Trading Mode</label>
+                            <select id="cfg-mode" class="input-styled">
+                                <option value="PAPER">Paper Trading (Simulated)</option>
+                                <option value="GUARDED_LIVE">Guarded Live (Exchange API)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Target Symbol</label>
+                            <input type="text" id="cfg-symbol" class="input-styled" value="BTC/USDT">
+                        </div>
+                        <div class="form-group">
+                            <label>Timeframe (Interval)</label>
+                            <select id="cfg-timeframe" class="input-styled">
+                                <option value="1m" selected>1 Minute</option>
+                                <option value="5m">5 Minutes</option>
+                                <option value="15m">15 Minutes</option>
+                                <option value="1h">1 Hour</option>
+                                <option value="4h">4 Hours</option>
+                                <option value="1d">1 Day</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-top: 32px; display: flex; gap: 16px;">
+                            <button id="btn-start" class="btn btn-primary" style="flex: 1; height: 50px;">
+                                <i class="fa-solid fa-play"></i> START ENGINE
+                            </button>
+                            <button id="btn-stop" class="btn btn-danger" style="flex: 1; height: 50px;">
+                                <i class="fa-solid fa-stop"></i> TERMINATE
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="glass glass-card" style="padding: 32px;">
+                        <h3 style="margin-bottom: 24px;"><i class="fa-solid fa-shield-halved"></i> Risk Management</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="form-group">
+                                <label>Stop Loss (%)</label>
+                                <input type="number" step="0.1" id="cfg-sl" class="input-styled" value="4.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Take Profit (%)</label>
+                                <input type="number" step="0.1" id="cfg-tp" class="input-styled" value="10.0">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="form-group">
+                                <label>Risk Per Trade (%)</label>
+                                <input type="number" step="0.1" id="cfg-risk" class="input-styled" value="2.0">
+                            </div>
+                            <div class="form-group">
+                                <label>Max Capital Use (%)</label>
+                                <input type="number" step="1" id="cfg-max-pos" class="input-styled" value="95">
+                            </div>
+                        </div>
+
+                        <h4 style="margin: 16px 0 12px; font-size: 0.9rem; color: var(--text-secondary);">Advanced
+                            Protection</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="form-group">
+                                <label>ATR Stop Mult</label>
+                                <input type="number" step="0.1" id="cfg-atr-mult" class="input-styled" value="2.5">
+                            </div>
+                            <div class="form-group">
+                                <label>Break Even Trigger (%)</label>
+                                <input type="number" step="0.1" id="cfg-be-trigger" class="input-styled" value="3.0">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Max Consecutive Failures</label>
+                            <input type="number" id="cfg-max-retries" class="input-styled" value="5">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Execution Loop (Sec)</label>
+                            <input type="number" id="cfg-interval" class="input-styled" value="15">
+                        </div>
+
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 8px;">
+                            <i class="fa-solid fa-info-circle"></i> These safety bounds are enforced by the Governed
+                            Live system.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dashboard View -->
+            <section id="dashboard-view" class="view">
+                <header
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                    <h1>Live Monitoring</h1>
+                    <div class="status-indicator glass" style="padding: 8px 16px;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">STRATEGY:</span>
+                        <span id="active-strategy"
+                            style="font-size: 0.8rem; color: var(--primary);">SparseMetaPortfolio</span>
+                    </div>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="glass stat-card glow-blue">
+                        <span class="stat-label">Current Equity</span>
+                        <span id="stat-equity" class="stat-value">$1,000.00</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span class="stat-label">Total PnL</span>
+                        <span id="stat-pnl" class="stat-value" style="color: var(--success);">+$0.00</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span class="stat-label">Drawdown</span>
+                        <span id="stat-dd" class="stat-value">0.00%</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span class="stat-label">Open Position</span>
+                        <span id="stat-pos" class="stat-value">FLAT</span>
+                    </div>
+                </div>
+
+                <div class="glass chart-container" id="equity-chart">
+                    <!-- Chart goes here -->
+                </div>
+
+                <div class="dashboard-bottom-grid">
+                    <div class="glass log-panel">
+                        <div class="log-header">
+                            <span><i class="fa-solid fa-list-ul"></i> System Events</span>
+                            <span id="log-count" style="font-size: 0.8rem; opacity: 0.5;">0 entries</span>
+                        </div>
+                        <div id="log-list" class="log-list">
+                            <!-- Logs go here -->
+                        </div>
+                    </div>
+                    <div class="glass" style="padding: 24px;">
+                        <h3 style="margin-bottom: 16px;">Decision Log</h3>
+                        <div id="decision-panel" style="font-size: 0.9rem; line-height: 1.6;">
+                            <p style="color: var(--text-secondary); font-style: italic;">Waiting for strategy
+                                decisions...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reports View -->
+            <section id="reports-view" class="view">
+                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+                    <h1>Performance Analytics</h1>
+                    <button class="btn btn-primary" onclick="exportData()">
+                        <i class="fa-solid fa-download"></i> EXPORT CSV
+                    </button>
+                </header>
+
+                <div class="stats-grid" id="report-stats" style="margin-bottom: 32px;">
+                    <div class="glass stat-card glow-blue">
+                        <span class="stat-label">Win Rate</span>
+                        <span id="rep-winrate" class="stat-value">0%</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span class="stat-label">Profit Factor</span>
+                        <span id="rep-pf" class="stat-value">0.0</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span id="rep-total-trades-label" class="stat-label">Total Trades</span>
+                        <span id="rep-trades" class="stat-value">0</span>
+                    </div>
+                    <div class="glass stat-card">
+                        <span class="stat-label">Avg Bars Held</span>
+                        <span id="rep-avg-bars" class="stat-value">0</span>
+                    </div>
+                </div>
+
+                <div class="glass report-card" style="padding: 24px; overflow-x: auto;">
+                    <h3 style="margin-bottom: 24px;"><i class="fa-solid fa-history"></i> Executed Trades History</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                                <th style="padding: 12px;">Exit Time</th>
+                                <th style="padding: 12px;">Side</th>
+                                <th style="padding: 12px;">Entry</th>
+                                <th style="padding: 12px;">Exit</th>
+                                <th style="padding: 12px;">Qty</th>
+                                <th style="padding: 12px;">PnL ($)</th>
+                                <th style="padding: 12px;">Duration</th>
+                                <th style="padding: 12px;">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trade-history-body">
+                            <!-- Data injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+
+</html>
