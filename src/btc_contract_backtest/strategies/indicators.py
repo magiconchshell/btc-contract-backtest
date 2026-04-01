@@ -73,3 +73,33 @@ class MACDCrossStrategy(BaseStrategy):
         df.loc[bullish, "signal"] = 1
         df.loc[bearish, "signal"] = -1
         return df
+
+
+class KDJCrossStrategy(BaseStrategy):
+    def __init__(self, n: int = 9, m1: int = 3, m2: int = 3):
+        self.n = n
+        self.m1 = m1
+        self.m2 = m2
+
+    def name(self) -> str:
+        return "kdj_cross"
+
+    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        low_min = df["low"].rolling(self.n).min()
+        high_max = df["high"].rolling(self.n).max()
+
+        # Add epsilon 1e-9 to prevent division by zero in rsv calculation
+        rsv = 100 * (df["close"] - low_min) / (high_max - low_min + 1e-9)
+
+        df["k"] = rsv.ewm(alpha=1 / self.m1, adjust=False).mean()
+        df["d"] = df["k"].ewm(alpha=1 / self.m2, adjust=False).mean()
+        df["j"] = 3 * df["k"] - 2 * df["d"]
+
+        df["signal"] = 0
+        bullish = (df["k"] > df["d"]) & (df["k"].shift(1) <= df["d"].shift(1))
+        bearish = (df["k"] < df["d"]) & (df["k"].shift(1) >= df["d"].shift(1))
+
+        df.loc[bullish, "signal"] = 1
+        df.loc[bearish, "signal"] = -1
+        return df
