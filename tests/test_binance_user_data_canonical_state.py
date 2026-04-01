@@ -150,9 +150,7 @@ def test_execution_state_dedupes_replayed_events_and_tracks_gap(tmp_path):
 
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", listen_key_keepalive_seconds=1
-        ),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT", listen_key_keepalive_seconds=1),
         transport_factory=transport_factory,
         clock=clock,
         sleep_fn=clock.sleep,
@@ -196,9 +194,7 @@ def test_keepalive_and_reconnect_policy_are_exposed_in_state(tmp_path):
     clock = ClockHarness()
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", listen_key_keepalive_seconds=1
-        ),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT", listen_key_keepalive_seconds=1),
         reconnect_policy=ReconnectPolicy(initial_delay_seconds=2, max_delay_seconds=5),
         transport_factory=lambda _url: FakeTransport([]),
         clock=clock,

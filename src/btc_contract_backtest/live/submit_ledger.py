@@ -129,7 +129,9 @@ class SubmitLedger:
             for item in intents:
                 if item.get("request_id") == request_id:
                     item.setdefault("attempts", []).append(payload)
-                    item["updated_at"] = payload.get("timestamp") or item.get("updated_at")
+                    item["updated_at"] = payload.get("timestamp") or item.get(
+                        "updated_at"
+                    )
                     self.save(data)
                     return item
         return None

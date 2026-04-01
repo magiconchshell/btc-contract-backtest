@@ -203,7 +203,7 @@ class SimulatorCore:
         client_order_id: Optional[str] = None,
     ) -> Order:
         oid = str(uuid.uuid4())
-        
+
         # Round quantity and price using constraint checker methods
         quantity = self.constraint_checker._round_to_lot(quantity)
         price = self.constraint_checker._round_to_tick(price)
@@ -362,14 +362,16 @@ class SimulatorCore:
             check = self.constraint_checker.validate_order(
                 quantity=remaining,
                 price=None if is_market else price_estimate,
-                side=order.side.value if hasattr(order.side, 'value') else str(order.side),
+                side=order.side.value
+                if hasattr(order.side, "value")
+                else str(order.side),
                 order_type=(
                     order.order_type.value
-                    if hasattr(order.order_type, 'value')
+                    if hasattr(order.order_type, "value")
                     else str(order.order_type)
                 ),
                 notional=remaining * price_estimate,
-                reduce_only=getattr(order, 'reduce_only', False),
+                reduce_only=getattr(order, "reduce_only", False),
                 position_side=self.position.side,
                 current_position_notional=self.position.notional,
                 current_position_side=self.position.side,
@@ -377,9 +379,7 @@ class SimulatorCore:
             if not check.ok:
                 order.status = OrderStatus.REJECTED
                 order.updated_at = self.now_iso()
-                violation_codes = [
-                    v.get('code', 'unknown') for v in check.violations
-                ]
+                violation_codes = [v.get("code", "unknown") for v in check.violations]
                 self.emit_risk_event(
                     "order_rejected",
                     f"Backtest constraint violation: {', '.join(violation_codes)}",
@@ -585,8 +585,9 @@ class SimulatorCore:
                 current_ts = str(snapshot.timestamp)
                 # Parse timestamps to compare
                 from datetime import datetime as _dt
-                last_dt = _dt.fromisoformat(last_ts.replace('Z', '+00:00'))
-                curr_dt = _dt.fromisoformat(current_ts.replace('Z', '+00:00'))
+
+                last_dt = _dt.fromisoformat(last_ts.replace("Z", "+00:00"))
+                curr_dt = _dt.fromisoformat(current_ts.replace("Z", "+00:00"))
                 hours_elapsed = (curr_dt - last_dt).total_seconds() / 3600
                 if hours_elapsed < interval_hours:
                     return 0.0
@@ -598,7 +599,9 @@ class SimulatorCore:
             return 0.0
 
         # Record funding timestamp
-        self._last_funding_timestamp = str(snapshot.timestamp) if snapshot.timestamp else None
+        self._last_funding_timestamp = (
+            str(snapshot.timestamp) if snapshot.timestamp else None
+        )
         sample = sample_from_execution(
             timestamp=snapshot.timestamp,
             symbol=snapshot.symbol,

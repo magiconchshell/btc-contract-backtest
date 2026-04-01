@@ -1,4 +1,3 @@
-import time
 import threading
 import logging
 from collections import deque
@@ -7,18 +6,22 @@ import websocket
 
 logger = logging.getLogger(__name__)
 
+
 class DefaultWebsocketTransport:
     """
     A concrete implementation of WebsocketTransport Protocol using websocket-client.
     Provides a simple synchronous recv() mapping from the underlying threaded stream.
     """
+
     # Maximum messages to buffer. Oldest are dropped when full to prevent OOM.
     MAX_QUEUE_SIZE = 2000
 
     def __init__(self, url: str, connect_timeout: float = 5.0):
         self.url = url
         # Bounded deque: drops oldest messages when full rather than growing unboundedly.
-        self._message_queue: deque[Union[str, bytes]] = deque(maxlen=self.MAX_QUEUE_SIZE)
+        self._message_queue: deque[Union[str, bytes]] = deque(
+            maxlen=self.MAX_QUEUE_SIZE
+        )
         self._error: Exception | None = None
         self._is_closed = False
         self._cond = threading.Condition()
@@ -33,9 +36,7 @@ class DefaultWebsocketTransport:
             on_close=self._on_close,
         )
         self._thread = threading.Thread(
-            target=self._ws.run_forever,
-            daemon=True,
-            name=f"ws-transport-{hash(url)}"
+            target=self._ws.run_forever, daemon=True, name=f"ws-transport-{hash(url)}"
         )
         self._thread.start()
 
@@ -67,7 +68,9 @@ class DefaultWebsocketTransport:
 
     def _on_error(self, ws, error):
         with self._cond:
-            self._error = error if isinstance(error, Exception) else Exception(str(error))
+            self._error = (
+                error if isinstance(error, Exception) else Exception(str(error))
+            )
             self._is_closed = True
             logger.warning("WebsocketTransport error: %s", error)
             self._cond.notify_all()
@@ -82,17 +85,19 @@ class DefaultWebsocketTransport:
     def recv(self, timeout: float = 2.0) -> Union[str, bytes, dict[str, Any]]:
         with self._cond:
             # Wait until a message arrives, an error occurs, or it's closed
-            while not self._message_queue and not self._is_closed and self._error is None:
+            while (
+                not self._message_queue and not self._is_closed and self._error is None
+            ):
                 if not self._cond.wait(timeout):
-                    return "" # Return empty if nothing arrived in timeout to unblock listener loops
+                    return ""  # Return empty if nothing arrived in timeout to unblock listener loops
 
             if self._error is not None:
                 err = self._error
-                self._error = None # Clear after raising
+                self._error = None  # Clear after raising
                 raise err
             if self._is_closed and not self._message_queue:
                 raise ConnectionError("Websocket transport is closed")
-            
+
             return self._message_queue.pop(0)
 
     def close(self) -> None:

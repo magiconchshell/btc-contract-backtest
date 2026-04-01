@@ -97,7 +97,7 @@ class BacktestRuntime(TradingRuntime):
         if self.core.position.side == 0:
             return
         self.core.position.bars_held += 1
-        
+
         ctx = ExitEvalContext(
             position_side=self.core.position.side,
             peak_price=self.core.position.peak_price,
@@ -108,7 +108,7 @@ class BacktestRuntime(TradingRuntime):
             self.core.position.peak_price = update.peak_price
         if update.trough_price is not None:
             self.core.position.trough_price = update.trough_price
-            
+
         self.core.apply_periodic_funding(snapshot)
 
     def _check_liquidation(self, snapshot) -> bool:
@@ -156,7 +156,7 @@ class BacktestRuntime(TradingRuntime):
     def _maybe_close_position(self, snapshot) -> Optional[str]:
         if self.core.position.side == 0 or self.core.position.entry_price is None:
             return None
-            
+
         ctx = ExitEvalContext(
             position_side=self.core.position.side,
             entry_price=self.core.position.entry_price,
@@ -169,9 +169,9 @@ class BacktestRuntime(TradingRuntime):
             stepped_stop_anchor=self.core.position.stepped_stop_anchor,
             atr_at_entry=self.core.position.atr_at_entry,
         )
-        
+
         signal, update = evaluate_exit(self.context.risk, ctx, snapshot.close)
-        
+
         # Apply tracking updates (break-even arming, partial taken, stepped anchor)
         if update.break_even_armed is not None:
             self.core.position.break_even_armed = update.break_even_armed
@@ -179,10 +179,10 @@ class BacktestRuntime(TradingRuntime):
             self.core.position.partial_taken = update.partial_taken
         if update.stepped_stop_anchor is not None:
             self.core.position.stepped_stop_anchor = update.stepped_stop_anchor
-            
+
         if signal is None or not signal.should_close:
             return None
-            
+
         close_qty = abs(self.core.position.quantity) * signal.close_ratio
         order = self.core.create_order(
             OrderSide.SELL if self.core.position.side == 1 else OrderSide.BUY,
@@ -192,11 +192,11 @@ class BacktestRuntime(TradingRuntime):
         )
         for fill in self.core.try_fill_order(order, snapshot):
             self.core.apply_fill(fill)
-            
+
         if self.core.trades:
             self.core.trades[-1]["reason"] = signal.reason
             self.core.trades[-1]["is_partial"] = signal.is_partial
-            
+
         return signal.reason
 
     def on_hold(self, payload: dict):

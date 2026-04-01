@@ -159,7 +159,7 @@ class GovernedLiveSession(TradingRuntime):
         self.watchdog.state.halted = wd.get("halted", False)
         self.watchdog.state.halt_reason = wd.get("halt_reason")
         state = self.gov_state.load()
-        # If a specific mode was passed to the constructor (e.g. from the UI), 
+        # If a specific mode was passed to the constructor (e.g. from the UI),
         # use it unless it's the default and the state file has something else.
         if mode != TradingMode.APPROVAL_REQUIRED:
             current_mode = mode
@@ -226,7 +226,9 @@ class GovernedLiveSession(TradingRuntime):
         if self.policy.mode != TradingMode.PAPER:
             self._sync_position_from_exchange()
         else:
-            logger.info("Paper Trading active (independent): skipping exchange position sync.")
+            logger.info(
+                "Paper Trading active (independent): skipping exchange position sync."
+            )
 
         # Track day-start equity for daily loss limit calculation.
         # Stored separately from SimulatorCore so the live session owns it.
@@ -305,18 +307,12 @@ class GovernedLiveSession(TradingRuntime):
         """
         result = self.adapter.fetch_positions()
         if not result.ok:
-            logger.warning(
-                "Position sync failed: %s", result.error
-            )
+            logger.warning("Position sync failed: %s", result.error)
             return
 
-        remote_positions = (
-            result.payload if isinstance(result.payload, list) else []
-        )
+        remote_positions = result.payload if isinstance(result.payload, list) else []
         for pos in remote_positions:
-            contracts = float(
-                pos.get("contracts") or pos.get("positionAmt") or 0.0
-            )
+            contracts = float(pos.get("contracts") or pos.get("positionAmt") or 0.0)
             if contracts != 0:
                 self.core.position.side = 1 if contracts > 0 else -1
                 self.core.position.quantity = abs(contracts)
@@ -325,8 +321,8 @@ class GovernedLiveSession(TradingRuntime):
                     self.core.position.entry_price = float(entry)
                 self.core.position.symbol = self.context.contract.symbol
                 self.core.position.leverage = self.context.contract.leverage
-                self.core.position.notional = (
-                    abs(contracts) * (self.core.position.entry_price or 0.0)
+                self.core.position.notional = abs(contracts) * (
+                    self.core.position.entry_price or 0.0
                 )
                 self.core.position.margin_used = (
                     self.core.position.notional / self.context.contract.leverage
@@ -456,7 +452,8 @@ class GovernedLiveSession(TradingRuntime):
                         self.core.capital += pnl
                         logger.info(
                             "Applied reduce fill PnL: %.4f capital=%.4f",
-                            pnl, self.core.capital,
+                            pnl,
+                            self.core.capital,
                         )
                     except (TypeError, ValueError):
                         pass
@@ -465,21 +462,25 @@ class GovernedLiveSession(TradingRuntime):
                 remaining = abs(self.core.position.quantity) - fill_qty
                 if remaining <= 1e-12:
                     # Fully closed
-                    self.core.trades.append({
-                        "entry_time": self.core.position.entry_time,
-                        "exit_time": fill_data.get("timestamp"),
-                        "entry_price": self.core.position.entry_price,
-                        "exit_price": fill_price,
-                        "position": self.core.position.side,
-                        "bars_held": self.core.position.bars_held,
-                        "notional_closed": self.core.position.notional,
-                        "remaining_notional": 0.0,
-                        "reason": "live_fill",
-                        "is_partial": False,
-                        "pnl_after_costs": (
-                            float(realized_pnl) if realized_pnl is not None else None
-                        ),
-                    })
+                    self.core.trades.append(
+                        {
+                            "entry_time": self.core.position.entry_time,
+                            "exit_time": fill_data.get("timestamp"),
+                            "entry_price": self.core.position.entry_price,
+                            "exit_price": fill_price,
+                            "position": self.core.position.side,
+                            "bars_held": self.core.position.bars_held,
+                            "notional_closed": self.core.position.notional,
+                            "remaining_notional": 0.0,
+                            "reason": "live_fill",
+                            "is_partial": False,
+                            "pnl_after_costs": (
+                                float(realized_pnl)
+                                if realized_pnl is not None
+                                else None
+                            ),
+                        }
+                    )
                     self.core.position.side = 0
                     self.core.position.quantity = 0.0
                     self.core.position.entry_price = None
@@ -494,17 +495,15 @@ class GovernedLiveSession(TradingRuntime):
                     logger.info("Position fully closed at %.2f", fill_price)
                 else:
                     self.core.position.quantity = remaining
-                    self.core.position.notional = (
-                        remaining * (self.core.position.entry_price or fill_price)
+                    self.core.position.notional = remaining * (
+                        self.core.position.entry_price or fill_price
                     )
                     self.core.position.margin_used = (
                         self.core.position.notional / self.context.contract.leverage
                         if self.context.contract.leverage > 0
                         else 0.0
                     )
-                    logger.info(
-                        "Position partially reduced: remaining=%.6f", remaining
-                    )
+                    logger.info("Position partially reduced: remaining=%.6f", remaining)
             else:
                 # Open fill — set position
                 fill_side = 1 if side == "buy" else -1
@@ -529,7 +528,9 @@ class GovernedLiveSession(TradingRuntime):
                     self.core.position.stepped_stop_anchor = None
                     logger.info(
                         "Position opened: side=%d qty=%.6f entry=%.2f",
-                        fill_side, fill_qty, fill_price,
+                        fill_side,
+                        fill_qty,
+                        fill_price,
                     )
                 elif self.core.position.side == fill_side:
                     # Adding to position
@@ -537,8 +538,8 @@ class GovernedLiveSession(TradingRuntime):
                     old_entry = self.core.position.entry_price or fill_price
                     new_qty = old_qty + fill_qty
                     self.core.position.entry_price = (
-                        (old_qty * old_entry + fill_qty * fill_price) / new_qty
-                    )
+                        old_qty * old_entry + fill_qty * fill_price
+                    ) / new_qty
                     self.core.position.quantity = new_qty
                     self.core.position.notional = (
                         new_qty * self.core.position.entry_price
@@ -550,7 +551,8 @@ class GovernedLiveSession(TradingRuntime):
                     )
                     logger.info(
                         "Position increased: total_qty=%.6f avg_entry=%.2f",
-                        new_qty, self.core.position.entry_price,
+                        new_qty,
+                        self.core.position.entry_price,
                     )
 
             processed.append(fill_data)
@@ -580,11 +582,12 @@ class GovernedLiveSession(TradingRuntime):
             return 0.0
 
         current_equity = float(self.core.capital)
-        loss_pct = (self._day_start_equity - current_equity) / self._day_start_equity * 100.0
+        loss_pct = (
+            (self._day_start_equity - current_equity) / self._day_start_equity * 100.0
+        )
         return max(0.0, loss_pct)
 
     # ── Graceful shutdown ────────────────────────────────────────────
-
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         """Handle SIGTERM/SIGINT for graceful shutdown."""
@@ -610,15 +613,18 @@ class GovernedLiveSession(TradingRuntime):
                         else:
                             logger.warning(
                                 "Failed to cancel order %s: %s",
-                                order_id, cancel_result.error,
+                                order_id,
+                                cancel_result.error,
                             )
 
         # Save final state
-        self.save_state({
-            "event": "shutdown",
-            "timestamp": self.now_iso(),
-            "reason": "graceful_shutdown",
-        })
+        self.save_state(
+            {
+                "event": "shutdown",
+                "timestamp": self.now_iso(),
+                "reason": "graceful_shutdown",
+            }
+        )
 
         # Stop WebSocket thread
         self._shutdown_event.set()
@@ -680,9 +686,7 @@ class GovernedLiveSession(TradingRuntime):
 
         # Check exit conditions before processing new signals
         if self.core.position.side != 0:
-            snapshot_close = float(
-                (payload.get("snapshot") or {}).get("close") or 0.0
-            )
+            snapshot_close = float((payload.get("snapshot") or {}).get("close") or 0.0)
             if snapshot_close > 0:
                 self.exit_manager.update_tracking(self.core, snapshot_close)
                 exit_result = self.exit_manager.check_and_submit_exit(
@@ -769,17 +773,17 @@ class GovernedLiveSession(TradingRuntime):
         store = self.state_store()
         canonical_state = self.exchange_events.execution_state
         local_orders = canonical_state.active_orders() or []
-        
+
         available_margin = None
         reconcile_ok = True
-        
+
         if self.policy.mode != TradingMode.PAPER:
             balance = self.adapter.fetch_balance()
             if balance.ok and isinstance(balance.payload, dict):
                 usdt_raw = balance.payload.get("USDT")
                 usdt = usdt_raw if isinstance(usdt_raw, dict) else {}
                 available_margin = usdt.get("free")
-                
+
             local_position = canonical_state.derived_position()
             open_local_orders = len(local_orders)
             reconcile = self.adapter.reconcile_state(
@@ -800,10 +804,13 @@ class GovernedLiveSession(TradingRuntime):
         else:
             # In paper mode, we use local core capital as margin "truth"
             available_margin = self.core.capital
-            payload["reconcile_report"] = {"ok": True, "note": "reconciliation skipped in paper mode"}
+            payload["reconcile_report"] = {
+                "ok": True,
+                "note": "reconciliation skipped in paper mode",
+            }
 
         local_position = canonical_state.derived_position()
-        
+
         # --- Instant Execution for PAPER Mode ---
         if self.policy.mode == TradingMode.PAPER:
             current_side = self.core.position.side
@@ -839,7 +846,9 @@ class GovernedLiveSession(TradingRuntime):
                     fills = self.core.try_fill_order(order, snapshot_obj)
                     for f in fills:
                         self.core.apply_fill(f)
-                    payload.setdefault("live_fills", []).extend([f.__dict__ for f in fills])
+                    payload.setdefault("live_fills", []).extend(
+                        [f.__dict__ for f in fills]
+                    )
                     self.audit.log(
                         "paper_instant_fill",
                         {"side": open_side.value, "qty": qty},
@@ -1007,7 +1016,7 @@ class GovernedLiveSession(TradingRuntime):
             self.save_state(payload)
             self.last_decision = payload
             return payload
-        
+
         decision = super().step()
         self.last_decision = decision
         return decision
@@ -1073,16 +1082,22 @@ class GovernedLiveSession(TradingRuntime):
                 # Check for WebSocket reconnects requiring sync
                 if self.exchange_events.execution_state.needs_rest_reconciliation:
                     if self.policy.mode != TradingMode.PAPER:
-                        logger.info("WebSocket reconnected: triggering REST position sync")
+                        logger.info(
+                            "WebSocket reconnected: triggering REST position sync"
+                        )
                         self._sync_position_from_exchange()
-                    self.exchange_events.execution_state.needs_rest_reconciliation = False
+                    self.exchange_events.execution_state.needs_rest_reconciliation = (
+                        False
+                    )
 
                 # Handle watchdog halts (Error Recovery Policy)
                 if self.watchdog.state.halted:
                     # Upgrade to governance emergency_stop
                     state = self.gov_state.load()
                     if not state.get("emergency_stop"):
-                        logger.critical("Error Recovery Policy: Max failures exceeded. Triggering emergency_stop.")
+                        logger.critical(
+                            "Error Recovery Policy: Max failures exceeded. Triggering emergency_stop."
+                        )
                         state["emergency_stop"] = True
                         self.gov_state.save(state)
                         try:
@@ -1094,7 +1109,10 @@ class GovernedLiveSession(TradingRuntime):
                                     if order_id:
                                         self.adapter.cancel_order(order_id)
                         except Exception as exc:  # noqa: BLE001
-                            logger.error("Failed to cancel open orders on emergency stop", exc_info=exc)
+                            logger.error(
+                                "Failed to cancel open orders on emergency stop",
+                                exc_info=exc,
+                            )
                     # Stay halted until user intervention
                     self._shutdown_event.wait(timeout=interval_seconds)
                     continue
@@ -1110,7 +1128,7 @@ class GovernedLiveSession(TradingRuntime):
                     if self.watchdog.state.consecutive_failures > 0:
                         logger.info("Step succeeded, resetting failure count")
                         self.watchdog.beat()
-                        
+
                 except Exception as exc:  # noqa: BLE001
                     logger.error("Step error: %s", exc)
                     self.watchdog.record_failure(str(exc))
@@ -1119,11 +1137,16 @@ class GovernedLiveSession(TradingRuntime):
                         {"timestamp": self.now_iso(), "error": str(exc)},
                         severity="critical",
                     )
-                    
+
                     if not self.watchdog.state.halted:
                         # Exponential backoff sleep
-                        backoff = min(2 ** self.watchdog.state.consecutive_failures, interval_seconds)
-                        logger.warning("Error Recovery Policy: Backing off for %ds", backoff)
+                        backoff = min(
+                            2**self.watchdog.state.consecutive_failures,
+                            interval_seconds,
+                        )
+                        logger.warning(
+                            "Error Recovery Policy: Backing off for %ds", backoff
+                        )
                         self._shutdown_event.wait(timeout=backoff)
                         continue
 

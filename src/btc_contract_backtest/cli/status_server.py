@@ -122,15 +122,9 @@ def create_status_app(session: Any) -> FastAPI:
         unrealized_pnl = 0.0
         mark_price = None
         try:
-            ticker = _SESSION.exchange.fetch_ticker(
-                _SESSION.context.contract.symbol
-            )
+            ticker = _SESSION.exchange.fetch_ticker(_SESSION.context.contract.symbol)
             mark_price = float(ticker.get("last") or 0.0)
-            if (
-                pos.side != 0
-                and pos.entry_price is not None
-                and mark_price > 0
-            ):
+            if pos.side != 0 and pos.entry_price is not None and mark_price > 0:
                 unrealized_pnl = (
                     (mark_price - pos.entry_price)
                     / pos.entry_price
@@ -208,16 +202,8 @@ def create_status_app(session: Any) -> FastAPI:
             for t in trades_list
             if t.get("pnl_after_costs") is not None
         )
-        win_count = sum(
-            1
-            for t in trades_list
-            if (t.get("pnl_after_costs") or 0) > 0
-        )
-        loss_count = sum(
-            1
-            for t in trades_list
-            if (t.get("pnl_after_costs") or 0) < 0
-        )
+        win_count = sum(1 for t in trades_list if (t.get("pnl_after_costs") or 0) > 0)
+        loss_count = sum(1 for t in trades_list if (t.get("pnl_after_costs") or 0) < 0)
         total_count = len(trades_list)
         win_rate = (win_count / total_count * 100) if total_count > 0 else 0.0
 

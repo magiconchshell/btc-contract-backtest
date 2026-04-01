@@ -74,7 +74,9 @@ class GuardedLiveExecutor:
 
         # De-duplication: Skip if already in the desired position side
         if signal != 0 and signal == position_side:
-            logger.info("Already in position matching signal %d, skipping submission.", signal)
+            logger.info(
+                "Already in position matching signal %d, skipping submission.", signal
+            )
             return {
                 "status": "already_in_position",
                 "request_id": request_id,

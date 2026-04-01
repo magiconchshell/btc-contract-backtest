@@ -269,9 +269,7 @@ def test_user_data_run_loop_ingests_normalized_events_and_keeps_listen_key_alive
 
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", listen_key_keepalive_seconds=1
-        ),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT", listen_key_keepalive_seconds=1),
         transport_factory=transport_factory,
         clock=clock,
         sleep_fn=clock.sleep,
@@ -346,19 +344,18 @@ def test_user_data_run_loop_reconnects_with_backoff_and_continues_ingest(tmp_pat
 
 def test_mainnet_requires_explicit_opt_in():
     import os
+
     # Temporarily clear to test guard
     orig = os.environ.get("BINANCE_FUTURES_ENABLE_MAINNET")
     if orig:
         del os.environ["BINANCE_FUTURES_ENABLE_MAINNET"]
-    
+
     try:
         exchange = FakeListenKeyExchange()
         adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
         source = BinanceFuturesUserDataEventSource(
             adapter,
-            BinanceFuturesStreamConfig(
-                symbol="BTC/USDT", allow_mainnet=False
-            ),
+            BinanceFuturesStreamConfig(symbol="BTC/USDT", allow_mainnet=False),
         )
 
         try:

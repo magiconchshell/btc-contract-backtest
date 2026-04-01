@@ -126,6 +126,7 @@ class LiveExitManager:
         now_iso = datetime.now(timezone.utc).isoformat()
         if self._last_exit_submitted_at is not None:
             from datetime import datetime as _dt
+
             last = _dt.fromisoformat(self._last_exit_submitted_at)
             elapsed = (_dt.now(timezone.utc) - last).total_seconds()
             if elapsed < self._exit_cooldown_seconds:

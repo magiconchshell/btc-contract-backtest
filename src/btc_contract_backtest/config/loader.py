@@ -30,6 +30,7 @@ def _merge_dataclass(cls, data: dict[str, Any], defaults: Optional[Any] = None):
 
     # Filter out keys not in the dataclass fields
     import dataclasses
+
     field_names = {f.name for f in dataclasses.fields(cls)}
     filtered = {k: v for k, v in data.items() if k in field_names}
     return cls(**filtered)
@@ -41,8 +42,7 @@ def load_config_from_dict(data: dict[str, Any]) -> EngineConfig:
     # Handle leverage_brackets specially
     brackets_raw = contract_data.pop("leverage_brackets", [])
     brackets = [
-        LeverageBracket(**b) if isinstance(b, dict) else b
-        for b in brackets_raw
+        LeverageBracket(**b) if isinstance(b, dict) else b for b in brackets_raw
     ]
     contract = _merge_dataclass(ContractSpec, contract_data)
     contract.leverage_brackets = brackets

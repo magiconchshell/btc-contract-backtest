@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import signal
 import threading
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -357,10 +355,12 @@ class PaperTradingSession(TradingRuntime):
         # --- Signal handling (main thread only) ---
         original_sigint = original_sigterm = None
         if threading.current_thread() is threading.main_thread():
+
             def _handle_signal(signum, frame):
                 sig_name = signal.Signals(signum).name
                 logger.info("%s received, stopping paper trading loop.", sig_name)
                 shutdown_event.set()
+
             try:
                 original_sigint = signal.getsignal(signal.SIGINT)
                 original_sigterm = signal.getsignal(signal.SIGTERM)
@@ -388,7 +388,7 @@ class PaperTradingSession(TradingRuntime):
                     consecutive_failures = 0  # reset on success
                 except Exception as exc:  # noqa: BLE001
                     consecutive_failures += 1
-                    backoff = min(2 ** consecutive_failures, interval_seconds)
+                    backoff = min(2**consecutive_failures, interval_seconds)
                     logger.error(
                         "Paper trading step error (attempt %d/%d): %s — backing off %ds",
                         consecutive_failures,

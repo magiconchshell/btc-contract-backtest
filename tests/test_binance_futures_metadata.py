@@ -146,7 +146,7 @@ def test_mainnet_requires_explicit_opt_in():
     assert is_binance_mainnet_enabled(BINANCE_FUTURES_MAINNET.key, environ={}) is False
     with pytest.raises(PermissionError):
         require_binance_profile_enabled(BINANCE_FUTURES_MAINNET.key, environ={})
-    
+
     # Verify opt-in works
     require_binance_profile_enabled(
         BINANCE_FUTURES_MAINNET.key,

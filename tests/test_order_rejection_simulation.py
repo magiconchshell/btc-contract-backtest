@@ -8,7 +8,6 @@ lot_size, etc.).
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from btc_contract_backtest.config.models import (
     AccountConfig,
@@ -25,7 +24,8 @@ def make_engine(
     risk: RiskConfig | None = None,
 ) -> FuturesBacktestEngine:
     return FuturesBacktestEngine(
-        contract=contract or ContractSpec(
+        contract=contract
+        or ContractSpec(
             symbol="BTC/USDT",
             leverage=5,
             min_notional=5.0,
@@ -34,7 +34,8 @@ def make_engine(
         account=AccountConfig(initial_capital=1000.0),
         risk=risk or RiskConfig(max_position_notional_pct=0.5),
         timeframe="1h",
-        execution=execution or ExecutionConfig(
+        execution=execution
+        or ExecutionConfig(
             allow_partial_fills=False,
             enforce_exchange_constraints=True,
         ),
@@ -79,9 +80,7 @@ def test_order_rejection_below_min_notional():
     # With min_notional=100 and tiny position, order should be rejected
     risk_events = results.get("risk_events")
     if risk_events is not None and not risk_events.empty:
-        rejection_events = risk_events[
-            risk_events["event_type"] == "order_rejected"
-        ]
+        rejection_events = risk_events[risk_events["event_type"] == "order_rejected"]
         assert len(rejection_events) >= 1
     else:
         # If no risk events at all, the order was too small to be created
@@ -100,9 +99,7 @@ def test_no_rejection_when_constraints_disabled():
     results = engine.simulate(df)
     risk_events = results.get("risk_events")
     if risk_events is not None and not risk_events.empty:
-        rejection_events = risk_events[
-            risk_events["event_type"] == "order_rejected"
-        ]
+        rejection_events = risk_events[risk_events["event_type"] == "order_rejected"]
         assert len(rejection_events) == 0
 
 
@@ -127,7 +124,5 @@ def test_valid_orders_pass_constraint_check():
     # Should have no rejection events
     risk_events = results.get("risk_events")
     if risk_events is not None and not risk_events.empty:
-        rejection_events = risk_events[
-            risk_events["event_type"] == "order_rejected"
-        ]
+        rejection_events = risk_events[risk_events["event_type"] == "order_rejected"]
         assert len(rejection_events) == 0

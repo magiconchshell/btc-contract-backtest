@@ -38,51 +38,69 @@ def _ctx(
 
 # ─── Flat / no-op ───
 
+
 def test_flat_position_no_exit():
     sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=0), 95.0)
     assert sig is None
 
 
 def test_no_entry_price_no_exit():
-    sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=None), 95.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=None), 95.0
+    )
     assert sig is None
 
 
 # ─── Stop-loss ───
 
+
 def test_long_stop_loss_triggers():
-    sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=100), 96.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=100), 96.0
+    )
     assert sig is not None and sig.reason == "stop_loss"
 
 
 def test_long_stop_loss_not_triggered():
-    sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=100), 98.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(stop_loss_pct=0.03), _ctx(side=1, entry=100), 98.0
+    )
     assert sig is None
 
 
 def test_short_stop_loss_triggers():
-    sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=-1, entry=100), 104.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(stop_loss_pct=0.03), _ctx(side=-1, entry=100), 104.0
+    )
     assert sig is not None and sig.reason == "stop_loss"
 
 
 def test_short_stop_loss_not_triggered():
-    sig, _ = evaluate_exit(RiskConfig(stop_loss_pct=0.03), _ctx(side=-1, entry=100), 102.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(stop_loss_pct=0.03), _ctx(side=-1, entry=100), 102.0
+    )
     assert sig is None
 
 
 # ─── Take-profit ───
 
+
 def test_long_take_profit_triggers():
-    sig, _ = evaluate_exit(RiskConfig(take_profit_pct=0.05), _ctx(side=1, entry=100), 106.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(take_profit_pct=0.05), _ctx(side=1, entry=100), 106.0
+    )
     assert sig is not None and sig.reason == "take_profit"
 
 
 def test_short_take_profit_triggers():
-    sig, _ = evaluate_exit(RiskConfig(take_profit_pct=0.05), _ctx(side=-1, entry=100), 94.0)
+    sig, _ = evaluate_exit(
+        RiskConfig(take_profit_pct=0.05), _ctx(side=-1, entry=100), 94.0
+    )
     assert sig is not None and sig.reason == "take_profit"
 
 
 # ─── Trailing stop ───
+
 
 def test_long_trailing_stop_triggers():
     sig, _ = evaluate_exit(
@@ -122,6 +140,7 @@ def test_no_peak_no_trailing_stop():
 
 # ─── ATR stop ───
 
+
 def test_long_atr_stop_triggers():
     sig, _ = evaluate_exit(
         RiskConfig(atr_stop_mult=2.0),
@@ -150,6 +169,7 @@ def test_short_atr_stop_triggers():
 
 
 # ─── Break-even ───
+
 
 def test_break_even_armed_triggers_long():
     sig, _ = evaluate_exit(
@@ -180,6 +200,7 @@ def test_break_even_arms_on_profit():
 
 # ─── Partial take-profit ───
 
+
 def test_partial_take_profit_triggers():
     sig, upd = evaluate_exit(
         RiskConfig(partial_take_profit_pct=0.03, partial_close_ratio=0.5),
@@ -204,6 +225,7 @@ def test_partial_already_taken_skips():
 
 # ─── Time exit ───
 
+
 def test_time_exit_triggers():
     sig, _ = evaluate_exit(
         RiskConfig(max_holding_bars=10),
@@ -223,6 +245,7 @@ def test_time_exit_not_triggered():
 
 
 # ─── Stepped trailing stop ───
+
 
 def test_long_stepped_trailing_triggers():
     sig, upd = evaluate_exit(
@@ -245,6 +268,7 @@ def test_short_stepped_trailing_triggers():
 
 # ─── Priority ───
 
+
 def test_atr_stop_higher_priority_than_stop_loss():
     sig, _ = evaluate_exit(
         RiskConfig(atr_stop_mult=1.0, stop_loss_pct=0.01),
@@ -255,6 +279,7 @@ def test_atr_stop_higher_priority_than_stop_loss():
 
 
 # ─── Position tracking ───
+
 
 def test_update_tracking_updates_peak():
     upd = update_position_tracking(_ctx(side=1, peak_price=105), 110.0)

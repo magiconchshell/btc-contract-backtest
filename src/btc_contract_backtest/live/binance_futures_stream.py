@@ -467,7 +467,7 @@ class BinanceFuturesUserDataEventSource:
         self.execution_state = BinanceFuturesExecutionState(config.symbol)
 
     def source_name(self) -> str:
-        return f"binance_futures_user_data:mainnet"
+        return "binance_futures_user_data:mainnet"
 
     def source_kind(self) -> str:
         return "websocket"
@@ -631,15 +631,22 @@ class BinanceFuturesUserDataEventSource:
             except Exception as exc:  # noqa: BLE001
                 self.transport_state.reconnect_attempts += 1
                 max_att = self.reconnect_policy.max_attempts
-                if max_att is not None and self.transport_state.reconnect_attempts > max_att:
-                    raise RuntimeError(f"Reconnect failed after {max_att} attempts") from exc
-                delay = self.reconnect_policy.delay_for_attempt(self.transport_state.reconnect_attempts)
+                if (
+                    max_att is not None
+                    and self.transport_state.reconnect_attempts > max_att
+                ):
+                    raise RuntimeError(
+                        f"Reconnect failed after {max_att} attempts"
+                    ) from exc
+                delay = self.reconnect_policy.delay_for_attempt(
+                    self.transport_state.reconnect_attempts
+                )
                 self.transport_state.last_backoff_seconds = delay
                 self.sleep_fn(delay)
                 return []
 
         self.maybe_keepalive()
-        
+
         if self.transport is None:
             return []
         try:

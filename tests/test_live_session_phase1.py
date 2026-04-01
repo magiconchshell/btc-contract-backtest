@@ -5,16 +5,11 @@ Tests position sync, fill processing, exit integration, and shutdown.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-from dataclasses import dataclass
-from typing import Any, Optional
 
 import pytest
 
 from btc_contract_backtest.runtime.exit_logic import (
     ExitEvalContext,
-    ExitSignal,
-    PositionStateUpdate,
     evaluate_exit,
     update_position_tracking,
 )

@@ -53,9 +53,7 @@ class PositionStateUpdate:
     trough_price: Optional[float] = None
 
 
-def update_position_tracking(
-    ctx: ExitEvalContext, price: float
-) -> PositionStateUpdate:
+def update_position_tracking(ctx: ExitEvalContext, price: float) -> PositionStateUpdate:
     """Update peak/trough/bars tracking for an open position.
 
     This should be called every bar/tick for open positions.
@@ -64,16 +62,8 @@ def update_position_tracking(
     if ctx.position_side == 0:
         return PositionStateUpdate()
 
-    new_peak = (
-        price
-        if ctx.peak_price is None
-        else max(ctx.peak_price, price)
-    )
-    new_trough = (
-        price
-        if ctx.trough_price is None
-        else min(ctx.trough_price, price)
-    )
+    new_peak = price if ctx.peak_price is None else max(ctx.peak_price, price)
+    new_trough = price if ctx.trough_price is None else min(ctx.trough_price, price)
     return PositionStateUpdate(
         peak_price=new_peak,
         trough_price=new_trough,
@@ -99,9 +89,7 @@ def evaluate_exit(
         return None, PositionStateUpdate()
 
     price = current_price
-    pnl_pct = (
-        (price - ctx.entry_price) / ctx.entry_price
-    ) * ctx.position_side
+    pnl_pct = ((price - ctx.entry_price) / ctx.entry_price) * ctx.position_side
 
     state_update = PositionStateUpdate()
 
@@ -130,18 +118,13 @@ def evaluate_exit(
     should_close: Optional[str] = None
 
     # --- ATR stop ---
-    if (
-        risk.atr_stop_mult is not None
-        and ctx.atr_at_entry is not None
-    ):
-        if (
-            ctx.position_side == 1
-            and price <= ctx.entry_price - (ctx.atr_at_entry * risk.atr_stop_mult)
+    if risk.atr_stop_mult is not None and ctx.atr_at_entry is not None:
+        if ctx.position_side == 1 and price <= ctx.entry_price - (
+            ctx.atr_at_entry * risk.atr_stop_mult
         ):
             should_close = "atr_stop"
-        if (
-            ctx.position_side == -1
-            and price >= ctx.entry_price + (ctx.atr_at_entry * risk.atr_stop_mult)
+        if ctx.position_side == -1 and price >= ctx.entry_price + (
+            ctx.atr_at_entry * risk.atr_stop_mult
         ):
             should_close = "atr_stop"
 
@@ -154,10 +137,7 @@ def evaluate_exit(
             should_close = "break_even_stop"
 
     # --- Stepped trailing stop ---
-    if (
-        risk.stepped_trailing_stop_pct is not None
-        and should_close is None
-    ):
+    if risk.stepped_trailing_stop_pct is not None and should_close is None:
         if ctx.position_side == 1:
             peak = ctx.peak_price
             if peak is None:

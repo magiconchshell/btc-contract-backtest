@@ -44,6 +44,7 @@ class ExchangeExecutionAdapter:
         self, fn: Callable[[], dict[str, Any] | list[dict[str, Any]]]
     ) -> AdapterResult:
         import ccxt
+
         last_error = None
         for _ in range(self.max_retries):
             try:
@@ -155,7 +156,9 @@ class ExchangeExecutionAdapter:
 
     def keepalive_user_data_stream_listen_key(self, listen_key: str) -> bool:
         self.configure_binance_futures_mode()
-        params = {"listen_key": listen_key}  # Note: CCXT parameters might vary, using original logic
+        params = {
+            "listen_key": listen_key
+        }  # Note: CCXT parameters might vary, using original logic
         params = {"listenKey": listen_key}
         for method_name in ("fapiPrivatePutListenKey", "fapiprivate_put_listenkey"):
             result = self._call_exchange_api(method_name, params=params)
@@ -278,4 +281,3 @@ class ExchangeExecutionAdapter:
             details=details,
         )
         return AdapterResult(ok=True, payload=report.__dict__)
-
