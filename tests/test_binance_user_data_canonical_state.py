@@ -151,7 +151,7 @@ def test_execution_state_dedupes_replayed_events_and_tracks_gap(tmp_path):
     source = BinanceFuturesUserDataEventSource(
         adapter,
         BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", use_testnet=True, listen_key_keepalive_seconds=1
+            symbol="BTC/USDT", listen_key_keepalive_seconds=1
         ),
         transport_factory=transport_factory,
         clock=clock,
@@ -178,7 +178,7 @@ def test_execution_state_rest_sync_reconciles_snapshot(tmp_path):
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT"),
     )
 
     source.execution_state.needs_rest_reconciliation = True
@@ -197,7 +197,7 @@ def test_keepalive_and_reconnect_policy_are_exposed_in_state(tmp_path):
     source = BinanceFuturesUserDataEventSource(
         adapter,
         BinanceFuturesStreamConfig(
-            symbol="BTC/USDT", use_testnet=True, listen_key_keepalive_seconds=1
+            symbol="BTC/USDT", listen_key_keepalive_seconds=1
         ),
         reconnect_policy=ReconnectPolicy(initial_delay_seconds=2, max_delay_seconds=5),
         transport_factory=lambda _url: FakeTransport([]),
@@ -221,7 +221,7 @@ def test_execution_state_derives_authoritative_position_and_open_orders():
     adapter = ExchangeExecutionAdapter(exchange, "BTC/USDT")
     source = BinanceFuturesUserDataEventSource(
         adapter,
-        BinanceFuturesStreamConfig(symbol="BTC/USDT", use_testnet=True),
+        BinanceFuturesStreamConfig(symbol="BTC/USDT"),
     )
 
     source.execution_state.orders = {
