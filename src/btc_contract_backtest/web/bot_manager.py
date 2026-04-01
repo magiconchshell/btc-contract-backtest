@@ -179,6 +179,7 @@ class BotManager:
             markers.append({
                 "time": to_unix(t["entry_time"]),
                 "price": t["entry_price"],
+                "qty": t.get("notional_closed", 0) / t["entry_price"] if t["entry_price"] > 0 else 0,
                 "type": "BUY" if t["position"] == 1 else "SELL",
                 "side": t["position"],
                 "is_entry": True
@@ -187,6 +188,7 @@ class BotManager:
             markers.append({
                 "time": to_unix(t["exit_time"]),
                 "price": t["exit_price"],
+                "qty": t.get("notional_closed", 0) / t["exit_price"] if t["exit_price"] > 0 else 0,
                 "type": "SELL" if t["position"] == 1 else "BUY",
                 "side": t["position"],
                 "is_entry": False,
@@ -199,6 +201,7 @@ class BotManager:
             markers.append({
                 "time": to_unix(pos.entry_time),
                 "price": pos.entry_price,
+                "qty": abs(pos.quantity),
                 "type": "BUY" if pos.side == 1 else "SELL",
                 "side": pos.side,
                 "is_entry": True
@@ -277,6 +280,15 @@ class BotManager:
         perf = core.get_performance_summary() if hasattr(core, 'get_performance_summary') else {}
         perf['max_drawdown_pct'] = round(max_drawdown_pct, 2)
         
+        # 4. Final Payload
+        last_decision = getattr(self.session, 'last_decision', {})
+        if not last_decision.get("action"):
+            signal = last_decision.get("signal", 0)
+            if signal == 1: action_label = "OPEN LONG"
+            elif signal == -1: action_label = "OPEN SHORT"
+            else: action_label = "MONITORING"
+            last_decision["action"] = action_label
+
         return {
             "status": "running" if self.is_running and not self.session._shutdown_event.is_set() else "stopped",
             "capital": round(mtm_equity, 2),
@@ -289,7 +301,11 @@ class BotManager:
                 "pnl": round(unrealized_pnl, 2)
             },
             "performance": perf,
-            "latest_decision": self.session.last_decision if hasattr(self.session, 'last_decision') else {},
+            "latest_decision": {
+                **last_decision,
+                "current_price": round(current_price, 2),
+                "intended_qty": abs(pos.quantity) if pos.side != 0 else 0
+            },
             "config": {
                 "symbol": self.session.context.contract.symbol,
                 "mode": self.session.policy.mode.value,

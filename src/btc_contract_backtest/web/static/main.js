@@ -11,6 +11,7 @@ let lastOhlcvTime = 0;
 let lastEquityTime = 0;
 let lastPositionSide = 0;
 let lastMarkersJSON = ""; // Performance: Cache stringified markers to avoid redundant setMarkers calls
+let currentMarkersData = []; // Store raw marker data for tooltip lookups
 let isSyncing = false; // Performance: Throttle chart sync
 
 // Initialize Dashboard
@@ -140,6 +141,65 @@ function initCharts() {
         });
     });
 
+    // --- INTERACTIVE TOOLTIP LOGIC ---
+    const tooltip = document.getElementById('chart-tooltip');
+    priceChart.subscribeCrosshairMove(param => {
+        if (!param.time || param.point.x < 0 || param.point.x > priceContainer.clientWidth || param.point.y < 0 || param.point.y > 400) {
+            tooltip.style.display = 'none';
+            return;
+        }
+
+        // Find if there's a marker at this time
+        const hoverTime = param.time;
+        const marker = currentMarkersData.find(m => Math.abs(m.time - hoverTime) < 1); // Exact or near match
+
+        if (marker) {
+            tooltip.style.display = 'block';
+            const isEntry = marker.is_entry;
+            const sideStr = marker.type === 'BUY' ? '<span style="color:var(--success)">BUY</span>' : '<span style="color:var(--danger)">SELL</span>';
+            const typeStr = isEntry ? 'ENTRY' : 'EXIT';
+            
+            let html = `
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Type:</span>
+                    <span class="tooltip-value">${sideStr} [${typeStr}]</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Price:</span>
+                    <span class="tooltip-value">$${parseFloat(marker.price).toLocaleString()}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Qty:</span>
+                    <span class="tooltip-value">${parseFloat(marker.qty || 0).toFixed(6)}</span>
+                </div>
+            `;
+            if (marker.pnl !== undefined) {
+                const pnlColor = marker.pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+                html += `
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Trade PnL:</span>
+                        <span class="tooltip-value" style="color:${pnlColor}">$${marker.pnl.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+            tooltip.innerHTML = html;
+
+            // Position tooltip near the crosshair
+            const x = param.point.x;
+            const y = param.point.y;
+            let left = x + 20;
+            let top = y + 20;
+
+            if (left > priceContainer.clientWidth - 240) left = x - 240;
+            if (top > 400 - 150) top = y - 150;
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        } else {
+            tooltip.style.display = 'none';
+        }
+    });
+
     window.addEventListener('resize', () => {
         if (priceChart) priceChart.resize(priceContainer.clientWidth, 400);
         if (equityChart) equityChart.resize(equityContainer.clientWidth, 250);
@@ -254,7 +314,23 @@ function updateDashboard(data) {
 
         // 4. Update Strategy Insights
         if (status.latest_decision) {
-            updateStrategyInsights(status.latest_decision);
+            const decision = status.latest_decision;
+            updateStrategyInsights(decision);
+            
+            // Enrich the decision text with price and qty
+            const decisionText = document.getElementById('decision-text');
+            if (decisionText && decision.current_price) {
+                const action = decision.action || "WAITING";
+                const price = decision.current_price.toLocaleString();
+                const qty = decision.intended_qty ? decision.intended_qty.toFixed(6) : "0.0";
+                decisionText.innerHTML = `
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <span>Action: <b style="color:var(--primary)">${action.toUpperCase()}</b></span>
+                        <span style="font-size:0.8rem; opacity:0.8">Market Price: $${price} | Intended Qty: ${qty}</span>
+                        <span style="font-size:0.75rem; border-top:1px solid var(--border); padding-top:4px;">${decision.reason || "Analyzing market conditions..."}</span>
+                    </div>
+                `;
+            }
         }
     }
 
@@ -322,6 +398,7 @@ async function refreshTradeMarkers() {
         const markersJSON = JSON.stringify(data);
         if (markersJSON === lastMarkersJSON) return;
         lastMarkersJSON = markersJSON;
+        currentMarkersData = data; // Cache for tooltips
 
         const markers = data.map(m => {
             const isBuy = m.type === 'BUY';
@@ -332,8 +409,8 @@ async function refreshTradeMarkers() {
                 time: time,
                 position: isBuy ? 'belowBar' : 'aboveBar',
                 color: isBuy ? '#10b981' : '#f43f5e',
-                shape: isBuy ? 'arrowUp' : 'arrowDown',
-                text: m.type + (m.is_entry ? ' [IN]' : ' [OUT]'),
+                shape: 'circle', // USER REQUEST: Use dots instead of arrows
+                text: m.is_entry ? 'IN' : 'OUT',
                 size: 2
             };
         });

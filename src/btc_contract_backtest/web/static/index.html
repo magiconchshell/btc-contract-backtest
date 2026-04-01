@@ -6,6 +6,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magic Conch Shell | BTC Trading Engine Dashboard</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .floating-tooltip {
+            width: 220px;
+            height: auto;
+            position: absolute;
+            display: none;
+            padding: 12px;
+            box-sizing: border-box;
+            font-size: 0.8rem;
+            color: #f8fafc;
+            text-align: left;
+            z-index: 1000;
+            top: 12px;
+            left: 12px;
+            pointer-events: none;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        .tooltip-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .tooltip-label { color: #94a3b8; font-weight: 500; }
+        .tooltip-value { font-weight: 600; }
+        .chart-container-wrapper { padding-bottom: 40px !important; margin-bottom: 32px !important; }
+        .chart-container { overflow: visible !important; height: 350px !important; } /* Adjust height to ensure room for axis */
+    </style>
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Lightweight Charts for Crypto visualization -->
@@ -230,6 +257,7 @@
                         <!-- Price chart goes here -->
                     </div>
                 </div>
+                <div id="chart-tooltip" class="floating-tooltip"></div>
 
                 <div class="glass chart-container-wrapper">
                     <div class="chart-header">
