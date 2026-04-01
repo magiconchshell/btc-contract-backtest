@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 export interface BotStatus {
   event: string;
   is_running: boolean;
+  status?: string;
   bot_id: string | null;
   config: any;
   core: any;

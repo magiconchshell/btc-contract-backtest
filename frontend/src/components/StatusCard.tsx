@@ -27,25 +27,27 @@ function AnimatedNumber({ value, prefix = '', suffix = '', decimals = 2 }: { val
 }
 
 export default function StatusCard() {
-  const { status } = useBotContext();
+  const { status, backtestResult } = useBotContext();
   
-  if (!status) {
+  const activeData = backtestResult || status;
+
+  if (!activeData) {
     return (
       <div className="text-muted p-4">Waiting for engine state...</div>
     );
   }
 
-  // Use the parsed payload exactly from FastAPI bot_manager.py get_status()
-  const mtmEquity = status.capital || 0;
-  const unrealizedPnL = status.unrealized_pnl || 0;
+  // Use the parsed payload exactly from FastAPI bot_manager.py
+  const mtmEquity = activeData.capital || 0;
+  const unrealizedPnL = activeData.unrealized_pnl || 0;
   
-  const pos = status.position || { side: 0, quantity: 0, entry_price: 0 };
+  const pos = activeData.position || { side: 0, quantity: 0, entry_price: 0 };
   const side = pos.side;
   const openPosition = pos.quantity;
 
-  const perf = status.performance || {};
-  const maxDrawdown = perf.max_drawdown_pct || 0;
-  const realizedPnl = perf.total_pnl || 0;
+  const perf = activeData.performance || activeData.metrics || {};
+  const maxDrawdown = perf.max_drawdown_pct || perf.max_drawdown || 0;
+  const realizedPnl = perf.total_pnl || (perf.final_capital ? perf.final_capital - 1000 : 0); // fallback for backtest
   const winRate = perf.win_rate || 0;
   const profitFactor = perf.profit_factor || 0;
   const totalTrades = perf.total_trades || 0;

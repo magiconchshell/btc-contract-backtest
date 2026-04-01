@@ -21,7 +21,9 @@ export default function TradingChart() {
   const equityHistoryRef = useRef<{time: Time, value: number}[]>([]);
   const lastPositionSideRef = useRef<number | null>(null);
   
-  const { status } = useBotContext();
+  const { status, backtestResult } = useBotContext();
+  const activeData = backtestResult || status;
+  
   const [dataLoaded, setDataLoaded] = useState(false);
   const isSyncing = useRef(false);
 
@@ -103,79 +105,20 @@ export default function TradingChart() {
     };
   }, []);
 
-  // Sync Candlesticks and Equity over time
-  useEffect(() => {
-    if (!status?.ohlcv || !candlestickSeriesRef.current) return;
-    
-    // Candlesticks
-    const chartData = status.ohlcv.map((d: any) => ({
-      time: d.time as Time,
-      open: parseFloat(d.open),
-      high: parseFloat(d.high),
-      low: parseFloat(d.low),
-      close: parseFloat(d.close),
-    }));
-    
-    chartData.sort((a, b) => (a.time as number) - (b.time as number));
-    const uniqueTimeData = chartData.filter((item, index, self) => 
-      index === self.findIndex((t) => t.time === item.time)
-    );
-
-    // Extract latest Unix Time
-    const lastBarTime = uniqueTimeData.length > 0 ? (uniqueTimeData[uniqueTimeData.length - 1].time as number) : Math.floor(Date.now() / 1000);
-
-    // Initial Load - Full Series Set
-    if (!dataLoaded && uniqueTimeData.length > 0) {
-      candlestickSeriesRef.current.setData(uniqueTimeData);
-      
-      const mtmEquity = status.capital ? Number(status.capital) : 0;
-      if (mtmEquity > 0) {
-        const ext = [{ time: lastBarTime as Time, value: mtmEquity }];
-        equityHistoryRef.current = ext;
-        if (equitySeriesRef.current) equitySeriesRef.current.setData(ext);
-      }
-
-      // Initial Viewport Zoom
-      // 鎖定當下時間於圖表「正中央」：前 30 根 K 線，後 30 根空白 K 線
-      // 注意：不能使用 setVisibleRange (時間)，因為底層庫會強制把未來沒有資料的時間裁切掉 (Clamp) 導致 K 線永遠貼在最右邊。
-      // 使用 LogicalRange 才能強迫繪製未來的「空白座標軸」。
-      const len = uniqueTimeData.length;
-      const lr = {
-        from: len - 30,
-        to: len + 30
-      };
-      
-      chartRef.current?.timeScale().setVisibleLogicalRange(lr);
-      equityChartRef.current?.timeScale().setVisibleLogicalRange(lr);
-      
-      setDataLoaded(true);
-      
-    } else if (dataLoaded && uniqueTimeData.length > 0) {
-      // Incremental Update - Do not destroy user pan/zoom states
-      const lastCandle = uniqueTimeData[uniqueTimeData.length - 1];
-      candlestickSeriesRef.current.update(lastCandle);
-      
-      const mtmEquity = status.capital ? Number(status.capital) : 0;
-      if (mtmEquity > 0) {
-        const ext = [...equityHistoryRef.current];
-        if (ext.length === 0 || lastBarTime > (ext[ext.length - 1].time as number)) {
-          ext.push({ time: lastBarTime as Time, value: mtmEquity });
-        } else if (lastBarTime === (ext[ext.length - 1].time as number)) {
-          ext[ext.length - 1].value = mtmEquity; // update latest tick
-        }
-        
-        // Equity series also receives updates incrementally
-        equityHistoryRef.current = ext;
-        if (equitySeriesRef.current) equitySeriesRef.current.update(ext[ext.length - 1]);
-      }
-    }
-  }, [status?.ohlcv, status?.capital, dataLoaded]);
+  const prevFirstTimeRef = useRef<number | null>(null);
 
   // Fetch Markers Logic
   const fetchAndSetMarkers = useCallback(async () => {
     try {
-      if (!candlestickSeriesRef.current) return;
-      const data = await getMarkers();
+      if (!candlestickSeriesRef.current || !dataLoaded) return;
+      let data: any[] = [];
+      if (backtestResult && backtestResult.markers) {
+        data = backtestResult.markers;
+      } else {
+        const res = await getMarkers();
+        if (res) data = res;
+      }
+      
       if (!data || data.length === 0) return;
       setMarkersData(data); // for tooltip
 
@@ -210,23 +153,112 @@ export default function TradingChart() {
     } catch (err) {
       console.error('Error fetching markers:', err);
     }
-  }, []);
+  }, [backtestResult, dataLoaded]);
+
+  // Sync Candlesticks and Equity over time
+  useEffect(() => {
+    if (!activeData?.ohlcv || !candlestickSeriesRef.current || activeData.ohlcv.length === 0) return;
+    
+    // Candlesticks
+    const chartData = activeData.ohlcv.map((d: any) => ({
+      time: d.time as Time,
+      open: parseFloat(d.open),
+      high: parseFloat(d.high),
+      low: parseFloat(d.low),
+      close: parseFloat(d.close),
+    }));
+    
+    chartData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
+    const uniqueTimeData = chartData.filter((item: any, index: number, self: any[]) => 
+      index === self.findIndex((t: any) => t.time === item.time)
+    );
+
+    // Extract Edge Unix Times
+    const firstBarTime = uniqueTimeData[0].time as number;
+    const lastBarTime = uniqueTimeData[uniqueTimeData.length - 1].time as number;
+    
+    const isNewDataset = prevFirstTimeRef.current !== firstBarTime;
+
+    // Initial Load or Dataset Swap - Full Series Set
+    if (!dataLoaded || isNewDataset) {
+      candlestickSeriesRef.current.setData(uniqueTimeData);
+      
+      if (activeData.equity_curve && activeData.equity_curve.length > 0) {
+        let curve = activeData.equity_curve.map((e: any) => ({
+             time: e.time as Time,
+             value: Number(e.value)
+        }));
+        
+        curve.sort((a: any, b: any) => (a.time as number) - (b.time as number));
+        curve = curve.filter((item: any, index: number, self: any[]) => 
+          index === self.findIndex((t: any) => t.time === item.time)
+        );
+        
+        equityHistoryRef.current = curve;
+        if (equitySeriesRef.current) equitySeriesRef.current.setData(curve);
+      } else {
+        const mtmEquity = activeData.capital ? Number(activeData.capital) : 0;
+        if (mtmEquity > 0) {
+          const ext = [{ time: lastBarTime as Time, value: mtmEquity }];
+          equityHistoryRef.current = ext;
+          if (equitySeriesRef.current) equitySeriesRef.current.setData(ext);
+        }
+      }
+
+      const len = uniqueTimeData.length;
+      const lr = {
+        from: len - 30,
+        to: len + 30
+      };
+      
+      chartRef.current?.timeScale().setVisibleLogicalRange(lr);
+      equityChartRef.current?.timeScale().setVisibleLogicalRange(lr);
+      
+      prevFirstTimeRef.current = firstBarTime;
+      setDataLoaded(true);
+      
+      // Force markers refresh after massive dataset overwrite
+      if (typeof fetchAndSetMarkers === 'function') {
+         setTimeout(fetchAndSetMarkers, 50);
+      }
+      
+    } else {
+      // Incremental Update - Do not destroy user pan/zoom states
+      const lastCandle = uniqueTimeData[uniqueTimeData.length - 1];
+      candlestickSeriesRef.current.update(lastCandle);
+      
+      const mtmEquity = activeData.capital ? Number(activeData.capital) : 0;
+      if (mtmEquity > 0) {
+        const ext = [...equityHistoryRef.current];
+        if (ext.length === 0 || lastBarTime > (ext[ext.length - 1].time as number)) {
+          ext.push({ time: lastBarTime as Time, value: mtmEquity });
+        } else if (lastBarTime === (ext[ext.length - 1].time as number)) {
+          ext[ext.length - 1].value = mtmEquity; // update latest tick
+        }
+        
+        equityHistoryRef.current = ext;
+        if (equitySeriesRef.current) equitySeriesRef.current.update(ext[ext.length - 1]);
+      }
+    }
+  }, [activeData?.ohlcv, activeData?.capital, dataLoaded, fetchAndSetMarkers]);
 
   // Poll for Marker updates on position side change
   useEffect(() => {
-    const currentSide = status?.position?.side || 0;
+    const currentSide = activeData?.position?.side || 0;
     if (lastPositionSideRef.current !== null && lastPositionSideRef.current !== currentSide) {
       fetchAndSetMarkers();
     }
     lastPositionSideRef.current = currentSide;
-  }, [status?.position?.side, fetchAndSetMarkers]);
+  }, [activeData?.position?.side, fetchAndSetMarkers]);
 
   // Initial markers load
   useEffect(() => {
     fetchAndSetMarkers();
-    const iv = setInterval(fetchAndSetMarkers, 10000); // Polled fallback
-    return () => clearInterval(iv);
-  }, [fetchAndSetMarkers]);
+    if (!backtestResult) {
+      const iv = setInterval(fetchAndSetMarkers, 10000); // Polled fallback only if live
+      return () => clearInterval(iv);
+    }
+  }, [fetchAndSetMarkers, backtestResult]);
 
   // Setup React Crosshair Tooltip
   useEffect(() => {
@@ -311,10 +343,9 @@ export default function TradingChart() {
         }}
       />
       
-      {/* Price Candlesticks */}
-      <div className="relative full-height" style={{ flex: 2.5, minHeight: 0 }}>
+      <div className="relative full-height" style={{ flex: 2.5, minHeight: 0, minWidth: 0 }}>
         <h3 className="absolute" style={{ top: 10, left: 10, zIndex: 10, fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }}>BTC/USDT PRICE CHART</h3>
-        <div ref={chartContainerRef} className="full-height" />
+        <div ref={chartContainerRef} className="full-height" style={{ position: 'relative' }} />
         {!dataLoaded && (
           <div className="absolute inset-0 flex-center">
             <div className="text-muted">Awaiting Chart Data...</div>
@@ -323,9 +354,9 @@ export default function TradingChart() {
       </div>
 
       {/* Equity Area Chart */}
-      <div className="relative full-height" style={{ flex: 1, minHeight: 0 }}>
+      <div className="relative full-height" style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
         <h3 className="absolute" style={{ top: 10, left: 10, zIndex: 10, fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }}>ACCOUNT EQUITY</h3>
-        <div ref={equityContainerRef} className="full-height" />
+        <div ref={equityContainerRef} className="full-height" style={{ position: 'relative' }} />
       </div>
     </div>
   );

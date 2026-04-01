@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class BotStartConfig(BaseModel):
+class LiveBotConfig(BaseModel):
     capital: float = 1000.0
     leverage: int = 5
     mode: str = "PAPER"
@@ -43,20 +43,49 @@ class BotStartConfig(BaseModel):
     max_retries: int = 5
     strategy: str = "sparse_meta_portfolio"
 
+class BacktestBotConfig(BaseModel):
+    capital: float = 1000.0
+    leverage: int = 5
+    symbol: str = "BTC/USDT"
+    timeframe: str = "1h"
+    days: int = 30
+    strategy: str = "sparse_meta_portfolio"
+    stop_loss_pct: float = 0.04
+    take_profit_pct: float = 0.10
+    risk_per_trade_pct: float = 0.02
+    max_pos_pct: float = 0.95
+    atr_stop_mult: float = 2.5
+    break_even_trigger_pct: float = 0.03
+
 @app.get("/")
 async def get_index():
     return {"status": "BTC Trading Engine API is running"}
 
 @app.post("/api/bot/start")
-async def start_bot(config: BotStartConfig):
+async def start_bot(config: LiveBotConfig):
     try:
-        bot_manager.start_bot(config.dict())
+        dict_conf = config.dict()
+        dict_conf["mode"] = dict_conf.get("mode", "PAPER")
+        bot_manager.start_bot(dict_conf)
         return {"message": "Bot started successfully", "status": "running"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error starting bot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start bot: {str(e)}")
+
+@app.post("/api/bot/backtest")
+async def run_backtest(config: BacktestBotConfig):
+    try:
+        dict_conf = config.dict()
+        dict_conf["mode"] = "BACKTEST"
+        result = bot_manager.run_offline_backtest(dict_conf)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error running backtest: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to run backtest: {str(e)}")
 
 @app.post("/api/bot/stop")
 async def stop_bot():

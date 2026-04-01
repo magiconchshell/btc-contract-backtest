@@ -153,7 +153,10 @@ class BotManager:
             return
         
         logger.info("Stopping bot via Web UI...")
-        self.session._shutdown_event.set()
+        if hasattr(self.session, 'shutdown'):
+            self.session.shutdown()
+        else:
+            self.session._shutdown_event.set()
 
     def get_trades(self):
         if not self.session:
@@ -359,5 +362,152 @@ class BotManager:
                 last_t = bar["time"]
                 
         return unique_ohlcv
+
+    def run_offline_backtest(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Runs a synchronous historical backtest and returns the complete result payload."""
+        from btc_contract_backtest.config.models import ContractSpec, AccountConfig, RiskConfig, ExecutionConfig, LiveRiskConfig
+        from btc_contract_backtest.strategies import build_strategy
+        from btc_contract_backtest.engine.futures_engine import FuturesBacktestEngine
+        from datetime import timedelta
+
+        capital = float(config.get("capital", 1000.0))
+        leverage = int(config.get("leverage", 5))
+        symbol = config.get("symbol", "BTC/USDT")
+        timeframe = config.get("timeframe", "1h")
+        days = int(config.get("days", 30))
+        strategy_name = config.get("strategy", "sparse_meta_portfolio")
+
+        contract = ContractSpec(symbol=symbol, leverage=leverage, exchange_profile="binance_futures_mainnet")
+        account = AccountConfig(initial_capital=capital)
+        
+        risk = RiskConfig(
+            stop_loss_pct=float(config.get("stop_loss_pct", 0.04)),
+            take_profit_pct=float(config.get("take_profit_pct", 0.10)),
+            risk_per_trade_pct=float(config.get("risk_per_trade_pct", 0.02)),
+            max_position_notional_pct=float(config.get("max_pos_pct", 0.95)),
+            atr_stop_mult=float(config.get("atr_stop_mult", 2.5)),
+            break_even_trigger_pct=float(config.get("break_even_trigger_pct", 0.03))
+        )
+        execution = ExecutionConfig()
+        live_risk = LiveRiskConfig()
+        
+        strategy = build_strategy(strategy_name)
+
+        engine = FuturesBacktestEngine(
+            contract,
+            account,
+            risk,
+            timeframe=timeframe,
+            execution=execution,
+            live_risk=live_risk,
+        )
+        
+        start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+        end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
+        df = engine.fetch_historical_data(start_date, end_date)
+        signal_df = strategy.generate_signals(df)
+        results = engine.simulate(signal_df)
+        metrics = engine.calculate_metrics(results)
+        
+        trades_df = results.get("trades", pd.DataFrame())
+        
+        def to_unix(ts):
+            if ts is None: return 0
+            if hasattr(ts, 'timestamp'): return int(ts.timestamp())
+            if isinstance(ts, (int, float)): return int(ts) if ts > 1e10 else int(ts/1000)
+            try:
+                return int(pd.to_datetime(ts).timestamp())
+            except:
+                return 0
+
+        markers = []
+        trades_payload = []
+        
+        if not trades_df.empty:
+            for idx, t in trades_df.iterrows():
+                entry_time = t.get("entry_time")
+                exit_time = t.get("exit_time")
+                entry_price = float(t.get("entry_price", 0))
+                exit_price = float(t.get("exit_price", 0))
+                side = int(t.get("position", 1))
+                pnl = float(t.get("pnl_after_costs", 0))
+                notional = float(t.get("notional_closed", 0.0))
+                qty = notional / exit_price if exit_price > 0 else 0
+                
+                trades_payload.append({
+                    "entry_time": to_unix(entry_time),
+                    "exit_time": to_unix(exit_time),
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "position": side,
+                    "pnl_after_costs": pnl,
+                    "notional_closed": notional
+                })
+                
+                if entry_time:
+                    markers.append({
+                        "time": to_unix(entry_time),
+                        "price": entry_price,
+                        "qty": qty,
+                        "type": "BUY" if side == 1 else "SELL",
+                        "side": side,
+                        "is_entry": True
+                    })
+                if exit_time:
+                    markers.append({
+                        "time": to_unix(exit_time),
+                        "price": exit_price,
+                        "qty": qty,
+                        "type": "SELL" if side == 1 else "BUY",
+                        "side": side,
+                        "is_entry": False,
+                        "pnl": pnl
+                    })
+
+        ohlcv = []
+        for timestamp, row in df.iterrows():
+            ohlcv.append({
+                "time": to_unix(timestamp),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"])
+            })
+        ohlcv.sort(key=lambda x: x["time"])
+        
+        # De-duplicate timestamps (Lightweight Charts requirement)
+        unique_ohlcv = []
+        last_t = -1
+        for bar in ohlcv:
+            if bar["time"] > last_t:
+                unique_ohlcv.append(bar)
+                last_t = bar["time"]
+
+        equity_df = results.get("equity_curve", pd.DataFrame())
+        equity_curve = []
+        if not equity_df.empty:
+            for idx, row in equity_df.iterrows():
+                try:
+                    # The DataFrame is built from a list of dicts, so 'timestamp' is a column, not the index
+                    actual_ts = row.get("timestamp")
+                    if actual_ts is None: continue
+                    val = float(row.get("equity", capital))
+                    equity_curve.append({
+                        "time": to_unix(actual_ts),
+                        "value": val
+                    })
+                except Exception:
+                    continue
+
+        return {
+            "status": "completed",
+            "metrics": metrics,
+            "trades": trades_payload,
+            "markers": markers,
+            "ohlcv": unique_ohlcv,
+            "equity_curve": equity_curve,
+            "capital": metrics.get("final_capital", capital)
+        }
 
 bot_manager = BotManager()

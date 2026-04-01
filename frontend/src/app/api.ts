@@ -19,6 +19,11 @@ export const stopBot = async () => {
   return data;
 };
 
+export const runBacktest = async (config: any) => {
+  const { data } = await api.post('/bot/backtest', config);
+  return data;
+};
+
 export const getStrategies = async (): Promise<string[]> => {
   const { data } = await api.get('/strategies');
   return data;
