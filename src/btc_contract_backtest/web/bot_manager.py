@@ -163,11 +163,21 @@ class BotManager:
         core = self.session.core
         markers = []
         
+        def to_unix(ts):
+            if ts is None: return 0
+            if isinstance(ts, (int, float)): return int(ts)
+            try:
+                # Force to Unix UTC
+                import pandas as pd
+                return int(pd.to_datetime(ts).timestamp())
+            except:
+                return 0
+
         # 1. Add markers from completed trades
         for t in core.trades:
             # Entry
             markers.append({
-                "time": t["entry_time"],
+                "time": to_unix(t["entry_time"]),
                 "price": t["entry_price"],
                 "type": "BUY" if t["position"] == 1 else "SELL",
                 "side": t["position"],
@@ -175,7 +185,7 @@ class BotManager:
             })
             # Exit
             markers.append({
-                "time": t["exit_time"],
+                "time": to_unix(t["exit_time"]),
                 "price": t["exit_price"],
                 "type": "SELL" if t["position"] == 1 else "BUY",
                 "side": t["position"],
@@ -187,7 +197,7 @@ class BotManager:
         pos = core.position
         if pos.side != 0 and pos.entry_time:
             markers.append({
-                "time": pos.entry_time,
+                "time": to_unix(pos.entry_time),
                 "price": pos.entry_price,
                 "type": "BUY" if pos.side == 1 else "SELL",
                 "side": pos.side,

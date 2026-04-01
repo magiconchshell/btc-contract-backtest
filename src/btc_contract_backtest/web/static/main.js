@@ -42,7 +42,13 @@ async function fetchStrategies() {
             strategies.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s;
-                opt.textContent = s.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                let displayName = s.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                if (s === 'high_frequency_test') {
+                    displayName = `[DEBUG] ${displayName}`;
+                    opt.style.color = '#fbbf24'; // Warning yellow
+                    opt.style.fontWeight = 'bold';
+                }
+                opt.textContent = displayName;
                 if (s === 'sparse_meta_portfolio') opt.selected = true;
                 select.appendChild(opt);
             });
@@ -94,10 +100,12 @@ function initCharts() {
             timeVisible: true, 
             secondsVisible: false,
             autoScale: true,
-            rightOffset: 12,
-            barSpacing: 12,
+            rightOffset: 15,
+            barSpacing: 10,
             minBarSpacing: 1,
             shiftVisibleRangeOnNewBar: true,
+            fixLeftEdge: false,
+            borderVisible: true,
         },
         handleScroll: { mouseWheel: true, pressedMouseButton: true },
         handleScale: { axisPressedMouseButton: true, mouseWheel: true, pinch: true },
@@ -234,12 +242,12 @@ function updateDashboard(data) {
             }
         }
 
-        if (equitySeries) {
+        if (equitySeries && typeof status.capital === 'number') {
             const timePoint = lastOhlcvTime || Math.floor(Date.now() / 1000);
             const fixedTime = Number(timePoint);
             // ONLY update if it's the same or newer to avoid Lightweight Charts crash
             if (fixedTime >= lastEquityTime) {
-                equitySeries.update({ time: fixedTime, value: parseFloat(equity) });
+                equitySeries.update({ time: fixedTime, value: parseFloat(status.capital) });
                 lastEquityTime = fixedTime;
             }
         }
@@ -317,7 +325,8 @@ async function refreshTradeMarkers() {
 
         const markers = data.map(m => {
             const isBuy = m.type === 'BUY';
-            const time = typeof m.time === 'string' ? Math.floor(new Date(m.time).getTime() / 1000) : m.time;
+            // Unix time as integer from backend
+            const time = Number(m.time);
             
             return {
                 time: time,

@@ -103,7 +103,8 @@ async def get_strategies():
         "regime_switcher",
         "short_overlay_switcher",
         "strong_bull_long",
-        "buy_and_hold_long"
+        "buy_and_hold_long",
+        "high_frequency_test"
     ]
 
 @app.websocket("/ws")

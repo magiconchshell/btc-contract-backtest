@@ -15,39 +15,35 @@ class HighFrequencyTestStrategy(BaseStrategy):
         self.oversold = oversold
 
     def name(self) -> str:
-        return "HighFrequencyTest"
+        return "high_frequency_test"
 
-    def execute(self, df: pd.DataFrame) -> pd.Series:
+    def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
         if len(df) < self.rsi_period + 1:
-            return pd.Series(0, index=df.index)
+            df['signal'] = 0
+            return df
 
         # Calculate 2-period RSI
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=self.rsi_period).mean()
         
-        rs = gain / loss
+        # Avoid division by zero
+        rs = gain / loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
-        
-        signals = pd.Series(0, index=df.index)
+        rsi = rsi.fillna(50) # Neutral if no movement
         
         # Simple Logic: 
         # RSI < 30 -> LONG (1)
         # RSI > 70 -> SHORT (-1)
-        # Otherwise -> Hold previous
+        # Otherwise -> Hold previous (using ffill)
         
-        current_signal = 0
-        for i in range(len(df)):
-            val = rsi.iloc[i]
-            if pd.isna(val):
-                signals.iloc[i] = 0
-                continue
-                
-            if val < self.oversold:
-                current_signal = 1
-            elif val > self.overbought:
-                current_signal = -1
-            
-            signals.iloc[i] = current_signal
-            
-        return signals
+        df['raw_signal'] = 0
+        df.loc[rsi < self.oversold, 'raw_signal'] = 1
+        df.loc[rsi > self.overbought, 'raw_signal'] = -1
+        
+        # Fill zeros with previous non-zero signal to simulate position holding
+        # But for high frequency testing, we can also just use raw signals
+        df['signal'] = df['raw_signal'].replace(0, np.nan).ffill().fillna(0)
+        
+        return df
