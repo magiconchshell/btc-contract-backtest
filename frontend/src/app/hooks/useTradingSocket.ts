@@ -25,7 +25,9 @@ export interface LogEntry {
   session_id: string;
 }
 
-export function useTradingSocket(url: string = 'ws://localhost:8000/ws') {
+const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws";
+
+export function useTradingSocket(url: string = DEFAULT_WS_URL) {
   const [sessionsData, setSessionsData] = useState<Record<string, BotStatus>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
