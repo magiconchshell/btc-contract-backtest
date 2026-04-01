@@ -121,7 +121,15 @@ export default function ReportView() {
   if (!data) return <div className="report-view-container glass-panel"><div style={{padding: '2rem'}}>Failed to load data for this session.</div></div>;
 
   const { status, pf, trades } = data;
-  const totalPnlStr = pf.total_pnl >= 0 ? `+$${pf.total_pnl.toFixed(2)}` : `-$${Math.abs(pf.total_pnl).toFixed(2)}`;
+  
+  const totalPnl = pf?.total_pnl ?? 0;
+  const pnlPct = pf?.pnl_pct ?? 0;
+  const winRate = pf?.win_rate ?? 0;
+  const profitFactor = pf?.profit_factor ?? 0;
+  const maxDrawdown = pf?.max_drawdown_pct ?? 0;
+  const totalTrades = pf?.total_trades ?? 0;
+
+  const totalPnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`;
 
   return (
     <div className="report-view-container flex-col">
@@ -151,25 +159,25 @@ export default function ReportView() {
         <div className="report-stats-grid">
           <div className="report-stat-card" style={{ backgroundColor: 'rgba(22, 163, 74, 0.05)', borderColor: 'rgba(22, 163, 74, 0.2)' }}>
             <div className="report-stat-label">Net Profit</div>
-            <div className={`report-stat-value ${pf.total_pnl >= 0 ? 'positive' : 'negative'}`}>
-              {totalPnlStr} ({pf.pnl_pct.toFixed(2)}%)
+            <div className={`report-stat-value ${totalPnl >= 0 ? 'positive' : 'negative'}`}>
+              {totalPnlStr} ({pnlPct.toFixed(2)}%)
             </div>
           </div>
           <div className="report-stat-card">
             <div className="report-stat-label">Win Rate</div>
-            <div className="report-stat-value">{pf.win_rate}%</div>
+            <div className="report-stat-value">{winRate}%</div>
           </div>
           <div className="report-stat-card">
             <div className="report-stat-label">Profit Factor</div>
-            <div className="report-stat-value">{pf.profit_factor}</div>
+            <div className="report-stat-value">{profitFactor}</div>
           </div>
           <div className="report-stat-card">
             <div className="report-stat-label">Max Drawdown</div>
-            <div className="report-stat-value">{pf.max_drawdown_pct}%</div>
+            <div className="report-stat-value">{maxDrawdown}%</div>
           </div>
           <div className="report-stat-card">
             <div className="report-stat-label">Total Trades</div>
-            <div className="report-stat-value">{pf.total_trades}</div>
+            <div className="report-stat-value">{totalTrades}</div>
           </div>
         </div>
 
@@ -206,8 +214,8 @@ export default function ReportView() {
                     <tr key={i}>
                       <td>{new Date(t.exit_time).toLocaleString()}</td>
                       <td className={isLong ? 'trade-long' : 'trade-short'}>{isLong ? 'LONG' : 'SHORT'}</td>
-                      <td>${t.entry_price.toFixed(2)}</td>
-                      <td>${t.exit_price.toFixed(2)}</td>
+                      <td>${(t.entry_price || 0).toFixed(2)}</td>
+                      <td>${(t.exit_price || 0).toFixed(2)}</td>
                       <td style={{ color: pnl >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
                         {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
                       </td>
