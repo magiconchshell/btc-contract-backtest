@@ -4,24 +4,36 @@ import React, { createContext, useContext, ReactNode, useState } from 'react';
 import { useTradingSocket, BotStatus, LogEntry } from '../hooks/useTradingSocket';
 
 interface BotContextType {
-  status: BotStatus | null;
+  sessionsData: Record<string, BotStatus>;
   logs: LogEntry[];
   connected: boolean;
-  backtestResult: any | null;
-  setBacktestResult: (data: any | null) => void;
-  clearBacktestResult: () => void;
+  activeSessionId: string | null;
+  setActiveSessionId: (id: string | null) => void;
+  // Get active session helper
+  activeSession: BotStatus | null;
 }
 
 const BotContext = createContext<BotContextType | undefined>(undefined);
 
 export function BotProvider({ children }: { children: ReactNode }) {
-  const socketData = useTradingSocket();
-  const [backtestResult, setBacktestResult] = useState<any | null>(null);
+  const { sessionsData, logs, connected } = useTradingSocket();
+  const [activeSessionId, setActiveSessionId] = useState<string | null>('new');
 
-  const clearBacktestResult = () => setBacktestResult(null);
+  const activeSession = activeSessionId && sessionsData[activeSessionId] 
+    ? sessionsData[activeSessionId] 
+    : null;
 
   return (
-    <BotContext.Provider value={{ ...socketData, backtestResult, setBacktestResult, clearBacktestResult }}>
+    <BotContext.Provider 
+      value={{ 
+        sessionsData, 
+        logs, 
+        connected, 
+        activeSessionId, 
+        setActiveSessionId,
+        activeSession
+      }}
+    >
       {children}
     </BotContext.Provider>
   );

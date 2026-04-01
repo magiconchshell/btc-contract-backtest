@@ -62,13 +62,22 @@ async def get_index():
     return {"status": "BTC Trading Engine API is running"}
 
 
-@app.post("/api/bot/start")
-async def start_bot(config: LiveBotConfig):
+@app.get("/api/sessions")
+async def get_sessions():
+    return bot_manager.get_all_sessions()
+
+
+@app.post("/api/sessions/start")
+async def start_session(config: LiveBotConfig):
     try:
         dict_conf = config.dict()
         dict_conf["mode"] = dict_conf.get("mode", "PAPER")
-        bot_manager.start_bot(dict_conf)
-        return {"message": "Bot started successfully", "status": "running"}
+        session_id = bot_manager.start_bot(dict_conf)
+        return {
+            "message": "Bot started successfully",
+            "session_id": session_id,
+            "status": "running",
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -76,13 +85,17 @@ async def start_bot(config: LiveBotConfig):
         raise HTTPException(status_code=500, detail=f"Failed to start bot: {str(e)}")
 
 
-@app.post("/api/bot/backtest")
-async def run_backtest(config: BacktestBotConfig):
+@app.post("/api/sessions/backtest")
+async def run_backtest_session(config: BacktestBotConfig):
     try:
         dict_conf = config.dict()
         dict_conf["mode"] = "BACKTEST"
-        result = bot_manager.run_offline_backtest(dict_conf)
-        return result
+        session_id = bot_manager.run_offline_backtest(dict_conf)
+        return {
+            "message": "Backtest completed",
+            "session_id": session_id,
+            "status": "completed",
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -90,41 +103,45 @@ async def run_backtest(config: BacktestBotConfig):
         raise HTTPException(status_code=500, detail=f"Failed to run backtest: {str(e)}")
 
 
-@app.post("/api/bot/stop")
-async def stop_bot():
+@app.post("/api/sessions/{session_id}/stop")
+async def stop_session(session_id: str):
     try:
-        bot_manager.stop_bot()
-        return {"message": "Bot stopped successfully", "status": "stopped"}
+        bot_manager.stop_bot(session_id)
+        return {
+            "message": "Bot stopped successfully",
+            "session_id": session_id,
+            "status": "stopped",
+        }
     except Exception as e:
         logger.error(f"Error stopping bot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to stop bot: {str(e)}")
 
 
-@app.get("/api/bot/status")
-async def get_status():
-    return bot_manager.get_status()
+@app.get("/api/sessions/{session_id}/status")
+async def get_status(session_id: str):
+    res = bot_manager.get_status(session_id)
+    if res.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Session not found")
+    return res
 
 
-@app.get("/api/bot/trades")
-async def get_trades():
-    return bot_manager.get_trades()
+@app.get("/api/sessions/{session_id}/trades")
+async def get_trades(session_id: str):
+    return bot_manager.get_trades(session_id)
 
 
-@app.get("/api/bot/markers")
-async def get_markers():
-    return bot_manager.get_markers()
+@app.get("/api/sessions/{session_id}/markers")
+async def get_markers(session_id: str):
+    return bot_manager.get_markers(session_id)
 
 
-@app.get("/api/bot/performance")
-async def get_performance():
-    return bot_manager.get_performance()
+@app.get("/api/sessions/{session_id}/performance")
+async def get_performance(session_id: str):
+    return bot_manager.get_performance(session_id)
 
 
 @app.get("/api/strategies")
 async def get_strategies():
-    # This is a bit of a hack but it gets the registered names from build_strategy
-    # by inspecting the function or just returning a curated list.
-    # For now, let's return the common ones.
     return [
         "sparse_meta_portfolio",
         "sma_cross",
@@ -149,17 +166,14 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established")
 
-    # Ensure bot_manager is bound to the current running event loop
     bot_manager.ensure_loop(asyncio.get_running_loop())
 
-    # We'll send live data and logs through this channel
     try:
-        # Start a broadcaster task for this websocket
         while True:
-            # Check for bot status updates
-            status = bot_manager.get_status()
+            sessions_data = {}
+            for sid in list(bot_manager.sessions.keys()):
+                sessions_data[sid] = bot_manager.get_status(sid)
 
-            # Try to get logs from the queue if it's initialized
             log_entries = []
             if bot_manager.log_queue:
                 try:
@@ -168,20 +182,21 @@ async def websocket_endpoint(websocket: WebSocket):
                 except Exception as e:
                     logger.error(f"Error draining log queue: {e}")
 
-            # Always send status if it exists, or if there are logs
-            if status or log_entries:
-                payload = {"type": "update", "status": status, "logs": log_entries}
+            if sessions_data or log_entries:
+                payload = {
+                    "type": "update",
+                    "sessions": sessions_data,
+                    "logs": log_entries,
+                }
                 await websocket.send_json(payload)
 
-            await asyncio.sleep(1)  # Frequency of updates
+            await asyncio.sleep(1)
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
     except Exception as e:
         logger.error(f"WS error: {e}")
 
-
-# Static file serving removed as frontend is now hosted via Next.js
 
 if __name__ == "__main__":
     import uvicorn

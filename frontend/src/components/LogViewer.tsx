@@ -4,23 +4,27 @@ import React, { useEffect, useRef } from 'react';
 import { useBotContext } from '../app/context/BotContext';
 
 export default function LogViewer() {
-  const { logs } = useBotContext();
+  const { logs, activeSessionId } = useBotContext();
   const endRef = useRef<HTMLDivElement>(null);
+
+  const filteredLogs = logs.filter(l => 
+    l.session_id === activeSessionId || l.session_id === 'system'
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+  }, [filteredLogs]);
 
   return (
     <div className="log-viewer full-height flex-col">
       <div className="log-header">
-        <h3>System Operations Log</h3>
+        <h3>System Operations Log {activeSessionId && activeSessionId !== 'new' ? `[${activeSessionId.substring(0,8)}]` : ''}</h3>
       </div>
       <div className="log-content">
-        {logs.length === 0 ? (
-          <div className="text-muted">No logs yet... Waiting for connection.</div>
+        {filteredLogs.length === 0 ? (
+          <div className="text-muted">No logs for this session yet.</div>
         ) : (
-          logs.map((log, i) => {
+          filteredLogs.map((log, i) => {
             const isError = log.level === 'ERROR' || log.level === 'CRITICAL';
             const isWarn = log.level === 'WARNING';
             const cls = isError ? 'log-error' : isWarn ? 'log-warn' : 'log-info';

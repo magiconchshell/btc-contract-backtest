@@ -8,6 +8,7 @@ export interface BotStatus {
   config: any;
   core: any;
   ohlcv: any[];
+  equity_curve?: any[];
   decision_history: any[];
   capital?: number;
   position?: any;
@@ -21,10 +22,11 @@ export interface LogEntry {
   level: string;
   message: string;
   logger: string;
+  session_id: string;
 }
 
 export function useTradingSocket(url: string = 'ws://localhost:8000/ws') {
-  const [status, setStatus] = useState<BotStatus | null>(null);
+  const [sessionsData, setSessionsData] = useState<Record<string, BotStatus>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -46,7 +48,7 @@ export function useTradingSocket(url: string = 'ws://localhost:8000/ws') {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'update') {
-          if (data.status) setStatus(data.status);
+          if (data.sessions) setSessionsData(data.sessions);
           if (data.logs && data.logs.length > 0) {
             setLogs((prev) => {
               const newLogs = [...prev, ...data.logs];
@@ -81,5 +83,5 @@ export function useTradingSocket(url: string = 'ws://localhost:8000/ws') {
     };
   }, [connect]);
 
-  return { status, logs, connected };
+  return { sessionsData, logs, connected };
 }

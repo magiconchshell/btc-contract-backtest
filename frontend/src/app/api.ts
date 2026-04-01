@@ -9,18 +9,23 @@ export const api = axios.create({
   },
 });
 
-export const startBot = async (config: any) => {
-  const { data } = await api.post('/bot/start', config);
+export const getSessions = async () => {
+  const { data } = await api.get('/sessions');
   return data;
 };
 
-export const stopBot = async () => {
-  const { data } = await api.post('/bot/stop');
+export const startBot = async (config: any) => {
+  const { data } = await api.post('/sessions/start', config);
+  return data;
+};
+
+export const stopBot = async (sessionId: string) => {
+  const { data } = await api.post(`/sessions/${sessionId}/stop`);
   return data;
 };
 
 export const runBacktest = async (config: any) => {
-  const { data } = await api.post('/bot/backtest', config);
+  const { data } = await api.post('/sessions/backtest', config);
   return data;
 };
 
@@ -29,17 +34,17 @@ export const getStrategies = async (): Promise<string[]> => {
   return data;
 };
 
-export const getTrades = async () => {
-  const { data } = await api.get('/bot/trades');
+export const getTrades = async (sessionId: string) => {
+  const { data } = await api.get(`/sessions/${sessionId}/trades`);
   return data;
 };
 
-export const getPerformance = async () => {
-  const { data } = await api.get('/bot/performance');
+export const getPerformance = async (sessionId: string) => {
+  const { data } = await api.get(`/sessions/${sessionId}/performance`);
   return data;
 };
 
-export const getMarkers = async () => {
-  const { data } = await api.get('/bot/markers');
+export const getMarkers = async (sessionId: string) => {
+  const { data } = await api.get(`/sessions/${sessionId}/markers`);
   return data;
 };

@@ -21,8 +21,8 @@ export default function TradingChart() {
   const equityHistoryRef = useRef<{time: Time, value: number}[]>([]);
   const lastPositionSideRef = useRef<number | null>(null);
   
-  const { status, backtestResult } = useBotContext();
-  const activeData = backtestResult || status;
+  const { activeSession, activeSessionId } = useBotContext();
+  const activeData = activeSession;
   
   const [dataLoaded, setDataLoaded] = useState(false);
   const isSyncing = useRef(false);
@@ -73,11 +73,6 @@ export default function TradingChart() {
     seriesMarkersRef.current = createSeriesMarkers(candleSeries);
     equitySeriesRef.current = equitySeries;
 
-    // The User explicitly requested to decouple the synchronization of the two X-axes.
-    // Bidirectional event listeners `subscribeVisibleTimeRangeChange` have been removed to prevent the "elastic snapback" infinite loop 
-    // caused by mismatching array lengths resolving conflicting visible zoom bounds.
-
-    // Setup dynamic resizing through ResizeObserver to handle flex boundaries automatically
     const resizeObserver = new ResizeObserver(entries => {
       for (let entry of entries) {
         if (entry.target === chartContainerRef.current && chartRef.current) {
@@ -110,16 +105,16 @@ export default function TradingChart() {
   // Fetch Markers Logic
   const fetchAndSetMarkers = useCallback(async () => {
     try {
-      if (!candlestickSeriesRef.current || !dataLoaded) return;
-      let data: any[] = [];
-      if (backtestResult && backtestResult.markers) {
-        data = backtestResult.markers;
-      } else {
-        const res = await getMarkers();
-        if (res) data = res;
-      }
+      if (!candlestickSeriesRef.current || !dataLoaded || !activeSessionId) return;
       
-      if (!data || data.length === 0) return;
+      let data: any[] = [];
+      const res = await getMarkers(activeSessionId);
+      if (res) data = res;
+      
+      if (!data || data.length === 0) {
+        seriesMarkersRef.current?.setMarkers([]);
+        return;
+      }
       setMarkersData(data); // for tooltip
 
       const markersMap = data.map((m: any) => {
@@ -153,7 +148,7 @@ export default function TradingChart() {
     } catch (err) {
       console.error('Error fetching markers:', err);
     }
-  }, [backtestResult, dataLoaded]);
+  }, [dataLoaded, activeSessionId]);
 
   // Sync Candlesticks and Equity over time
   useEffect(() => {
@@ -254,11 +249,17 @@ export default function TradingChart() {
   // Initial markers load
   useEffect(() => {
     fetchAndSetMarkers();
-    if (!backtestResult) {
-      const iv = setInterval(fetchAndSetMarkers, 10000); // Polled fallback only if live
-      return () => clearInterval(iv);
-    }
-  }, [fetchAndSetMarkers, backtestResult]);
+    // Re-fetch markers every 10s just in case
+    const iv = setInterval(fetchAndSetMarkers, 10000);
+    return () => clearInterval(iv);
+  }, [fetchAndSetMarkers]);
+
+  // Handle active session ID change
+  useEffect(() => {
+    // Force reload graphic datasets on session swap
+    setDataLoaded(false);
+    prevFirstTimeRef.current = null;
+  }, [activeSessionId]);
 
   // Setup React Crosshair Tooltip
   useEffect(() => {
@@ -347,7 +348,7 @@ export default function TradingChart() {
         <h3 className="absolute" style={{ top: 10, left: 10, zIndex: 10, fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }}>BTC/USDT PRICE CHART</h3>
         <div ref={chartContainerRef} className="full-height" style={{ position: 'relative' }} />
         {!dataLoaded && (
-          <div className="absolute inset-0 flex-center">
+          <div className="absolute inset-0 flex-center" style={{ backdropFilter: 'blur(2px)' }}>
             <div className="text-muted">Awaiting Chart Data...</div>
           </div>
         )}

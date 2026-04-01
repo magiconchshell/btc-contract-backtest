@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useBotContext } from '../app/context/BotContext';
-import { getStrategies, startBot, stopBot, runBacktest } from '../app/api';
+import { getStrategies, startBot, runBacktest } from '../app/api';
 
 export default function ControlPanel() {
-  const { status, connected, setBacktestResult, clearBacktestResult } = useBotContext();
+  const { connected, setActiveSessionId } = useBotContext();
   const [strategies, setStrategies] = useState<string[]>([]);
-  const [isBacktesting, setIsBacktesting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const [formData, setFormData] = useState({
     capital: 1000.0,
@@ -38,47 +38,41 @@ export default function ControlPanel() {
     e.preventDefault();
     try {
       if (formData.mode === 'BACKTEST') {
-        setIsBacktesting(true);
-        clearBacktestResult();
-        // ensure bot is logically stopped via API if running, though UI could just ignore it for now
+        setIsProcessing(true);
         const result = await runBacktest(formData);
-        if (result?.status === 'completed') {
-            setBacktestResult(result);
+        if (result?.session_id) {
+            setActiveSessionId(result.session_id);
         }
-        setIsBacktesting(false);
+        setIsProcessing(false);
       } else {
-        clearBacktestResult();
-        await startBot(formData);
+        setIsProcessing(true);
+        const result = await startBot(formData);
+        if (result?.session_id) {
+            setActiveSessionId(result.session_id);
+        }
+        setIsProcessing(false);
       }
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Failed to start');
-      setIsBacktesting(false);
+      setIsProcessing(false);
     }
   };
 
-  const handleStop = async () => {
-    try {
-      await stopBot();
-    } catch (err: any) {
-      console.error('Failed to stop bot', err);
-    }
-  };
-
-  const isRunning = status?.status === 'running';
   const isBTMode = formData.mode === 'BACKTEST';
 
   return (
-    <div className="panel flex-col full-height control-panel">
-      <h2>Engine Control</h2>
+    <div className="panel flex-col full-height control-panel glass-panel" style={{ maxWidth: '600px', margin: '2rem auto', padding: '2rem' }}>
+      <h2>Create New Session</h2>
+      <p style={{ color: '#aaa', marginBottom: '1.5rem' }}>Configure a new trading bot or historical backtest.</p>
       
-      <div className={`connection-status ${connected ? 'text-success' : 'text-danger'}`}>
+      <div className={`connection-status ${connected ? 'text-success' : 'text-danger'}`} style={{ marginBottom: '1rem' }}>
         ● {connected ? 'Connected to Core' : 'Disconnected'}
       </div>
 
       <form onSubmit={handleStart} className="flex-col gap-md">
         <label>
           <span>Trading Mode</span>
-          <select name="mode" value={formData.mode} onChange={handleChange} disabled={isRunning || isBacktesting}>
+          <select name="mode" value={formData.mode} onChange={handleChange} disabled={isProcessing}>
             <option value="PAPER">Simulated Trading (Mainnet)</option>
             <option value="LIVE">Guarded Live (Mainnet)</option>
             <option value="BACKTEST">Historical Backtest</option>
@@ -87,7 +81,7 @@ export default function ControlPanel() {
 
         <label>
           <span>Strategy Profile</span>
-          <select name="strategy" value={formData.strategy} onChange={handleChange} disabled={isRunning || isBacktesting}>
+          <select name="strategy" value={formData.strategy} onChange={handleChange} disabled={isProcessing}>
             {strategies.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
@@ -95,51 +89,45 @@ export default function ControlPanel() {
         <div className="flex-row gap-sm">
           <label>
             <span>Capital (USDT)</span>
-            <input type="number" name="capital" value={formData.capital} onChange={handleChange} disabled={isRunning || isBacktesting} />
+            <input type="number" name="capital" value={formData.capital} onChange={handleChange} disabled={isProcessing} />
           </label>
           <label>
             <span>Leverage</span>
-            <input type="number" name="leverage" value={formData.leverage} onChange={handleChange} disabled={isRunning || isBacktesting} />
+            <input type="number" name="leverage" value={formData.leverage} onChange={handleChange} disabled={isProcessing} />
           </label>
         </div>
 
         <div className="flex-row gap-sm">
           <label>
             <span>Symbol</span>
-            <input type="text" name="symbol" value={formData.symbol} onChange={handleChange} disabled={isRunning || isBacktesting} />
+            <input type="text" name="symbol" value={formData.symbol} onChange={handleChange} disabled={isProcessing} />
           </label>
           <label>
             <span>Timeframe</span>
-            <input type="text" name="timeframe" value={formData.timeframe} onChange={handleChange} disabled={isRunning || isBacktesting} />
+            <input type="text" name="timeframe" value={formData.timeframe} onChange={handleChange} disabled={isProcessing} />
           </label>
         </div>
 
         {isBTMode ? (
           <label>
             <span>Backtest History (Days)</span>
-            <input type="number" name="days" value={formData.days} onChange={handleChange} disabled={isRunning || isBacktesting} />
+            <input type="number" name="days" value={formData.days} onChange={handleChange} disabled={isProcessing} />
           </label>
         ) : (
           <label>
             <span>Interval (Seconds)</span>
-            <input type="number" name="interval_seconds" value={formData.interval_seconds} onChange={handleChange} disabled={isRunning} />
+            <input type="number" name="interval_seconds" value={formData.interval_seconds} onChange={handleChange} disabled={isProcessing} />
           </label>
         )}
 
         <div className="actions mt-md flex-col gap-sm">
-          {(!isRunning && !isBacktesting) && (
+          {!isProcessing ? (
             <button type="submit" className="btn btn-primary" disabled={(!connected && !isBTMode)}>
-              {isBTMode ? '🔬 Run Backtest' : '🚀 Launch Engine'}
+              {isBTMode ? '🔬 Run Backtest' : '🚀 Launch Engine Session'}
             </button>
-          )}
-          {isBacktesting && (
+          ) : (
             <button type="button" className="btn btn-primary" disabled>
-              ⏳ Processing Backtest...
-            </button>
-          )}
-          {isRunning && (
-            <button type="button" onClick={handleStop} className="btn btn-danger">
-              🛑 Halt Execution
+              ⏳ Processing...
             </button>
           )}
         </div>
