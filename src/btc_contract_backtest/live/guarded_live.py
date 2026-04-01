@@ -67,6 +67,7 @@ class GuardedLiveExecutor:
         emergency_stop: bool = False,
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
+        capital: Optional[float] = None,
     ):
         request_id = request_id or str(uuid.uuid4())
         client_order_id = client_order_id or request_id
@@ -144,6 +145,7 @@ class GuardedLiveExecutor:
             emergency_stop=emergency_stop,
             maintenance=maintenance,
             current_daily_loss_pct=current_daily_loss_pct,
+            capital=capital,
         )
         if not decision.allowed:
             if decision.requires_approval:

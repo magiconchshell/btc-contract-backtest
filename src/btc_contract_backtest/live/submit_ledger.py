@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional, Any
@@ -52,18 +53,22 @@ class SubmitLedger:
     def __init__(self, path: str = "submit_ledger.json"):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # RLock allows the same thread to re-acquire (e.g. upsert → save).
+        self._lock = threading.RLock()
         if not self.path.exists():
             self.save({"intents": []})
 
     def load(self) -> dict[str, Any]:
-        return json.loads(self.path.read_text())
+        with self._lock:
+            return json.loads(self.path.read_text())
 
     def save(self, payload: dict[str, Any]) -> None:
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False, default=str)
-        )
-        os.replace(tmp_path, self.path)
+        with self._lock:
+            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+            tmp_path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+            )
+            os.replace(tmp_path, self.path)
 
     def list_intents(self) -> list[dict[str, Any]]:
         return self.load().get("intents", [])
@@ -82,20 +87,21 @@ class SubmitLedger:
 
     def upsert(self, intent: Any) -> dict[str, Any]:
         payload = intent.to_dict() if isinstance(intent, SubmitIntent) else dict(intent)
-        data = self.load()
-        intents = data.setdefault("intents", [])
-        for idx, existing in enumerate(intents):
-            if existing.get("request_id") == payload.get("request_id") or (
-                existing.get("client_order_id") == payload.get("client_order_id")
-            ):
-                payload.setdefault("attempts", existing.get("attempts", []))
-                payload.setdefault("metadata", existing.get("metadata", {}))
-                intents[idx] = payload
-                self.save(data)
-                return payload
-        intents.append(payload)
-        self.save(data)
-        return payload
+        with self._lock:
+            data = self.load()
+            intents = data.setdefault("intents", [])
+            for idx, existing in enumerate(intents):
+                if existing.get("request_id") == payload.get("request_id") or (
+                    existing.get("client_order_id") == payload.get("client_order_id")
+                ):
+                    payload.setdefault("attempts", existing.get("attempts", []))
+                    payload.setdefault("metadata", existing.get("metadata", {}))
+                    intents[idx] = payload
+                    self.save(data)
+                    return payload
+            intents.append(payload)
+            self.save(data)
+            return payload
 
     def get_by_request_or_client_order_id(
         self, request_id: str, client_order_id: Optional[str] = None
@@ -114,17 +120,18 @@ class SubmitLedger:
         return str(intent.get("state") or "").lower() in TERMINAL_STATES
 
     def append_attempt(self, request_id: str, attempt: Any) -> Optional[dict[str, Any]]:
-        data = self.load()
-        intents = data.setdefault("intents", [])
         payload = (
             attempt.to_dict() if isinstance(attempt, SubmitAttempt) else dict(attempt)
         )
-        for item in intents:
-            if item.get("request_id") == request_id:
-                item.setdefault("attempts", []).append(payload)
-                item["updated_at"] = payload.get("timestamp") or item.get("updated_at")
-                self.save(data)
-                return item
+        with self._lock:
+            data = self.load()
+            intents = data.setdefault("intents", [])
+            for item in intents:
+                if item.get("request_id") == request_id:
+                    item.setdefault("attempts", []).append(payload)
+                    item["updated_at"] = payload.get("timestamp") or item.get("updated_at")
+                    self.save(data)
+                    return item
         return None
 
     def mark_state(
@@ -137,22 +144,23 @@ class SubmitLedger:
         error: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Optional[dict[str, Any]]:
-        data = self.load()
-        intents = data.setdefault("intents", [])
-        for item in intents:
-            if item.get("request_id") == request_id:
-                item["state"] = state
-                if timestamp is not None:
-                    item["updated_at"] = timestamp
-                if exchange_order_id is not None:
-                    item["exchange_order_id"] = exchange_order_id
-                if error is not None:
-                    item["error"] = error
-                if metadata:
-                    current = item.setdefault("metadata", {})
-                    current.update(metadata)
-                self.save(data)
-                return item
+        with self._lock:
+            data = self.load()
+            intents = data.setdefault("intents", [])
+            for item in intents:
+                if item.get("request_id") == request_id:
+                    item["state"] = state
+                    if timestamp is not None:
+                        item["updated_at"] = timestamp
+                    if exchange_order_id is not None:
+                        item["exchange_order_id"] = exchange_order_id
+                    if error is not None:
+                        item["error"] = error
+                    if metadata:
+                        current = item.setdefault("metadata", {})
+                        current.update(metadata)
+                    self.save(data)
+                    return item
         return None
 
     def pending_intents(self) -> list[dict[str, Any]]:

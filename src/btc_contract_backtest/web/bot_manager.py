@@ -53,6 +53,8 @@ class BotManager:
         self.is_running = False
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._handler_attached = False
+        self._peak_equity = 0.0
+        self._max_realtime_drawdown = 0.0
 
     def ensure_loop(self, loop: asyncio.AbstractEventLoop):
         """Ensures the manager is bound to the correct running event loop."""
@@ -87,6 +89,8 @@ class BotManager:
                 raise ValueError("Bot is already running")
 
             capital = float(config.get("capital", 1000.0))
+            self._peak_equity = capital
+            self._max_realtime_drawdown = 0.0
             leverage = int(config.get("leverage", 5))
             mode_str = config.get("mode", "PAPER").upper()
             mode = TradingMode[mode_str] if mode_str in TradingMode.__members__ else TradingMode.PAPER
@@ -265,18 +269,15 @@ class BotManager:
         mtm_equity = capital + unrealized_pnl
 
         # 2. Update Peak Equity and Calculate Real-time Max Drawdown
-        core = self.session.core
-        core.peak_equity = max(getattr(core, 'peak_equity', mtm_equity), mtm_equity)
+        self._peak_equity = max(self._peak_equity, mtm_equity)
         max_drawdown_pct = 0.0
-        if core.peak_equity > 0:
-            current_drawdown = (core.peak_equity - mtm_equity) / core.peak_equity * 100
-            # Track the max observed real-time drawdown
-            if not hasattr(core, 'max_realtime_drawdown'):
-                core.max_realtime_drawdown = 0.0
-            core.max_realtime_drawdown = max(core.max_realtime_drawdown, current_drawdown)
-            max_drawdown_pct = core.max_realtime_drawdown
+        if self._peak_equity > 0:
+            current_drawdown = (self._peak_equity - mtm_equity) / self._peak_equity * 100
+            self._max_realtime_drawdown = max(self._max_realtime_drawdown, current_drawdown)
+            max_drawdown_pct = self._max_realtime_drawdown
 
         # 3. Performance Stats
+        core = self.session.core
         perf = core.get_performance_summary() if hasattr(core, 'get_performance_summary') else {}
         perf['max_drawdown_pct'] = round(max_drawdown_pct, 2)
         

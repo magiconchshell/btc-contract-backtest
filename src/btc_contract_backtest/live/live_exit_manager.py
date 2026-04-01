@@ -7,6 +7,7 @@ the governed execution path (reduce_only=True).
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -55,6 +56,10 @@ class LiveExitManager:
         self.audit = audit
         self.submit_ledger = submit_ledger
         self.event_source = event_source
+        # Cooldown: prevents duplicate exit submissions within the same step cycle.
+        # Both on_hold and on_decision call check_and_submit_exit; we debounce.
+        self._last_exit_submitted_at: Optional[str] = None
+        self._exit_cooldown_seconds: float = 30.0
 
     def _build_exit_context(self, core: SimulatorCore) -> ExitEvalContext:
         """Build exit evaluation context from the simulator core's position."""
@@ -116,6 +121,20 @@ class LiveExitManager:
         if exit_signal is None or not exit_signal.should_close:
             return None
 
+        # Cooldown guard: prevent double-submission within a single step cycle.
+        # Both on_hold and on_decision call us; the second call is debounced.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if self._last_exit_submitted_at is not None:
+            from datetime import datetime as _dt
+            last = _dt.fromisoformat(self._last_exit_submitted_at)
+            elapsed = (_dt.now(timezone.utc) - last).total_seconds()
+            if elapsed < self._exit_cooldown_seconds:
+                logger.debug(
+                    "Exit cooldown active (%.1fs remaining), skipping duplicate exit.",
+                    self._exit_cooldown_seconds - elapsed,
+                )
+                return None
+
         # Calculate close quantity
         if exit_signal.is_partial:
             close_qty = abs(core.position.quantity) * exit_signal.close_ratio
@@ -128,10 +147,12 @@ class LiveExitManager:
         # Determine order side (opposite of position)
         order_side = "sell" if core.position.side == 1 else "buy"
 
-        now = datetime.now(timezone.utc).isoformat()
+        # Generate a unique order ID for each exit so SubmitLedger can track it.
+        exit_order_id = f"exit-{uuid.uuid4().hex[:12]}"
+        now = now_iso
 
         order = Order(
-            order_id="exit",
+            order_id=exit_order_id,
             symbol=symbol,
             side=OrderSide.SELL if core.position.side == 1 else OrderSide.BUY,
             quantity=close_qty,
@@ -173,6 +194,8 @@ class LiveExitManager:
         result = self.adapter.submit_order(order)
 
         if result.ok:
+            # Record the timestamp so the cooldown check works on subsequent calls.
+            self._last_exit_submitted_at = now
             response = result.payload if isinstance(result.payload, dict) else {}
             exchange_order_id = response.get("id")
             submit_result = {
@@ -181,6 +204,7 @@ class LiveExitManager:
                 "is_partial": exit_signal.is_partial,
                 "close_quantity": close_qty,
                 "exchange_order_id": exchange_order_id,
+                "exit_order_id": exit_order_id,
                 "response": response,
             }
             self.event_source.emit(

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import signal
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -128,37 +131,9 @@ class PaperTradingSession(TradingRuntime):
         self.watchdog.state.halt_reason = wd.get("halt_reason")
 
     def reconcile_with_exchange(self):
-        open_order_count = len(
-            [
-                o
-                for o in self.core.orders.values()
-                if getattr(o, "status", None) not in (None,)
-                and str(o.status)
-                not in {
-                    "OrderStatus.CANCELED",
-                    "OrderStatus.FILLED",
-                    "OrderStatus.REJECTED",
-                    "OrderStatus.EXPIRED",
-                }
-            ]
-        )
-        result = self.adapter.reconcile_state(
-            self.core.position.side,
-            open_order_count,
-        )
-        if result.ok and result.payload and not result.payload.get("ok", True):
-            self.core.emit_risk_event(
-                "reconcile_mismatch",
-                "Exchange reconciliation detected differences",
-                severity="critical",
-                metadata=result.payload,
-            )
-        elif not result.ok:
-            self.core.emit_risk_event(
-                "reconcile_failed",
-                result.error or "Unknown reconcile failure",
-                severity="warning",
-            )
+        # In paper trading, we intentionally DO NOT reconcile with the real exchange
+        # to prevent spurious risk events if the user has manual positions open.
+        pass
 
     def save(self):
         store = self.state_store()
@@ -236,6 +211,11 @@ class PaperTradingSession(TradingRuntime):
         return payload
 
     def on_hold(self, payload: dict):
+        # Apply funding costs to matching open positions (like in backtest)
+        if self.core.position.side != 0 and "snapshot" in payload:
+            snapshot = type("Snapshot", (), payload["snapshot"])()
+            self.core.apply_periodic_funding(snapshot)
+
         self.save()
         return payload
 
@@ -360,11 +340,82 @@ class PaperTradingSession(TradingRuntime):
         }
 
     def run_loop(self, interval_seconds: int = 60, iterations: Optional[int] = None):
+        """Production-safe main loop for paper trading.
+
+        Differences from the original implementation:
+        - Uses threading.Event for interruptible sleep (responds instantly to SIGTERM).
+        - Wraps step() in try/except with exponential backoff on errors.
+        - Logs via structured logger instead of print.
+        - Registers SIGINT/SIGTERM handlers when run on the main thread.
+        - Breaks after MAX_CONSECUTIVE_FAILURES consecutive unrecoverable errors.
+        """
+        logger = logging.getLogger(__name__)
+        MAX_CONSECUTIVE_FAILURES = 10
+        shutdown_event = threading.Event()
+        consecutive_failures = 0
+
+        # --- Signal handling (main thread only) ---
+        original_sigint = original_sigterm = None
+        if threading.current_thread() is threading.main_thread():
+            def _handle_signal(signum, frame):
+                sig_name = signal.Signals(signum).name
+                logger.info("%s received, stopping paper trading loop.", sig_name)
+                shutdown_event.set()
+            try:
+                original_sigint = signal.getsignal(signal.SIGINT)
+                original_sigterm = signal.getsignal(signal.SIGTERM)
+                signal.signal(signal.SIGINT, _handle_signal)
+                signal.signal(signal.SIGTERM, _handle_signal)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not register signal handlers: %s", exc)
+
+        logger.info(
+            "Paper trading loop started: symbol=%s interval=%ds",
+            self.context.contract.symbol,
+            interval_seconds,
+        )
         count = 0
-        while True:
-            payload = self.step()
-            print(json.dumps(payload, indent=2, default=str))
-            count += 1
-            if iterations is not None and count >= iterations:
-                break
-            time.sleep(interval_seconds)
+        try:
+            while not shutdown_event.is_set():
+                try:
+                    payload = self.step()
+                    logger.info(
+                        "Paper step %d: event=%s signal=%s",
+                        count + 1,
+                        payload.get("event", "unknown"),
+                        payload.get("signal", "?"),
+                    )
+                    consecutive_failures = 0  # reset on success
+                except Exception as exc:  # noqa: BLE001
+                    consecutive_failures += 1
+                    backoff = min(2 ** consecutive_failures, interval_seconds)
+                    logger.error(
+                        "Paper trading step error (attempt %d/%d): %s — backing off %ds",
+                        consecutive_failures,
+                        MAX_CONSECUTIVE_FAILURES,
+                        exc,
+                        backoff,
+                        exc_info=True,
+                    )
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.critical(
+                            "Paper trading: %d consecutive failures, halting loop.",
+                            consecutive_failures,
+                        )
+                        break
+                    shutdown_event.wait(timeout=backoff)
+                    continue
+
+                count += 1
+                if iterations is not None and count >= iterations:
+                    logger.info("Iteration limit reached (%d)", iterations)
+                    break
+                # Interruptible sleep — wakes immediately on shutdown_event.set()
+                shutdown_event.wait(timeout=interval_seconds)
+        finally:
+            # Restore original signal handlers
+            if original_sigint is not None:
+                signal.signal(signal.SIGINT, original_sigint)
+            if original_sigterm is not None:
+                signal.signal(signal.SIGTERM, original_sigterm)
+            logger.info("Paper trading loop exited after %d iterations.", count)

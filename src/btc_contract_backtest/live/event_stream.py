@@ -115,6 +115,7 @@ class EventDrivenExecutionSource:
         self.last_event_timestamp: Optional[str] = None
         self.last_received_at: Optional[str] = None
         self.last_external_sequence: Optional[str] = None
+        self._recent_events: list[dict[str, Any]] = []
 
     @staticmethod
     def now_iso() -> str:
@@ -164,7 +165,11 @@ class EventDrivenExecutionSource:
             replayable=replayable,
         )
         self.recorder.append(event)
-        return event.to_dict()
+        event_dict = event.to_dict()
+        self._recent_events.append(event_dict)
+        if len(self._recent_events) > 200:
+            self._recent_events.pop(0)
+        return event_dict
 
     def ingest(self, event: ExecutionEvent | dict[str, Any]) -> dict[str, Any]:
         row = event.to_dict() if isinstance(event, ExecutionEvent) else dict(event)
@@ -215,4 +220,9 @@ class EventDrivenExecutionSource:
             self.last_event_timestamp = last.get("timestamp")
             self.last_received_at = last.get("received_at")
             self.last_external_sequence = _max_external_sequence(rows)
+            # Pre-fill recent events from history
+            self._recent_events = rows[-200:]
         return rows
+
+    def recent_events(self) -> list[dict[str, Any]]:
+        return list(self._recent_events)

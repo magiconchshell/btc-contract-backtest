@@ -5,7 +5,7 @@ import signal
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -87,7 +87,7 @@ class GovernedLiveSession(TradingRuntime):
         governance_state_file: str = "governance_state.json",
         alerts_file: str = "live_alerts.jsonl",
         state_file: str = "live_session_state.json",
-        metadata_cache_file: str = "var/binance_futures_exchange_info.json",
+        metadata_cache_file: Optional[str] = None,
         allow_mainnet: bool = False,
         exchange: Optional[Any] = None,
     ):
@@ -228,6 +228,11 @@ class GovernedLiveSession(TradingRuntime):
         else:
             logger.info("Paper Trading active (independent): skipping exchange position sync.")
 
+        # Track day-start equity for daily loss limit calculation.
+        # Stored separately from SimulatorCore so the live session owns it.
+        self._day_start_equity: float = float(self.core.capital)
+        self._day_start_date: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
         # Threading and shutdown state
         self._shutdown_event = threading.Event()
         self._ws_thread: Optional[threading.Thread] = None
@@ -253,7 +258,7 @@ class GovernedLiveSession(TradingRuntime):
             store.set_state_fields(
                 recovery_report=recovery_report,
                 startup_report=recovery_report_payload.get("startup_convergence") or {},
-                execution_events=self.event_source.replay(),
+                execution_events=self.event_source.recent_events(),
                 event_stream_boundary=self.event_source.boundary_state(),
             )
             store.set_watchdog(
@@ -413,6 +418,9 @@ class GovernedLiveSession(TradingRuntime):
 
             except Exception as exc:  # noqa: BLE001
                 logger.error("WebSocket consumer error: %s", exc)
+                # Report to watchdog so consecutive WS failures eventually
+                # trigger the error recovery policy / emergency stop.
+                self.watchdog.record_failure(f"ws_consumer:{exc}")
                 if self._shutdown_event.is_set():
                     break
                 time.sleep(1)
@@ -549,7 +557,34 @@ class GovernedLiveSession(TradingRuntime):
 
         return processed
 
+    # ── Daily loss limit helpers ─────────────────────────────────────
+
+    def _current_daily_loss_pct(self) -> float:
+        """Return the percentage of equity lost since the start of today (UTC).
+
+        Auto-resets the day-start snapshot at UTC midnight. Returns 0.0 if
+        equity has not decreased, so the governance check only fires when
+        there is an actual loss.
+        """
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if today != self._day_start_date:
+            # New calendar day — reset the baseline
+            self._day_start_date = today
+            self._day_start_equity = float(self.core.capital)
+            logger.info(
+                "Daily loss counter reset (new UTC day). Baseline equity=%.2f",
+                self._day_start_equity,
+            )
+
+        if self._day_start_equity <= 0:
+            return 0.0
+
+        current_equity = float(self.core.capital)
+        loss_pct = (self._day_start_equity - current_equity) / self._day_start_equity * 100.0
+        return max(0.0, loss_pct)
+
     # ── Graceful shutdown ────────────────────────────────────────────
+
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         """Handle SIGTERM/SIGINT for graceful shutdown."""
@@ -771,26 +806,45 @@ class GovernedLiveSession(TradingRuntime):
         
         # --- Instant Execution for PAPER Mode ---
         if self.policy.mode == TradingMode.PAPER:
-            # Check if we need to open or switch position
-            if payload["signal"] != local_position.get("side", self.core.position.side):
+            current_side = self.core.position.side
+            target_signal = payload.get("signal", 0)
+            snapshot_obj = self.core.last_snapshot or self.core.snapshot_from_bar(
+                payload["timestamp"], payload["snapshot"]
+            )
+
+            # 1. Close existing position if signal flips or becomes 0
+            if current_side != 0 and current_side != target_signal:
+                close_order = self.core.create_order(
+                    OrderSide.SELL if current_side == 1 else OrderSide.BUY,
+                    abs(self.core.position.quantity),
+                    OrderType.MARKET,
+                    reduce_only=True,
+                )
+                fills = self.core.try_fill_order(close_order, snapshot_obj)
+                for f in fills:
+                    self.core.apply_fill(f)
+                payload.setdefault("live_fills", []).extend([f.__dict__ for f in fills])
+                self.audit.log(
+                    "paper_instant_close",
+                    {"side": close_order.side.value, "qty": close_order.quantity},
+                )
+
+            # 2. Open new position if signal is active and we are flat
+            # (If we just closed a position above, self.core.position.side is now 0)
+            if target_signal != 0 and self.core.position.side == 0:
                 qty = float(intended.get("quantity", 0.0))
                 if qty > 0:
-                    side = OrderSide.BUY if payload["signal"] == 1 else OrderSide.SELL
-                    # If reversing a position, we might need 2 orders or one large order
-                    # Simplified: just create the order on Core
-                    order = self.core.create_order(side, qty, OrderType.MARKET)
-                    
-                    # Simulation: try to fill immediately using the actual last snapshot known to core
-                    snapshot_obj = self.core.last_snapshot
-                    if not snapshot_obj:
-                        snapshot_obj = self.core.snapshot_from_bar(payload["timestamp"], payload["snapshot"])
-                    
+                    open_side = OrderSide.BUY if target_signal == 1 else OrderSide.SELL
+                    order = self.core.create_order(open_side, qty, OrderType.MARKET)
                     fills = self.core.try_fill_order(order, snapshot_obj)
                     for f in fills:
                         self.core.apply_fill(f)
-                    payload["live_fills"] = [f.__dict__ for f in fills]
-                    self.audit.log("paper_instant_fill", {"side": side.value, "qty": qty})
-        
+                    payload.setdefault("live_fills", []).extend([f.__dict__ for f in fills])
+                    self.audit.log(
+                        "paper_instant_fill",
+                        {"side": open_side.value, "qty": qty},
+                    )
+
         result = self.executor.submit_intended_order(
             symbol=self.context.contract.symbol,
             signal=payload["signal"],
@@ -808,7 +862,8 @@ class GovernedLiveSession(TradingRuntime):
             current_open_positions=0 if local_position.get("side", 0) == 0 else 1,
             emergency_stop=state.get("emergency_stop", False),
             maintenance=state.get("maintenance", False),
-            current_daily_loss_pct=0.0,
+            current_daily_loss_pct=self._current_daily_loss_pct(),
+            capital=float(self.core.capital),
         )
         if hasattr(store, "append_operator_action"):
             store.append_operator_action(

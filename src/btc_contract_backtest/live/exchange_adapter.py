@@ -43,13 +43,24 @@ class ExchangeExecutionAdapter:
     def _retry(
         self, fn: Callable[[], dict[str, Any] | list[dict[str, Any]]]
     ) -> AdapterResult:
+        import ccxt
         last_error = None
         for _ in range(self.max_retries):
             try:
                 return AdapterResult(ok=True, payload=fn())
-            except Exception as exc:  # noqa: BLE001
+            except ccxt.NetworkError as exc:
                 last_error = str(exc)
                 time.sleep(self.retry_delay_seconds)
+            except (ccxt.RateLimitExceeded, ccxt.ExchangeNotAvailable) as exc:
+                last_error = str(exc)
+                time.sleep(self.retry_delay_seconds)
+            except ccxt.ExchangeError as exc:
+                # Deterministic logic errors (InsufficientFunds, BadRequest, etc.)
+                last_error = str(exc)
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                break
         return AdapterResult(ok=False, error=last_error)
 
     def submit_order(self, order: Order) -> AdapterResult:
@@ -223,13 +234,18 @@ class ExchangeExecutionAdapter:
         )
         remote_open_order_count = len(remote_orders)
         differences = []
+        # CRITICAL divergences: only position-side mismatch blocks trading.
+        critical_differences = []
         if remote_position_side != local_position_side:
-            differences.append(
-                f"position side mismatch local={local_position_side} remote={remote_position_side}"
-            )
+            msg = f"position side mismatch local={local_position_side} remote={remote_position_side}"
+            differences.append(msg)
+            critical_differences.append(msg)
+        # Non-critical: order-count mismatch is informational only.
+        # Event-driven counts lag behind REST until a fill/cancel event fires,
+        # so this will almost always differ and must NOT block trading.
         if remote_open_order_count != local_open_orders:
             differences.append(
-                f"open order count mismatch local={local_open_orders} remote={remote_open_order_count}"
+                f"open order count mismatch local={local_open_orders} remote={remote_open_order_count} (non-blocking)"
             )
 
         details = build_detailed_reconcile_report(
@@ -240,18 +256,19 @@ class ExchangeExecutionAdapter:
             remote_orders=remote_orders,
         ).to_dict()
         if not details.get("ok", True):
-            differences.extend(
-                [
-                    f"order_mismatch_count={details.get('summary', {}).get('order_mismatch_count', 0)}",
-                    f"orphan_local_order_count={details.get('summary', {}).get('orphan_local_order_count', 0)}",
-                    f"orphan_remote_order_count={details.get('summary', {}).get('orphan_remote_order_count', 0)}",
-                ]
-            )
+            detail_msgs = [
+                f"order_mismatch_count={details.get('summary', {}).get('order_mismatch_count', 0)}",
+                f"orphan_local_order_count={details.get('summary', {}).get('orphan_local_order_count', 0)}",
+                f"orphan_remote_order_count={details.get('summary', {}).get('orphan_remote_order_count', 0)}",
+            ]
+            differences.extend(detail_msgs)
             if details.get("position_mismatch"):
+                critical_differences.append("detailed_position_mismatch")
                 differences.append("detailed_position_mismatch")
 
+        # reconcile is ok if there are NO critical (position-side) divergences.
         report = ReconcileReport(
-            ok=len(differences) == 0 and bool(details.get("ok", False)),
+            ok=len(critical_differences) == 0,
             timestamp=datetime.now(timezone.utc).isoformat(),
             local_position_side=local_position_side,
             remote_position_side=remote_position_side,
@@ -261,3 +278,4 @@ class ExchangeExecutionAdapter:
             details=details,
         )
         return AdapterResult(ok=True, payload=report.__dict__)
+

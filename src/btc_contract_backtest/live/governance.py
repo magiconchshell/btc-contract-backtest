@@ -190,6 +190,7 @@ class GovernancePolicy:
         emergency_stop: bool = False,
         maintenance: bool = False,
         current_daily_loss_pct: float = 0.0,
+        capital: Optional[float] = None,
     ) -> GovernanceDecision:
         if emergency_stop:
             return GovernanceDecision(False, "emergency_stop", severity="critical")
@@ -243,15 +244,23 @@ class GovernancePolicy:
                         "normalized": constraint_result.normalized,
                     },
                 )
+        # BUG FIX: max_symbol_exposure_pct is a fraction (e.g. 0.95), not USDT.
+        # Compare notional against capital * pct to get the USDT exposure cap.
         if (
             self.risk.max_symbol_exposure_pct is not None
-            and notional > self.risk.max_symbol_exposure_pct
+            and capital is not None
+            and capital > 0
+            and notional > capital * self.risk.max_symbol_exposure_pct
         ):
             return GovernanceDecision(
                 False,
                 "symbol_exposure_limit",
                 severity="critical",
-                metadata={"notional": notional},
+                metadata={
+                    "notional": notional,
+                    "exposure_cap_usdt": capital * self.risk.max_symbol_exposure_pct,
+                    "max_symbol_exposure_pct": self.risk.max_symbol_exposure_pct,
+                },
             )
         if (
             self.risk.max_daily_loss_pct is not None
